@@ -24,6 +24,13 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: check out hyperdrive
+        uses: actions/checkout@main
+        with:
+          repository: delvtech/hyperdrive
+          ref: "latest"
+          path: "./hyperdrive"
+
       # NOTE: This is needed to ensure that hyperdrive-wrappers builds correctly.
       - name: install foundry
         uses: foundry-rs/foundry-toolchain@v1
@@ -36,4 +43,4 @@ jobs:
           override: true
 
       - name: test
-        run: make test-rust
+        run: make test

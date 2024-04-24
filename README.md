@@ -1,5 +1,4 @@
-[![Tests](https://github.com/delvtech/hyperdrive/actions/workflows/solidity_test.yml/badge.svg)](https://github.com/delvtech/hyperdrive/actions/workflows/solidity_test.yml)
-[![Coverage](https://coveralls.io/repos/github/delvtech/hyperdrive/badge.svg?branch=main&t=vnW3xG&kill_cache=1&service=github)](https://coveralls.io/github/delvtech/hyperdrive?branch=main)
+[![Tests](https://github.com/delvtech/hyperdrive-rs/actions/workflows/rust_test.yml/badge.svg)](https://github.com/delvtech/hyperdrive-rs/actions/workflows/rust_test.yml)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/delvtech/elf-contracts/blob/master/LICENSE)
 [![Static Badge](https://img.shields.io/badge/DELV-Terms%20Of%20Service-orange)](https://elementfi.s3.us-east-2.amazonaws.com/element-finance-terms-of-service.pdf)
 
@@ -24,6 +23,21 @@ provide base assets. The fact that LPs don't need to mint bonds to provide
 liquidity improves the capital efficiency and UX of providing liquidity to
 fixed-rate markets.
 
+# Hyperdrive-rs
+
+Hyperdrive-rs is a Rust library that mirrors the functionality of the
+Hyperdrive Solidity smart contracts. Hyperdrive-rs includes differential testing
+against smart contracts for implemented functions, which demonstrates parity
+between the two implementations. This is a work-in-progress and not all
+Hyperdrive features are present.
+
+Python bindings for this libarary can be accessed via
+[agent0](https://github.com/delvtech/agent0).
+
+WASM bindings are available via the
+[Hyperdrive web sdk](https://github.com/delvtech/frontend-monorepo).
+
+
 # Resources
 
 The [Hyperdrive docs](https://docs-delv.gitbook.io/hyperdrive) include documentation
@@ -31,59 +45,22 @@ on how to use Hyperdrive to source and provide liquidity, documentation for
 developers seeking to use Hyperdrive programatically, and documentation for
 developers that want to integrate Hyperdrive with a yield source.
 
-The [Hyperdrive Whitepaper](./docs/Hyperdrive_Whitepaper.pdf) describes the technical
-details underlying how Hyperdrive mints terms on demand, enables LPs to provide
+The [Hyperdrive Whitepaper](https://github.com/delvtech/hyperdrive/blob/main/docs/Hyperdrive_Whitepaper.pdf)
+describes the technical details underlying how Hyperdrive mints terms on demand, enables LPs to provide
 everlasting liquidity, and explains how the AMM's pricing model works.
-
-The [`audits/`](./audits) directory contains the reports for all of the audits that
-have been conducted for Hyperdrive to date.
-
-# Repository Layout
-
-The Hyperdrive interface can be found in [`IHyperdrive.sol`](./contracts/src/interfaces/IHyperdrive.sol).
-This interface includes all of the read and write functions available on each Hyperdrive
-instance as well as the events emitted by Hyperdrive and the custom errors used by Hyperdrive.
-
-The existing Hyperdrive instances can be found in [`contracts/src/instances/`](./contracts/src/instances/).
-These instances can serve as a reference for integrators that would like to integrate
-a yield source with Hyperdrive. The `ERC4626Hyperdrive` instance found in
-[`contracts/src/instances/erc4626/`](./contracts/src/instances/erc4626/) can be
-used to integrate `ERC4626` compliant yield sources. For yield sources that require
-direct integrations, the other instances can serve as a reference for how integrations
-are structured.
-
-Because of the code size limits imposed by [EIP-170](https://eips.ethereum.org/EIPS/eip-170),
-Hyperdrive's logic is sharded over several different contracts. The code that
-supports the proxy architecture can be found in [`contracts/src/external`](./contracts/src/external/).
-These contracts are abstract since several functions must be implemented on a case-by-case basis
-for different yield sources.
-
-The core logic used in the Hyperdrive AMM can be found in [`contracts/src/internal/`](./contracts/src/internal/).
-This logic relies on libraries that can be found in [`contracts/src/libraries/`](./contracts/src/libraries/).
-
-The `HyperdriveFactory` contract can be found in [`HyperdriveFactory.sol`](./contracts/src/factory/HyperdriveFactory.sol).
-This contract makes it easy to deploy and initialize new pools. The factory utilizes
-deployer coordinators that correspond to Hyperdrive instances. These deployer
-coordinators and the deployer contracts used by the coordinators can be found in
-[`contracts/src/deployers/`](./contracts/src/deployers/).
 
 # Gettings Started
 
 ## Pre-requisites
 
 This repository makes use of [foundry](https://github.com/foundry-rs/foundry) to
-build and test the smart contracts and uses several node.js packages to lint and
-prettify the source code. Proceed through the following steps to set up the repository:
+build and test smart contracts against the Rust implementation. 
+Proceed through the following steps to set up the repository:
+
 - [Install forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation)
-- [Install yarn](https://yarnpkg.com/getting-started/install)
-- Install lib/forge-std dependencies by running `forge install` from the project root
-- Install node.js dependencies by running `yarn` from the project root
-
-## Environment Variables
-
-The test suite and migration scripts make use of several environment variables.
-Copy `.env_template` to `.env` and populate the file with your private key and
-provider URLs.
+- Create a sim-link to the `Hyperdrive` smart contracts:
+  - clone [Hyperdrive](https://github.com/delvtech/hyperdrive) into a parent folder
+  - create a sim link to hyperdrive in this repository root via `ln -s ../hyperdrive .`
 
 ## Build
 

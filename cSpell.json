@@ -180,9 +180,7 @@
         "solidity"
     ],
     "ignorePaths": [
-        "node_modules/**/*",
-        "lib/**/*",
-        "test/3rdPartyLibs/**/*"
+        "lib/**/*"
     ],
     "allowCompoundWords": false
 }

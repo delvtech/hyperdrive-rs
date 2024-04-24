@@ -79,7 +79,7 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
 fn main() -> Result<()> {
     // Re-run this script whenever the build script itself or a contract changes.
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../../contracts/");
+    println!("cargo:rerun-if-changed=hyperdrive/contracts/");
 
     // Compile the contracts.
     Command::new("forge").args(["build"]).status()?;
@@ -99,7 +99,7 @@ fn main() -> Result<()> {
         .open(mod_file)?;
 
     // Generate the relevant contract wrappers from Foundry's artifacts.
-    let artifacts = root.join("../../out");
+    let artifacts = root.join("../../hyperdrive/out");
     let mut artifacts = get_artifacts(&artifacts)?;
     artifacts.sort_by(|a, b| a.1.cmp(&b.1));
     artifacts.dedup_by(|a, b| a.1.eq(&b.1));
