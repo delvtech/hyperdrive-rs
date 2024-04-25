@@ -88,10 +88,11 @@ impl State {
     /// it is possible for traders to receive a negative interest rate even
     /// if curve's spot price is less than or equal to 1.
     //
-    /// Given the curve fee `phi_c` and the starting spot price `p_0`, the
+    /// Given the curve fee $\phi_c$ and the starting spot price `p_0`, the
     /// maximum spot price is given by:
+    ///
     /// $$
-    /// p_max = 1 - phi_c * (1 - p_0)
+    /// p_max = 1 - \phi_c * (1 - p_0)
     /// $$
     fn calculate_close_short_max_spot_price(&self) -> FixedPoint {
         fixed!(1e18)
@@ -119,7 +120,7 @@ impl State {
         }
 
         // Ensure that the trader didn't purchase bonds at a negative interest
-        // rate after accounting for fees
+        // rate after accounting for fees.
         let share_curve_delta =
             self.calculate_close_short_curve(bond_amount, maturity_time, current_time);
         let bond_reserves_delta = bond_amount

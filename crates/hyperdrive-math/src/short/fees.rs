@@ -24,7 +24,7 @@ impl State {
     }
 
     /// Calculates the curve fee paid by shorts for a given bond amount.
-    /// Returns the fee in shares
+    /// Returns the fee in shares.
     pub fn close_short_curve_fee(
         &self,
         bond_amount: FixedPoint,
@@ -34,7 +34,7 @@ impl State {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
 
-        // ((1 - p) * phi_curve * d_y * t) / c
+        // ((1 - p) * phi_c * d_y * t) / c
         self.curve_fee()
             * (fixed!(1e18) - self.calculate_spot_price())
             * bond_amount.mul_div_down(normalized_time_remaining, self.vault_share_price())
@@ -54,8 +54,8 @@ impl State {
             .mul_down(self.governance_lp_fee())
     }
 
-    /// Calculates the flat fee paid by shorts for a given bond amount
-    /// Returns the fee in shares
+    /// Calculates the flat fee paid by shorts for a given bond amount.
+    /// Returns the fee in shares.
     pub fn close_short_flat_fee(
         &self,
         bond_amount: FixedPoint,
@@ -64,7 +64,7 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
-        // flat fee = (d_y * (1 - t) * phi_flat) / c
+        // flat_fee = (d_y * (1 - t) * phi_f) / c
         bond_amount.mul_div_down(
             fixed!(1e18) - normalized_time_remaining,
             self.vault_share_price(),

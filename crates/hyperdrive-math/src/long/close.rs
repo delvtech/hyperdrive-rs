@@ -5,6 +5,27 @@ use fixed_point_macros::fixed;
 use crate::{State, YieldSpace};
 
 impl State {
+    /// Calculates the amount of shares the trader will receive after fees for closing a long
+    pub fn calculate_close_long<F: Into<FixedPoint>>(
+        &self,
+        bond_amount: F,
+        maturity_time: U256,
+        current_time: U256,
+    ) -> FixedPoint {
+        let bond_amount = bond_amount.into();
+
+        if bond_amount < self.config.minimum_transaction_amount.into() {
+            // TODO would be nice to return a `Result` here instead of a panic.
+            panic!("MinimumTransactionAmount: Input amount too low");
+        }
+
+        // Subtract the fees from the trade
+        self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)
+            - self.close_long_curve_fee(bond_amount, maturity_time, current_time)
+            - self.close_long_flat_fee(bond_amount, maturity_time, current_time)
+    }
+
+    /// Calculate the amount of shares returned when selling bonds without considering fees.
     fn calculate_close_long_flat_plus_curve<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
@@ -30,26 +51,6 @@ impl State {
         };
 
         flat + curve
-    }
-
-    /// Calculates the amount of shares the trader will receive after fees for closing a long
-    pub fn calculate_close_long<F: Into<FixedPoint>>(
-        &self,
-        bond_amount: F,
-        maturity_time: U256,
-        current_time: U256,
-    ) -> FixedPoint {
-        let bond_amount = bond_amount.into();
-
-        if bond_amount < self.config.minimum_transaction_amount.into() {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("MinimumTransactionAmount: Input amount too low");
-        }
-
-        // Subtract the fees from the trade
-        self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)
-            - self.close_long_curve_fee(bond_amount, maturity_time, current_time)
-            - self.close_long_flat_fee(bond_amount, maturity_time, current_time)
     }
 }
 
