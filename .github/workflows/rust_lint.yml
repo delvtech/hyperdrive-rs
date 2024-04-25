@@ -20,18 +20,22 @@ jobs:
       - uses: actions/checkout@v3
         with:
           submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: check out hyperdrive
-        uses: actions/checkout@main
-        with:
-          repository: delvtech/hyperdrive
-          ref: "latest"
-          path: "./hyperdrive"
-
+      # NOTE: This is needed to ensure that hyperdrive-wrappers builds correctly.
       - name: install foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+
+      - name: check out hyperdrive
+        uses: actions/checkout@v3
+        with:
+          repository: delvtech/hyperdrive
+          path: "./hyperdrive"
+
+      - name: build hyperdrive
+        run: cd hyperdrive && make build-sol
 
       - uses: actions-rs/toolchain@v1
         with:
