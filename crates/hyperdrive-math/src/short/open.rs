@@ -570,6 +570,7 @@ mod tests {
             vault.set_rate(variable_rate.into()).send().await?;
 
             // Alice initializes the pool.
+            // TODO: We'd like to set a random position duration & checkpoint duration.
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Bob opens a short with a random bond amount. Before opening the
@@ -585,7 +586,7 @@ mod tests {
 
             // The term passes and interest accrues.
             chain
-                .increase_time(bob.get_config().position_duration.low_u128())
+            .increase_time(bob.get_config().position_duration.low_u128())
                 .await?;
 
             // Bob closes his short.
