@@ -1,7 +1,7 @@
-use std::{io::Write, path::Path, process::Command};
+use std::{fs::create_dir_all, io::Write, path::Path, process::Command};
 
 use ethers::prelude::Abigen;
-use eyre::{eyre, Result};
+use eyre::Result;
 use heck::ToSnakeCase;
 
 const TARGETS: &[&str] = &[
@@ -57,13 +57,10 @@ const TARGETS: &[&str] = &[
 ];
 
 fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
-    let mut artifacts = Vec::new();
     if !artifacts_path.exists() {
-        return Err(eyre!(
-            "artifacts_path={:#?} does not exist!",
-            artifacts_path
-        ));
+        create_dir_all(artifacts_path)?;
     }
+    let mut artifacts = Vec::new();
     for entry in std::fs::read_dir(artifacts_path)? {
         let entry = entry?;
         let path = entry.path();
