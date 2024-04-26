@@ -586,7 +586,7 @@ mod tests {
 
             // The term passes and interest accrues.
             chain
-            .increase_time(bob.get_config().position_duration.low_u128())
+                .increase_time(bob.get_config().position_duration.low_u128())
                 .await?;
 
             // Bob closes his short.
