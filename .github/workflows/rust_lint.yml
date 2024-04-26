@@ -2,10 +2,14 @@ name: Rust Lint
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   merge_group:
 
 jobs:
+  # Check if files in the /contracts, /test, /crates, or /lib directories or the
+  # /foundry.toml, /Cargo.lock, or /Cargo.toml files were changed in this PR.
   detect-changes:
     uses: ./.github/workflows/check_diff.yaml
     with:
@@ -17,21 +21,32 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.changed == 'true'
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout hyperdrive-rs
+        uses: actions/checkout@v4
         with:
           submodules: recursive
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: check out hyperdrive
-        uses: actions/checkout@main
-        with:
-          repository: delvtech/hyperdrive
-          ref: "latest"
-          path: "./hyperdrive"
-
-      - name: install foundry
+      # NOTE: This is needed to ensure that hyperdrive-wrappers builds correctly.
+      - name: Install foundry
         uses: foundry-rs/foundry-toolchain@v1
         with:
           version: nightly
+
+      - name: Fetch latest release tag from Hyperdrive
+        run: ./scripts/fetch-latest-tag.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: check out hyperdrive
+        uses: actions/checkout@v4
+        with:
+          repository: delvtech/hyperdrive
+          ref: ${{ env.latest_tag }}
+          path: "./hyperdrive"
+
+      - name: build hyperdrive
+        run: cd hyperdrive && make build-sol
 
       - uses: actions-rs/toolchain@v1
         with:

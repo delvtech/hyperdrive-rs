@@ -10,7 +10,7 @@ impl State {
     /// The curve fee $c(x)$ paid by longs is paid in bonds and is given by:
     ///
     /// $$
-    /// c(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right) \cdot x
+    /// c(x) = \phi_c \cdot \left( \tfrac{1}{p} - 1 \right) \cdot x
     /// $$
     pub fn open_long_curve_fees(&self, base_amount: FixedPoint) -> FixedPoint {
         self.curve_fee()
@@ -25,7 +25,7 @@ impl State {
     /// is given by:
     ///
     /// $$
-    /// g(x) = \phi_{g} \cdot p \cdot c(x)
+    /// g(x) = \phi_g \cdot p \cdot c(x)
     /// $$
     pub fn open_long_governance_fee(&self, base_amount: FixedPoint) -> FixedPoint {
         self.governance_lp_fee()
@@ -43,7 +43,7 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
-        // curve_fee = ((1 - p) * phi_curve * d_y * t) / c
+        // curve_fee = ((1 - p) * phi_c * d_y * t) / c
         self.curve_fee()
             * (fixed!(1e18) - self.calculate_spot_price())
             * bond_amount.mul_div_down(normalized_time_remaining, self.vault_share_price())
@@ -59,7 +59,7 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
-        // flat_fee = (d_y * (1 - t) * phi_flat) / c
+        // flat_fee = (d_y * (1 - t) * phi_f) / c
         bond_amount.mul_div_down(
             fixed!(1e18) - normalized_time_remaining,
             self.vault_share_price(),

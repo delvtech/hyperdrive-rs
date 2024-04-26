@@ -1,4 +1,4 @@
-use std::{io::Write, path::Path, process::Command};
+use std::{fs::create_dir_all, io::Write, path::Path, process::Command};
 
 use ethers::prelude::Abigen;
 use eyre::Result;
@@ -57,6 +57,9 @@ const TARGETS: &[&str] = &[
 ];
 
 fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
+    if !artifacts_path.exists() {
+        create_dir_all(artifacts_path)?;
+    }
     let mut artifacts = Vec::new();
     for entry in std::fs::read_dir(artifacts_path)? {
         let entry = entry?;

@@ -70,7 +70,7 @@ impl State {
     ///
     /// We calculate the rate for a fixed length of time as:
     /// $$
-    /// r(x) = (1 - p(x)) / (p(x) t)
+    /// r(\Delta y) = (1 - p(\Delta y)) / (p(\Delta y) t)
     /// $$
     ///
     /// where $p(x)$ is the spot price after a long for `delta_base`$= x$ and
