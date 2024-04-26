@@ -2,6 +2,8 @@ name: Rust Test
 
 on:
   push:
+    branches:
+      - main
   pull_request:
   merge_group:
 
@@ -19,7 +21,8 @@ jobs:
     needs: detect-changes
     if: needs.detect-changes.outputs.changed == 'true'
     steps:
-      - uses: actions/checkout@v3
+      - name: Checkout hyperdrive-rs
+        uses: actions/checkout@v4
         with:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -30,10 +33,16 @@ jobs:
         with:
           version: nightly
 
+      - name: Fetch latest release tag from Hyperdrive
+        run: ./scripts/fetch-latest-tag.sh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: check out hyperdrive
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: delvtech/hyperdrive
+          ref: ${{ env.latest_tag }}
           path: "./hyperdrive"
 
       - name: build hyperdrive
