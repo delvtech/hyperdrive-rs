@@ -1,5 +1,5 @@
-This directory sets up running fuzz testing on both solidity and rust. We use python as the orchestration language
-to (1) gather fuzz testing for solidity and rust, (2) run individual tests, and (3) log any errors from tests to
+This directory sets up running rust fuzz tests. We use python as the orchestration language
+to (1) gather fuzz testing for rust, (2) run individual tests, and (3) log any errors from tests to
 rollbar.
 
 From the `hyperdrive-rs` root directory:
