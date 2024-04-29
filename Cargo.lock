@@ -1098,7 +1098,7 @@ dependencies = [
 
 [[package]]
 name = "fixed-point-macros"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ethers",
  "fixed-point",
@@ -1500,7 +1500,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-addresses"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ethers",
  "serde",
@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-math"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ethers",
  "eyre",
@@ -1525,7 +1525,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-wrappers"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "ethers",
  "ethers-solc",
@@ -3165,7 +3165,7 @@ dependencies = [
 
 [[package]]
 name = "test-utils"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "async-trait",
  "dotenvy",
