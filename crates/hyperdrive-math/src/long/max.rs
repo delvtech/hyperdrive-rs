@@ -49,12 +49,18 @@ impl State {
         let budget = budget.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
+        // Check the spot price after opening a minimum long is less than the
+        // max spot price
+        let spot_price_after_min_long = self
+            .calculate_spot_price_after_long(self.minimum_transaction_amount(), None)
+            .unwrap();
+        if spot_price_after_min_long > self.calculate_max_spot_price() {
+            return fixed!(0);
+        }
+
         // Calculate the maximum long that brings the spot price to 1. If the pool is
         // solvent after opening this long, then we're done.
-        let (absolute_max_base_amount, absolute_max_bond_amount) = match self.absolute_max_long() {
-            Ok(result) => result,
-            Err(_) => return fixed!(0),
-        };
+        let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long();
 
         if self
             .solvency_after_long(
@@ -171,7 +177,7 @@ impl State {
     /// Calculates the largest long that can be opened without buying bonds at a
     /// negative interest rate. This calculation does not take Hyperdrive's
     /// solvency constraints into account and shouldn't be used directly.
-    fn absolute_max_long(&self) -> Result<(FixedPoint, FixedPoint)> {
+    fn absolute_max_long(&self) -> (FixedPoint, FixedPoint) {
         // We are targeting the pool's max spot price of:
         //
         // p_max = (1 - flatFee) / (1 + curveFee * (1 / p_0 - 1) * (1 - flatFee))
@@ -234,12 +240,16 @@ impl State {
 
         // The absolute max base amount is given by:
         //
+
+        // Here, the target share reserves may be smaller than the effective share reserves.
+        // Instead of throwing a panic error in fixed point, we catch this here and throw a
+        // descriptive panic.
+        // TODO this likely should throw an err.
         let effective_share_reserves = self.effective_share_reserves();
         if target_share_reserves < effective_share_reserves {
-            return Err(eyre!(
-                "absolute_max_long: target share reserves below effective share reserves"
-            ));
+            panic!("target share reserves less than effective share reserves");
         }
+
         let absolute_max_base_amount =
             (target_share_reserves - effective_share_reserves) * self.vault_share_price();
 
@@ -249,7 +259,7 @@ impl State {
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
             - self.open_long_curve_fees(absolute_max_base_amount);
 
-        Ok((absolute_max_base_amount, absolute_max_bond_amount))
+        (absolute_max_base_amount, absolute_max_bond_amount)
     }
 
     /// Calculates an initial guess of the max long that can be opened. This is a
@@ -539,13 +549,13 @@ mod tests {
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
                     // Unwrap twice to handle panic and err
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
+                    let (actual_base_amount, actual_bond_amount) = actual.unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
                 Err(_) => assert!(
                     // Check both panic and err
-                    actual.is_err() || actual.unwrap().is_err()
+                    actual.is_err()
                 ),
             }
         }
@@ -605,7 +615,8 @@ mod tests {
                 Ok((expected_base_amount, ..)) => {
                     assert_eq!(actual.unwrap(), FixedPoint::from(expected_base_amount));
                 }
-                Err(_) => assert!(actual.is_err() || actual == 0),
+                //Err(_) => assert!(actual.is_err() || actual == 0),
+                Err(_) => assert!(actual.is_err()),
             }
         }
 
