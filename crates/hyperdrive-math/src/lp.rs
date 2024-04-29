@@ -11,7 +11,7 @@ use fixed_point_macros::{fixed, int256};
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
-    // Calculates the lp_shares for a given contribution when adding liquidity.
+    /// Calculates the lp_shares for a given contribution when adding liquidity.
     pub fn calculate_add_liquidity(
         &self,
         current_block_timestamp: U256,
@@ -77,7 +77,7 @@ impl State {
         Ok(lp_shares)
     }
 
-    // Gets the resulting state when updating liquidity.
+    /// Gets the resulting state when updating liquidity.
     pub fn get_state_after_liquidity_update(&self, share_reserves_delta: I256) -> State {
         let share_reserves = self.share_reserves();
         let share_adjustment = self.share_adjustment();
@@ -106,8 +106,8 @@ impl State {
         }
     }
 
-    // Calculates the resulting share_reserves, share_adjustment, and
-    // bond_reserves when updating liquidity with a share_reserves_delta.
+    /// Calculates the resulting share_reserves, share_adjustment, and
+    /// bond_reserves when updating liquidity with a share_reserves_delta.
     fn calculate_update_liquidity(
         &self,
         share_reserves: FixedPoint,
@@ -226,9 +226,10 @@ impl State {
         present_value.into()
     }
 
-    // NOTE: This version will not panic.
-    //
-    // Calculates the present value of LPs capital in the pool.
+    /// NOTE: This version will not panic.
+    /// TODO: Combine this with `calculate_present_value`.
+    ///
+    /// Calculates the present value of LPs capital in the pool.
     pub fn calculate_present_value_safe(
         &self,
         current_block_timestamp: U256,
@@ -279,6 +280,7 @@ impl State {
         }
     }
 
+    /// Calculates the result of closing the net curve position.
     pub fn calculate_net_curve_trade(
         &self,
         long_average_time_remaining: FixedPoint,
@@ -386,6 +388,7 @@ impl State {
         }
     }
 
+    /// Calculates the result of closing the net flat position.
     pub fn calculate_net_flat_trade(
         &self,
         long_average_time_remaining: FixedPoint,
@@ -409,8 +412,8 @@ impl State {
             .unwrap()
     }
 
-    // Calculates the number of share reserves that are not reserved by open
-    // positions.
+    /// Calculates the number of share reserves that are not reserved by open
+    /// positions.
     fn calculate_idle_share_reserves(&self) -> FixedPoint {
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
         let idle_shares = {
@@ -423,14 +426,14 @@ impl State {
         idle_shares
     }
 
-    // Given a signed bond amount, this function calculates the negation of the
-    // derivative of `calculateSharesOutGivenBondsIn` when the bond amount is
-    // positive or the derivative of `calculateSharesInGivenBondsOut` when the
-    // bond amount is negative.
-    // Note that the state is the present state of the pool and original values
-    // passed in as parameters.  Present sate variables are not expressly
-    // paased in because so that downstream function like kUp() can still be
-    // used.
+    /// Given a signed bond amount, this function calculates the negation of the
+    /// derivative of `calculateSharesOutGivenBondsIn` when the bond amount is
+    /// positive or the derivative of `calculateSharesInGivenBondsOut` when the
+    /// bond amount is negative.
+    /// Note that the state is the present state of the pool and original values
+    /// passed in as parameters.  Present sate variables are not expressly
+    /// paased in because so that downstream function like kUp() can still be
+    /// used.
     fn calculate_shares_delta_given_bonds_delta_derivative(
         &self,
         bond_amount: I256,
@@ -933,6 +936,7 @@ mod tests {
                 original_bond_reserves: original_state.bond_reserves().into(),
             };
 
+            // Make the solidity call and compare to the Rust implementation.
             match mock
                 .calculate_shares_delta_given_bonds_delta_derivative_safe(
                     params,
