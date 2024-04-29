@@ -60,7 +60,6 @@ impl State {
         // Calculate the maximum long that brings the spot price to 1. If the pool is
         // solvent after opening this long, then we're done.
         let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long();
-
         if self
             .solvency_after_long(
                 absolute_max_base_amount,
@@ -547,15 +546,11 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
-                    // Unwrap twice to handle panic and err
                     let (actual_base_amount, actual_bond_amount) = actual.unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
-                Err(_) => assert!(
-                    // Check both panic and err
-                    actual.is_err()
-                ),
+                Err(_) => assert!(actual.is_err()),
             }
         }
 
