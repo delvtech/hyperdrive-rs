@@ -1,4 +1,7 @@
-use std::cmp::Ordering;
+use std::{
+    cmp::Ordering,
+    panic::{catch_unwind, AssertUnwindSafe},
+};
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
@@ -223,6 +226,59 @@ impl State {
         present_value.into()
     }
 
+    // NOTE: This version will not panic.
+    //
+    // Calculates the present value of LPs capital in the pool.
+    pub fn calculate_present_value_safe(
+        &self,
+        current_block_timestamp: U256,
+    ) -> Result<FixedPoint> {
+        let result = catch_unwind(AssertUnwindSafe(|| {
+            // Assume the following methods return Results and can be handled with `?`
+            let long_average_time_remaining = self.calculate_normalized_time_remaining(
+                self.long_average_maturity_time().into(),
+                current_block_timestamp,
+            );
+
+            let short_average_time_remaining = self.calculate_normalized_time_remaining(
+                self.short_average_maturity_time().into(),
+                current_block_timestamp,
+            );
+
+            // Conversion and calculation
+            let share_reserves = I256::try_from(self.share_reserves())
+                .map_err(|_| eyre!("Failed to convert share_reserves"))?;
+
+            let minimum_share_reserves = I256::try_from(self.minimum_share_reserves())
+                .map_err(|_| eyre!("Failed to convert minimum_share_reserves"))?;
+
+            let present_value = share_reserves
+                + self.calculate_net_curve_trade(
+                    long_average_time_remaining,
+                    short_average_time_remaining,
+                )
+                + self.calculate_net_flat_trade(
+                    long_average_time_remaining,
+                    short_average_time_remaining,
+                )
+                - minimum_share_reserves;
+
+            // Check for non-positive present value
+            if present_value < I256::from(0) {
+                Err(eyre!("Negative present value!"))
+            } else {
+                Ok(present_value.into()) // Converting I256 to FixedPoint, assuming it's possible
+            }
+        }));
+
+        // Handling the Result of `catch_unwind`
+        match result {
+            Ok(Ok(present_value)) => Ok(present_value), // Unwrap successful result
+            Ok(Err(e)) => Err(e),                       // Propagate the inner error
+            Err(_) => Err(eyre!("Panic occurred during calculation")),
+        }
+    }
+
     pub fn calculate_net_curve_trade(
         &self,
         long_average_time_remaining: FixedPoint,
@@ -352,6 +408,122 @@ impl State {
             ))
             .unwrap()
     }
+
+    // Calculates the number of share reserves that are not reserved by open
+    // positions.
+    fn calculate_idle_share_reserves(&self) -> FixedPoint {
+        let long_exposure = self.long_exposure().div_up(self.vault_share_price());
+        let idle_shares = {
+            if self.share_reserves() > long_exposure + self.minimum_share_reserves() {
+                return self.share_reserves() - long_exposure - self.minimum_share_reserves();
+            }
+            fixed!(0)
+        };
+
+        idle_shares
+    }
+
+    // Given a signed bond amount, this function calculates the negation of the
+    // derivative of `calculateSharesOutGivenBondsIn` when the bond amount is
+    // positive or the derivative of `calculateSharesInGivenBondsOut` when the
+    // bond amount is negative.
+    // Note that the state is the present state of the pool and original values
+    // passed in as parameters.  Present sate variables are not expressly
+    // paased in because so that downstream function like kUp() can still be
+    // used.
+    fn calculate_shares_delta_given_bonds_delta_derivative(
+        &self,
+        bond_amount: I256,
+        original_share_reserves: FixedPoint,
+        original_bond_reserves: FixedPoint,
+        original_effective_share_reserves: FixedPoint,
+        original_share_adjustment: I256,
+    ) -> Result<FixedPoint> {
+        // Calculate the bond reserves after the bond amount is applied.
+        let bond_reserves_after = if bond_amount >= I256::zero() {
+            self.bond_reserves() + bond_amount.into()
+        } else {
+            let bond_amount = FixedPoint::from(U256::try_from(-bond_amount)?);
+            if bond_amount < self.bond_reserves() {
+                self.bond_reserves() - bond_amount
+            } else {
+                return Err(eyre!("Calculating the bond reserves underflows"));
+            }
+        };
+
+        // NOTE: Round up since this is on the rhs of the final subtraction.
+        //
+        // derivative = c * (mu * z_e(x)) ** -t_s +
+        //              (y / z_e) * (y(x)) ** -t_s -
+        //              (y / z_e) * (y(x) + dy) ** -t_s
+        let effective_share_reserves = self.effective_share_reserves();
+        let derivative = self.vault_share_price().div_up(
+            self.initial_vault_share_price()
+                .mul_down(effective_share_reserves)
+                .pow(self.time_stretch()),
+        ) + original_bond_reserves.div_up(
+            original_effective_share_reserves
+                .mul_down(self.bond_reserves().pow(self.time_stretch())),
+        );
+
+        // NOTE: Rounding this down rounds the subtraction up.
+        let right_hand_side = original_bond_reserves.div_down(
+            original_effective_share_reserves.mul_up(bond_reserves_after.pow(self.time_stretch())),
+        );
+        if derivative < right_hand_side {
+            return Err(eyre!("Derivative is less than right hand side"));
+        }
+        let derivative = derivative - right_hand_side;
+
+        // NOTE: Round up since this is on the rhs of the final subtraction.
+        //
+        // inner = (
+        //             (mu / c) * (k(x) - (y(x) + dy) ** (1 - t_s))
+        //         ) ** (t_s / (1 - t_s))
+        let k = self.k_up();
+        let y_plus_dy_pow_one_minus_t = bond_reserves_after.pow(fixed!(1e18) - self.time_stretch());
+        if k < y_plus_dy_pow_one_minus_t {
+            return Err(eyre!("k is less than inner"));
+        }
+        let inner = k - y_plus_dy_pow_one_minus_t;
+        let inner = inner.mul_div_up(self.initial_vault_share_price(), self.vault_share_price());
+        let inner = if inner >= fixed!(1e18) {
+            // NOTE: Round the exponent up since this rounds the result up.
+            inner.pow(
+                self.time_stretch()
+                    .div_up(fixed!(1e18) - self.time_stretch()),
+            )
+        } else {
+            // NOTE: Round the exponent down since this rounds the result up.
+            inner.pow(
+                self.time_stretch()
+                    .div_down(fixed!(1e18) - self.time_stretch()),
+            )
+        };
+        let derivative = derivative.mul_div_up(inner, self.vault_share_price());
+        let derivative = if fixed!(1e18) > derivative {
+            fixed!(1e18) - derivative
+        } else {
+            return Ok(fixed!(0));
+        };
+        let derivative = if original_share_adjustment >= I256::zero() {
+            let right_hand_side =
+                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
+            if right_hand_side > fixed!(1e18) {
+                return Err(eyre!("Right hand side is greater than 1e18"));
+            }
+            let right_hand_side = fixed!(1e18) - right_hand_side;
+            derivative.mul_down(right_hand_side)
+        } else {
+            derivative.mul_down(
+                fixed!(1e18)
+                    + FixedPoint::try_from(-original_share_adjustment)?
+                        .div_down(original_share_reserves),
+            )
+        };
+
+        Ok(derivative)
+    }
 }
 
 #[cfg(test)]
@@ -362,7 +534,9 @@ mod tests {
     };
 
     use fixed_point_macros::uint256;
-    use hyperdrive_wrappers::wrappers::mock_lp_math::PresentValueParams;
+    use hyperdrive_wrappers::wrappers::mock_lp_math::{
+        DistributeExcessIdleParams, PresentValueParams,
+    };
     use rand::{thread_rng, Rng};
     use test_utils::{
         chain::TestChain,
@@ -681,6 +855,108 @@ mod tests {
             }
         }
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_test_calculate_shares_delta_given_bonds_delta_derivative() -> Result<()> {
+        let chain = TestChain::new().await?;
+        let mock = chain.mock_lp_math();
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // Generate random states.
+            let original_state = rng.gen::<State>();
+            let present_state = rng.gen::<State>();
+
+            // Get the bond amount, which in this case is equal to the net_curve_trade.
+            let bond_amount = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e24)))?; // 1 million
+
+            // Maturity time goes from 0 to position duration, so we'll just set
+            // this to zero to make the math simpler.
+            let current_block_timestamp = fixed!(0);
+
+            // Calcuulate the result from the Rust implementation.
+            let actual = present_state.calculate_shares_delta_given_bonds_delta_derivative(
+                bond_amount,
+                original_state.share_reserves(),
+                original_state.bond_reserves(),
+                original_state.effective_share_reserves(),
+                original_state.share_adjustment(),
+            );
+
+            // This errors out a lot so we need to catch that here.
+            let starting_present_value_result =
+                original_state.calculate_present_value_safe(U256::from(current_block_timestamp));
+            if starting_present_value_result.is_err() {
+                continue;
+            }
+            let starting_present_value = starting_present_value_result?;
+            let idle = present_state.calculate_idle_share_reserves();
+
+            // Gather the parameters for the solidity call.  There are a lot
+            // that aren't actually used, but the solidity call needs them.
+            let params = DistributeExcessIdleParams {
+                present_value_params: PresentValueParams {
+                    share_reserves: present_state.info.share_reserves,
+                    bond_reserves: present_state.info.bond_reserves,
+                    longs_outstanding: present_state.info.longs_outstanding,
+                    share_adjustment: present_state.info.share_adjustment,
+                    time_stretch: present_state.config.time_stretch,
+                    vault_share_price: present_state.info.vault_share_price,
+                    initial_vault_share_price: present_state.config.initial_vault_share_price,
+                    minimum_share_reserves: present_state.config.minimum_share_reserves,
+                    minimum_transaction_amount: present_state.config.minimum_transaction_amount,
+                    long_average_time_remaining: present_state
+                        .calculate_normalized_time_remaining(
+                            present_state.long_average_maturity_time().into(),
+                            current_block_timestamp.into(),
+                        )
+                        .into(),
+                    short_average_time_remaining: present_state
+                        .calculate_normalized_time_remaining(
+                            present_state.short_average_maturity_time().into(),
+                            current_block_timestamp.into(),
+                        )
+                        .into(),
+                    shorts_outstanding: present_state.shorts_outstanding().into(),
+                },
+                starting_present_value: starting_present_value.into(),
+                active_lp_total_supply: original_state.lp_total_supply().into(),
+                withdrawal_shares_total_supply: uint256!(0),
+                idle: idle.into(),
+                net_curve_trade: bond_amount,
+                original_share_reserves: original_state.share_reserves().into(),
+                original_share_adjustment: original_state.share_adjustment(),
+                original_bond_reserves: original_state.bond_reserves().into(),
+            };
+
+            match mock
+                .calculate_shares_delta_given_bonds_delta_derivative_safe(
+                    params,
+                    U256::from(original_state.effective_share_reserves()),
+                    bond_amount,
+                )
+                .call()
+                .await
+            {
+                Ok(expected) => {
+                    let (result, success) = expected;
+                    if !success && result == uint256!(0) {
+                        assert!(actual.is_err());
+                    } else if success && result == uint256!(0) {
+                        assert_eq!(actual?, fixed!(0));
+                    } else {
+                        assert_eq!(actual?, FixedPoint::from(expected.0));
+                    }
+                }
+                Err(_) => {
+                    assert!(actual.is_err())
+                }
+            }
+        }
         Ok(())
     }
 }
