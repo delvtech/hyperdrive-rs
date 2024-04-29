@@ -34,7 +34,7 @@ jobs:
           version: nightly
 
       - name: Fetch latest release tag from Hyperdrive
-        run: ./scripts/fetch-latest-tag.sh
+        run: ./scripts/fetch-latest-tag.sh delvtech hyperdrive
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -42,7 +42,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: delvtech/hyperdrive
-          ref: ${{ env.latest_tag }}
+          ref: ${{ env.latest_tag_hyperdrive }}
           path: "./hyperdrive"
 
       - name: build hyperdrive
