@@ -609,7 +609,6 @@ mod tests {
                 Ok((expected_base_amount, ..)) => {
                     assert_eq!(actual.unwrap(), FixedPoint::from(expected_base_amount));
                 }
-                //Err(_) => assert!(actual.is_err() || actual == 0),
                 Err(_) => assert!(actual.is_err()),
             }
         }
