@@ -87,7 +87,7 @@ jobs:
         python-version: [cp310]
 
     steps:
-      - name: Checkout hyperdrive-bindings
+      - name: Checkout hyperdrive-rs
         uses: actions/checkout@v4
         with:
           submodules: recursive

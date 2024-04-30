@@ -1,6 +1,6 @@
 # hyperdrivepy
 
-Hyperdrivepy is the Python to rust bindings of [hyperdrive-bindings](https://github.com/delvtech/hyperdrive-bindings).
+Hyperdrivepy is the Python bindings for the Rust [hyperdrive](https://github.com/delvtech/hyperdrive) implementation.
 
 ## Disclaimer
 
