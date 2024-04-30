@@ -159,23 +159,23 @@ impl State {
     /// if the variable rate stays the same.
     ///
     /// To do this, we must adjust the variable rate $r_{adjusted}$ according to
-    /// the position duration $t$ and the variable yield source's compounding
-    /// frequency $f$. The adjusted rate will be:
+    /// the position duration $t$. Since we start off from a compounded APY and
+    /// output a compounded APY, the compounding frequency $f$ is simplified away,
+    /// so the adjusted rate will be:
     ///
     /// $$
     /// r_{adjusted} = ((1 + r_{variable})^{1/f})^{t*f}-1
+    /// r_{adjusted} = (1 + r_{variable})^t-1
     /// $$
     pub fn calculate_implied_rate(
         &self,
         bond_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
         variable_apy: FixedPoint,
-        compounding_frequency: FixedPoint,
     ) -> Result<I256> {
         let base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
         let base_proceeds = bond_amount
-            * (((fixed!(1e18) + variable_apy).pow(fixed!(1e18) / compounding_frequency))
-                .pow(self.annualized_position_duration() * compounding_frequency)
+            * ((fixed!(1e18) + variable_apy).pow(self.annualized_position_duration())
                 - fixed!(1e18));
         if base_proceeds > base_paid {
             Ok(I256::try_from((base_proceeds - base_paid) / base_paid)?)
@@ -580,7 +580,6 @@ mod tests {
                 bond_amount,
                 bob.get_state().await?.vault_share_price(),
                 variable_rate.into(),
-                fixed!(365e18),
             )?;
             let (maturity_time, base_paid) = bob.open_short(bond_amount, None, None).await?;
 
