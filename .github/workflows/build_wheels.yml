@@ -45,20 +45,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: check out hyperdrive
-        uses: actions/checkout@v4
-        with:
-          repository: delvtech/hyperdrive
-          ref: ${{ env.latest_tag_hyperdrive }}
-          path: "./hyperdrive"
-          ssh-key: ${{ secrets.HYPERDRIVE_ACCESS_KEY }}
-
-      - name: build hyperdrive
-        run: cd hyperdrive && make build-sol
-
       - name: build hyperdrivepy
         shell: bash
         run: source scripts/build_python.sh
+        env:
+          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
+          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
 
       - name: upload artifacts
         uses: actions/upload-artifact@v4
@@ -93,17 +85,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: check out hyperdrive
-        uses: actions/checkout@v4
-        with:
-          repository: delvtech/hyperdrive
-          ref: ${{ env.latest_tag_hyperdrive }}
-          path: "./hyperdrive"
-          ssh-key: ${{ secrets.HYPERDRIVE_ACCESS_KEY }}
-
-      - name: build hyperdrive
-        run: cd hyperdrive && make build-sol
-
       - name: set up python
         uses: actions/setup-python@v4
         with:
@@ -115,6 +96,8 @@ jobs:
       - name: build wheels
         uses: pypa/cibuildwheel@v2.16.5
         env:
+          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
+          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
           CIBW_BUILD: "${{ matrix.python-version }}-*"
           CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$HOME/.foundry/bin:$HOME/.cargo/env:$PATH" CARGO_TERM_COLOR="always"'
           CIBW_ENVIRONMENT_WINDOWS: 'PATH="$UserProfile\.cargo\bin;$UserProfile\.foundry\bin;$UserProfile\.cargo\env;$PATH"'
