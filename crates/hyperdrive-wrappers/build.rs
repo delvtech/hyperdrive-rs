@@ -75,11 +75,15 @@ fn main() -> Result<()> {
     // Clone the hyperdrive repository if it doesn't exist
     let hyperdrive_dir = root.join("hyperdrive");
     if !hyperdrive_dir.exists() {
-        clone_repo(&git_url, &hyperdrive_dir)?;
+        clone_repo(&git_url, &hyperdrive_dir, &git_ref)?;
+    } else {
+        // If the repository exists, checkout the specified ref and pull the latest changes.
+        checkout_branch(&hyperdrive_dir, &git_ref)?;
+        Command::new("git")
+            .current_dir(&hyperdrive_dir)
+            .args(["pull", "origin", &git_ref])
+            .output()?;
     }
-
-    // Checkout the specified ref
-    checkout_ref(&hyperdrive_dir, &git_ref)?;
 
     // Compile the contracts.
     Command::new("forge")
@@ -166,9 +170,16 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
 
 // Git helpers
 
-fn clone_repo(url: &str, path: &Path) -> Result<()> {
+fn clone_repo(url: &str, path: &Path, branch: &str) -> Result<()> {
     let clone_status = Command::new("git")
-        .args(["clone", "--recurse-submodules", url, path.to_str().unwrap()])
+        .args([
+            "clone",
+            "--recurse-submodules",
+            "--branch",
+            branch,
+            url,
+            path.to_str().unwrap(),
+        ])
         .status()?;
 
     if !clone_status.success() {
@@ -178,7 +189,7 @@ fn clone_repo(url: &str, path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn checkout_ref(repo_path: &Path, git_ref: &str) -> Result<()> {
+fn checkout_branch(repo_path: &Path, git_ref: &str) -> Result<()> {
     let status = Command::new("git")
         .current_dir(repo_path)
         .args(["checkout", git_ref])
