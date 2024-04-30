@@ -38,17 +38,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: check out hyperdrive
-        uses: actions/checkout@v4
-        with:
-          repository: delvtech/hyperdrive
-          ref: ${{ env.latest_tag_hyperdrive }}
-          path: "./hyperdrive"
-
-      - name: build hyperdrive
-        run: cd hyperdrive && make build-sol
-
       - uses: actions-rs/toolchain@v1
+        env:
+          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
+          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
         with:
           toolchain: nightly
           override: true
