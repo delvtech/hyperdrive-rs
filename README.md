@@ -34,9 +34,6 @@ Hyperdrive features are present.
 Python bindings for this libarary can be accessed via
 [agent0](https://github.com/delvtech/agent0).
 
-WASM bindings are available via the
-[Hyperdrive web sdk](https://github.com/delvtech/frontend-monorepo).
-
 
 # Resources
 
