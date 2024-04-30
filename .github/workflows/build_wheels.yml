@@ -82,6 +82,11 @@ jobs:
           submodules: recursive
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: setup foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
       - name: Fetch latest release tag from hyperdrive
         shell: bash
         run: scripts/fetch-latest-tag.sh delvtech hyperdrive
