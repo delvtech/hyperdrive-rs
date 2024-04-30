@@ -157,6 +157,24 @@ impl State {
     /// will pay and comparing this to the amount of base the short will receive
     /// if the variable rate stays the same. The implied rate is just the ROI
     /// if the variable rate stays the same.
+    ///
+    /// To do this, we must figure out the term-adjusted yield $TPY$ according to
+    /// the position duration $t$. Since we start off from a compounded APY and also
+    /// output a compounded TPY, the compounding frequency $f$ is simplified away.
+    /// so the adjusted yield will be:
+    ///
+    /// $$
+    /// APR = f \cdot (( 1 + APY)^{\tfrac{1}{f}}  - 1)
+    /// $$
+    ///
+    /// Therefore,
+    ///
+    /// $$
+    /// \begin{align}
+    /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
+    /// &= (1 + APY)^{d} - 1
+    /// \end{align}make
+    /// $$
     pub fn calculate_implied_rate(
         &self,
         bond_amount: FixedPoint,
@@ -164,7 +182,9 @@ impl State {
         variable_apy: FixedPoint,
     ) -> Result<I256> {
         let base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
-        let base_proceeds = bond_amount * variable_apy;
+        let tpy =
+            (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration()) - fixed!(1e18);
+        let base_proceeds = bond_amount * tpy;
         if base_proceeds > base_paid {
             Ok(I256::try_from((base_proceeds - base_paid) / base_paid)?)
         } else {
@@ -532,7 +552,7 @@ mod tests {
     async fn test_calculate_implied_rate() -> Result<()> {
         let tolerance = int256!(1e14);
 
-        // Spwan a test chain with two agents.
+        // Spawn a test chain with two agents.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
@@ -558,6 +578,7 @@ mod tests {
             vault.set_rate(variable_rate.into()).send().await?;
 
             // Alice initializes the pool.
+            // TODO: We'd like to set a random position duration & checkpoint duration.
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Bob opens a short with a random bond amount. Before opening the
