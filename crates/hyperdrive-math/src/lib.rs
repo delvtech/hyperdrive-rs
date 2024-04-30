@@ -5,6 +5,7 @@ mod utils;
 mod yield_space;
 
 use ethers::types::{Address, I256, U256};
+use eyre::Result;
 use fixed_point::FixedPoint;
 use fixed_point_macros::fixed;
 use hyperdrive_wrappers::wrappers::ihyperdrive::{Fees, PoolConfig, PoolInfo};
@@ -253,6 +254,10 @@ impl State {
 
     fn effective_share_reserves(&self) -> FixedPoint {
         calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())
+    }
+
+    fn effective_share_reserves_safe(&self) -> Result<FixedPoint> {
+        calculate_effective_share_reserves_safe(self.share_reserves(), self.share_adjustment())
     }
 
     fn bond_reserves(&self) -> FixedPoint {
