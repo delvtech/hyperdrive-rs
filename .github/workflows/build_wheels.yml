@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*"
-  # FIXME remove this
-  pull_request:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -152,22 +150,22 @@ jobs:
           name: wheels-sdist
           path: bindings/hyperdrivepy/dist/*.tar.gz
 
-  #upload_pypi:
-  #  needs:
-  #    [
-  #      build-wheels-linux,
-  #      build-wheels-cibw,
-  #      build-sdist,
-  #    ]
-  #  runs-on: ubuntu-latest
-  #  environment: pypi
-  #  permissions:
-  #    id-token: write
-  #  steps:
-  #    - uses: actions/download-artifact@v4
-  #      with:
-  #        # unpacks all wheels into dist/
-  #        pattern: wheels-*
-  #        path: dist
-  #        merge-multiple: true
-  #    - uses: pypa/gh-action-pypi-publish@release/v1
+  upload_pypi:
+    needs:
+      [
+        build-wheels-linux,
+        build-wheels-cibw,
+        build-sdist,
+      ]
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          # unpacks all wheels into dist/
+          pattern: wheels-*
+          path: dist
+          merge-multiple: true
+      - uses: pypa/gh-action-pypi-publish@release/v1
