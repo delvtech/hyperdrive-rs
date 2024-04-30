@@ -48,6 +48,15 @@ impl State {
         let budget = budget.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
+        // Check the spot price after opening a minimum long is less than the
+        // max spot price
+        let spot_price_after_min_long = self
+            .calculate_spot_price_after_long(self.minimum_transaction_amount(), None)
+            .unwrap();
+        if spot_price_after_min_long > self.calculate_max_spot_price() {
+            return fixed!(0);
+        }
+
         // Calculate the maximum long that brings the spot price to 1. If the pool is
         // solvent after opening this long, then we're done.
         let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long();
@@ -81,6 +90,12 @@ impl State {
         // we converge to the solution.
         let mut max_base_amount =
             self.max_long_guess(absolute_max_base_amount, checkpoint_exposure);
+
+        // possible_max_base_amount might be less than minimum transaction amount.
+        // we clamp here if so
+        if max_base_amount < self.minimum_transaction_amount() {
+            max_base_amount = self.minimum_transaction_amount();
+        }
         let mut maybe_solvency = self.solvency_after_long(
             max_base_amount,
             self.calculate_open_long(max_base_amount).unwrap(),
@@ -118,7 +133,15 @@ impl State {
             if maybe_derivative.is_none() {
                 break;
             }
-            let possible_max_base_amount = max_base_amount + solvency / maybe_derivative.unwrap();
+            let mut possible_max_base_amount =
+                max_base_amount + solvency / maybe_derivative.unwrap();
+
+            // possible_max_base_amount might be less than minimum transaction amount.
+            // we clamp here if so
+            if possible_max_base_amount < self.minimum_transaction_amount() {
+                possible_max_base_amount = self.minimum_transaction_amount();
+            }
+
             maybe_solvency = self.solvency_after_long(
                 possible_max_base_amount,
                 self.calculate_open_long(possible_max_base_amount).unwrap(),
@@ -130,6 +153,11 @@ impl State {
             } else {
                 break;
             }
+        }
+
+        // If the max base amount is less than the minimum transaction amount, we return 0 as the max long.
+        if max_base_amount <= self.minimum_transaction_amount() {
+            return fixed!(0);
         }
 
         // Ensure that the final result is less than the absolute max and clamp
@@ -210,9 +238,18 @@ impl State {
 
         // The absolute max base amount is given by:
         //
-        // absoluteMaxBaseAmount = c * (z_t - z)
+
+        // Here, the target share reserves may be smaller than the effective share reserves.
+        // Instead of throwing a panic error in fixed point, we catch this here and throw a
+        // descriptive panic.
+        // TODO this likely should throw an err.
+        let effective_share_reserves = self.effective_share_reserves();
+        if target_share_reserves < effective_share_reserves {
+            panic!("target share reserves less than effective share reserves");
+        }
+
         let absolute_max_base_amount =
-            (target_share_reserves - self.effective_share_reserves()) * self.vault_share_price();
+            (target_share_reserves - effective_share_reserves) * self.vault_share_price();
 
         // The absolute max bond amount is given by:
         //

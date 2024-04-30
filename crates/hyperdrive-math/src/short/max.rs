@@ -318,7 +318,7 @@ impl State {
         let mut maybe_solvency =
             self.solvency_after_short(max_bond_amount, spot_price, checkpoint_exposure);
         if maybe_solvency.is_none() {
-            panic!("Initial guess in `max_short` is insolvent.");
+            panic!("Initial guess in `absolute_max_short` is insolvent.");
         }
         let mut solvency = maybe_solvency.unwrap();
         for _ in 0..maybe_max_iterations.unwrap_or(7) {

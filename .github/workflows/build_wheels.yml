@@ -2,23 +2,15 @@ name: build wheels
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - "v*"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
-  detect-version-changes:
-    uses: ./.github/workflows/check_version.yml
-    with:
-      file_path: bindings/hyperdrivepy/pyproject.toml
-
   build-wheels-linux:
-    needs: detect-version-changes
-    # Run on main if version has changed
-    if: needs.detect-version-changes.outputs.version_changed == 'true'
     name: build on linux
     runs-on: ubuntu-latest
     steps:
@@ -75,9 +67,6 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build-wheels-cibw:
-    needs: detect-version-changes
-    # Run on main if version has changed
-    if: needs.detect-version-changes.outputs.version_changed == 'true'
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
@@ -143,11 +132,8 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build-sdist:
-    needs: detect-version-changes
     name: Build source distribution
     runs-on: ubuntu-latest
-    # Run on main if version has changed
-    if: needs.detect-version-changes.outputs.version_changed == 'true'
     steps:
       - uses: actions/checkout@v3
 
@@ -165,14 +151,11 @@ jobs:
         build-wheels-linux,
         build-wheels-cibw,
         build-sdist,
-        detect-version-changes,
       ]
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
       id-token: write
-    # Run on main if version has changed
-    if: needs.detect-version-changes.outputs.version_changed == 'true'
     steps:
       - uses: actions/download-artifact@v4
         with:

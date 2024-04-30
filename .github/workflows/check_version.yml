@@ -1,3 +1,5 @@
+# TODO this workflow isn't used anymore, but we keep this around in case it's useful in the future
+# We likely want to abstract this out used across delv org
 name: Check Version
 
 on:
