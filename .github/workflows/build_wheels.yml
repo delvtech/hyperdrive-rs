@@ -2,6 +2,9 @@ name: build wheels
 
 on:
   push:
+    # FIXME remove this
+    pull_request:
+    
     tags:
       - "v*"
 
