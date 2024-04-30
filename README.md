@@ -65,7 +65,7 @@ Proceed through the following steps to set up the repository:
 > ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
 > ```
 >
-> Then,update the `HYPERDRIVE_REF` in the `.env` file to point to the branch,
+> Then, update the `HYPERDRIVE_REF` in the `.env` file to point to the branch,
 > tag, or the commit hash you want to build against.
 
 ## Build
