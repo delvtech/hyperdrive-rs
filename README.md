@@ -58,7 +58,7 @@ Proceed through the following steps to set up the repository:
   correct version of the [Hyperdrive](https://github.com/delvtech/hyperdrive)
   repository.
 
-> To build against a local version of the Hyperdrive contracts, create a sim-link
+> To build against a local version of the Hyperdrive contracts, create a symlink
 > to the Hyperdrive contracts in the hyperdrive-wrappers crate:
 >
 > ```sh
