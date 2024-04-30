@@ -11,17 +11,17 @@ built on top of arbitrary yield sources. Hyperdrive provides several novel
 features for fixed-rate AMMs including:
 
 - Terms on Demand: Hyperdrive allows for minting to be a part of the
-AMM, where the AMM essentially underwrites a new term for the user
-whenever they open a position. The user is not constrained to purchasing,
-selling, or minting into preexisting terms that are partially matured.
+  AMM, where the AMM essentially underwrites a new term for the user
+  whenever they open a position. The user is not constrained to purchasing,
+  selling, or minting into preexisting terms that are partially matured.
 - Continuous Liquidity: Hyperdrive pools never expire and underwrite a
-variety of fixed and variable rate terms with differing maturity dates. LPs
-can provide liquidity once without needing to roll their liquidity over to
-new terms.
+  variety of fixed and variable rate terms with differing maturity dates. LPs
+  can provide liquidity once without needing to roll their liquidity over to
+  new terms.
 - Single-Sided Liquidity: Hyperdrive liquidity providers are only required to
-provide base assets. The fact that LPs don't need to mint bonds to provide
-liquidity improves the capital efficiency and UX of providing liquidity to
-fixed-rate markets.
+  provide base assets. The fact that LPs don't need to mint bonds to provide
+  liquidity improves the capital efficiency and UX of providing liquidity to
+  fixed-rate markets.
 
 # Hyperdrive-rs
 
@@ -33,7 +33,6 @@ Hyperdrive features are present.
 
 Python bindings for this libarary can be accessed via
 [agent0](https://github.com/delvtech/agent0).
-
 
 # Resources
 
@@ -51,28 +50,41 @@ everlasting liquidity, and explains how the AMM's pricing model works.
 ## Pre-requisites
 
 This repository makes use of [foundry](https://github.com/foundry-rs/foundry) to
-build and test smart contracts against the Rust implementation. 
+build and test smart contracts against the Rust implementation.
 Proceed through the following steps to set up the repository:
 
 - [Install forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation)
-- Create a sim-link to the `Hyperdrive` smart contracts:
-  - clone [Hyperdrive](https://github.com/delvtech/hyperdrive) into a parent folder
-  - create a sim link to hyperdrive in this repository root via `ln -s ../hyperdrive .`
+- Copy the `.env.example` file to `.env` and adjust as needed to point to the
+  correct version of the [Hyperdrive](https://github.com/delvtech/hyperdrive)
+  repository.
+
+> To build against a local version of the Hyperdrive contracts, create a symlink
+> to the Hyperdrive contracts in the hyperdrive-wrappers crate:
+>
+> ```sh
+> ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
+> ```
+>
+> Then, update the `HYPERDRIVE_REF` in the `.env` file to point to the branch,
+> tag, or the commit hash you want to build against.
 
 ## Build
 
-To build the smart contracts, run `make build`.
+```sh
+make build
+```
 
 ## Test
 
-To test the smart contracts, run `make test`.
+```sh
+make test
+```
 
 ## Lint
 
-We have several linters. Solhint is a Solidity linter that checks for best
-practices and style, prettier is a Solidity formatter that checks for formatting
-and style, and cSpell is a spell checker. To run all three, run `make lint`.
-If you want to automatically format the code, run `make prettier`.
+```sh
+make lint
+```
 
 # Disclaimer
 
@@ -80,7 +92,7 @@ The language used in this code and documentation is not intended to, and does no
 
 ---
 
-Copyright © 2024  DELV
+Copyright © 2024 DELV
 
 Licensed under the Apache License, Version 2.0 (the "OSS License").
 
