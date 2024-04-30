@@ -1,4 +1,5 @@
 use ethers::types::{I256, U256};
+use eyre::{eyre, Result};
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, uint256};
 
@@ -43,6 +44,17 @@ pub fn calculate_effective_share_reserves(
         panic!("effective share reserves cannot be negative");
     }
     effective_share_reserves.into()
+}
+
+pub fn calculate_effective_share_reserves_safe(
+    share_reserves: FixedPoint,
+    share_adjustment: I256,
+) -> Result<FixedPoint> {
+    let effective_share_reserves = I256::try_from(share_reserves).unwrap() - share_adjustment;
+    if effective_share_reserves < I256::from(0) {
+        return Err(eyre!("effective share reserves cannot be negative"));
+    }
+    Ok(effective_share_reserves.into())
 }
 
 /// Calculates the bond reserves assuming that the pool has a given

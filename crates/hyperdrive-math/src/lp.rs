@@ -418,22 +418,61 @@ impl State {
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
         let idle_shares = {
             if self.share_reserves() > long_exposure + self.minimum_share_reserves() {
-                return self.share_reserves() - long_exposure - self.minimum_share_reserves();
+                self.share_reserves() - long_exposure - self.minimum_share_reserves()
+            } else {
+                fixed!(0)
             }
-            fixed!(0)
         };
 
         idle_shares
     }
 
-    /// Given a signed bond amount, this function calculates the negation of the
-    /// derivative of `calculateSharesOutGivenBondsIn` when the bond amount is
-    /// positive or the derivative of `calculateSharesInGivenBondsOut` when the
-    /// bond amount is negative.
+    /// TODO: https://github.com/delvtech/hyperdrive/issues/965
+    ///
     /// Note that the state is the present state of the pool and original values
     /// passed in as parameters.  Present sate variables are not expressly
     /// paased in because so that downstream function like kUp() can still be
     /// used.
+    ///
+    /// Given a signed bond amount, this function calculates the negation
+    /// of the derivative of `calculateSharesOutGivenBondsIn` when the
+    /// bond amount is positive or the derivative of
+    /// `calculateSharesInGivenBondsOut` when the bond amount is negative.
+    /// In both cases, the calculation is given by:
+    ///
+    ///  derivative = (1 - zeta / z) * (
+    ///      1 - (1 / c) * (
+    ///          c * (mu * z_e(x)) ** -t_s +
+    ///          (y / z_e) * y(x) ** -t_s  -
+    ///          (y / z_e) * (y(x) + dy) ** -t_s
+    ///      ) * (
+    ///          (mu / c) * (k(x) - (y(x) + dy) ** (1 - t_s))
+    ///      ) ** (t_s / (1 - t_s))
+    ///  )
+    ///
+    ///  This quantity is used in Newton's method to search for the optimal
+    ///  share proceeds. When the pool is net long, We can express the
+    ///  derivative of the objective function F(x) by the derivative
+    ///  -z_out'(x) that this function returns:
+    ///
+    ///  -F'(x) = l * -PV'(x)
+    ///         = l * (1 - net_c'(x))
+    ///         = l * (1 + z_out'(x))
+    ///         = l * (1 - derivative)
+    ///
+    ///  When the pool is net short, we can express the derivative of the
+    ///  objective function F(x) by the derivative z_in'(x) that this
+    ///  function returns:
+    ///
+    ///  -F'(x) = l * -PV'(x)
+    ///         = l * (1 - net_c'(x))
+    ///         = l * (1 - z_in'(x))
+    ///         = l * (1 - derivative)
+    ///
+    ///  With these calculations in mind, this function rounds its result
+    ///  down so that F'(x) is overestimated. Since F'(x) is in the
+    ///  denominator of Newton's method, overestimating F'(x) helps to avoid
+    ///  overshooting the optimal solution.
     fn calculate_shares_delta_given_bonds_delta_derivative(
         &self,
         bond_amount: I256,
@@ -459,7 +498,8 @@ impl State {
         // derivative = c * (mu * z_e(x)) ** -t_s +
         //              (y / z_e) * (y(x)) ** -t_s -
         //              (y / z_e) * (y(x) + dy) ** -t_s
-        let effective_share_reserves = self.effective_share_reserves();
+        let effective_share_reserves = self.effective_share_reserves_safe()?;
+        // NOTE: The exponent is positive and base is flipped to handle the negative value.
         let derivative = self.vault_share_price().div_up(
             self.initial_vault_share_price()
                 .mul_down(effective_share_reserves)
@@ -470,13 +510,13 @@ impl State {
         );
 
         // NOTE: Rounding this down rounds the subtraction up.
-        let right_hand_side = original_bond_reserves.div_down(
+        let rhs = original_bond_reserves.div_down(
             original_effective_share_reserves.mul_up(bond_reserves_after.pow(self.time_stretch())),
         );
-        if derivative < right_hand_side {
+        if derivative < rhs {
             return Err(eyre!("Derivative is less than right hand side"));
         }
-        let derivative = derivative - right_hand_side;
+        let derivative = derivative - rhs;
 
         // NOTE: Round up since this is on the rhs of the final subtraction.
         //
@@ -484,11 +524,11 @@ impl State {
         //             (mu / c) * (k(x) - (y(x) + dy) ** (1 - t_s))
         //         ) ** (t_s / (1 - t_s))
         let k = self.k_up();
-        let y_plus_dy_pow_one_minus_t = bond_reserves_after.pow(fixed!(1e18) - self.time_stretch());
-        if k < y_plus_dy_pow_one_minus_t {
+        let inner = bond_reserves_after.pow(fixed!(1e18) - self.time_stretch());
+        if k < inner {
             return Err(eyre!("k is less than inner"));
         }
-        let inner = k - y_plus_dy_pow_one_minus_t;
+        let inner = k - inner;
         let inner = inner.mul_div_up(self.initial_vault_share_price(), self.vault_share_price());
         let inner = if inner >= fixed!(1e18) {
             // NOTE: Round the exponent up since this rounds the result up.
@@ -507,8 +547,14 @@ impl State {
         let derivative = if fixed!(1e18) > derivative {
             fixed!(1e18) - derivative
         } else {
+            // NOTE: Small rounding errors can result in the derivative being
+            // slightly (on the order of a few wei) greater than 1. In this case,
+            // we return 0 since we should proceed with Newton's method.
             return Ok(fixed!(0));
         };
+        // NOTE: Round down to round the final result down.
+        //
+        // derivative = derivative * (1 - (zeta / z))
         let derivative = if original_share_adjustment >= I256::zero() {
             let right_hand_side =
                 FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
