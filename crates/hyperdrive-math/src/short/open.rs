@@ -158,11 +158,10 @@ impl State {
     /// if the variable rate stays the same. The implied rate is just the ROI
     /// if the variable rate stays the same.
     ///
-    /// To do this, we must adjust the variable rate $r_{adjusted}$ according to
-    /// the annualized position duration $d$ (which equals `position_duration / 365 days`).
-    /// Since we start off from a compounded APY and output a compounded APY with a
-    /// normalizing constant of 1 year, the compounding frequency $f$ is simplified away,
-    /// so the adjusted rate will be:
+    /// To do this, we must figure out the term-adjusted yield $TPY$ according to
+    /// the position duration $t$. Since we start off from a compounded APY and also
+    /// output a compounded TPY, the compounding frequency $f$ is simplified away.
+    /// so the adjusted yield will be:
     ///
     /// $$
     /// APR = f \cdot (( 1 + APY)^{\tfrac{1}{f}}  - 1)
@@ -174,7 +173,7 @@ impl State {
     /// \begin{align}
     /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
     /// &= (1 + APY)^{d} - 1
-    /// \end{align}
+    /// \end{align}make
     /// $$
     pub fn calculate_implied_rate(
         &self,
