@@ -1,6 +1,7 @@
-use crate::{extract_i256_from_attr, extract_u256_from_attr};
 use hyperdrive_wrappers::wrappers::ihyperdrive::PoolInfo;
 use pyo3::prelude::*;
+
+use crate::{extract_i256_from_attr, extract_u256_from_attr};
 
 pub struct PyPoolInfo {
     pub pool_info: PoolInfo,

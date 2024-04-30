@@ -1,15 +1,10 @@
 use ethers::core::types::{I256, U256};
 use fixed_point::FixedPoint;
+use hyperdrive_math::{State, YieldSpace};
+use pyo3::{exceptions::PyValueError, prelude::*};
 
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-
-pub use crate::utils::*;
 use crate::HyperdriveState;
-pub use crate::PyPoolConfig;
-pub use crate::PyPoolInfo;
-use hyperdrive_math::State;
-use hyperdrive_math::YieldSpace;
+pub use crate::{utils::*, PyPoolConfig, PyPoolInfo};
 
 #[pymethods]
 impl HyperdriveState {
@@ -24,7 +19,7 @@ impl HyperdriveState {
     pub fn calculate_solvency(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_solvency();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_spot_price_after_long(
@@ -51,7 +46,7 @@ impl HyperdriveState {
             .calculate_spot_price_after_long(base_amount_fp, maybe_bond_amount_fp)
             .unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_spot_price_after_short(
@@ -78,13 +73,13 @@ impl HyperdriveState {
             .calculate_spot_price_after_short(bond_amount_fp, maybe_base_amount_fp)
             .unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_spot_price(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_spot_price();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_spot_rate_after_long(
@@ -111,13 +106,13 @@ impl HyperdriveState {
             .calculate_spot_rate_after_long(base_amount_fp, maybe_bond_amount_fp)
             .unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_spot_rate(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_spot_rate();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_open_long(&self, base_amount: &str) -> PyResult<String> {
@@ -126,7 +121,7 @@ impl HyperdriveState {
         })?);
         let result_fp = self.state.calculate_open_long(base_amount_fp).unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_close_long(
@@ -149,7 +144,7 @@ impl HyperdriveState {
             self.state
                 .calculate_close_long(bond_amount_fp, maturity_time, current_time);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_open_short(
@@ -171,7 +166,7 @@ impl HyperdriveState {
             .calculate_open_short(short_amount_fp, open_vault_share_price_fp)
             .unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_close_short(
@@ -211,13 +206,13 @@ impl HyperdriveState {
             current_time,
         );
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_max_spot_price(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_max_spot_price();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_targeted_long_with_budget(
@@ -264,7 +259,7 @@ impl HyperdriveState {
                 ))
             })?;
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_max_long(
@@ -283,7 +278,7 @@ impl HyperdriveState {
             self.state
                 .calculate_max_long(budget_fp, checkpoint_exposure_i, maybe_max_iterations);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_max_short(
@@ -326,7 +321,7 @@ impl HyperdriveState {
             maybe_max_iterations,
         );
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_present_value(&self, current_block_timestamp: &str) -> PyResult<String> {
@@ -340,13 +335,13 @@ impl HyperdriveState {
             .state
             .calculate_present_value(current_block_timestamp_int);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_idle_share_reserves_in_base(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_idle_share_reserves_in_base();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_bonds_out_given_shares_in_down(&self, amount_in: &str) -> PyResult<String> {
@@ -357,7 +352,7 @@ impl HyperdriveState {
             .state
             .calculate_bonds_out_given_shares_in_down(amount_in_fp);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_shares_in_given_bonds_out_up(&self, amount_in: &str) -> PyResult<String> {
@@ -370,7 +365,7 @@ impl HyperdriveState {
             .calculate_shares_in_given_bonds_out_up_safe(amount_in_fp)
             .unwrap();
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_shares_in_given_bonds_out_down(&self, amount_in: &str) -> PyResult<String> {
@@ -381,7 +376,7 @@ impl HyperdriveState {
             .state
             .calculate_shares_in_given_bonds_out_down(amount_in_fp);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn calculate_shares_out_given_bonds_in_down(&self, amount_in: &str) -> PyResult<String> {
@@ -392,7 +387,7 @@ impl HyperdriveState {
             .state
             .calculate_shares_out_given_bonds_in_down(amount_in_fp);
         let result = U256::from(result_fp).to_string();
-        return Ok(result);
+        Ok(result)
     }
 
     pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {
@@ -400,6 +395,6 @@ impl HyperdriveState {
             .map_err(|_| PyErr::new::<PyValueError, _>("Failed to convert time string to U256"))?;
         let result_int = self.state.to_checkpoint(time_int);
         let result = result_int.to_string();
-        return Ok(result);
+        Ok(result)
     }
 }

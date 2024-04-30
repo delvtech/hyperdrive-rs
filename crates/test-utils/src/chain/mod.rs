@@ -173,10 +173,7 @@ impl Chain {
         }
         let balance = self.provider.get_balance(address, None).await?;
         self.provider
-            .request::<(Address, U256), ()>(
-                "anvil_setBalance",
-                (address, U256::from(balance) + amount),
-            )
+            .request::<(Address, U256), ()>("anvil_setBalance", (address, balance + amount))
             .await?;
         Ok(())
     }

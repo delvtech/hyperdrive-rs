@@ -1,7 +1,6 @@
 use ethers::core::types::{Address, H256, I256, U256};
 use hyperdrive_wrappers::wrappers::ihyperdrive::Fees;
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyValueError, prelude::*};
 
 // Helper function to extract U256 values from Python object attributes
 pub fn extract_u256_from_attr(ob: &PyAny, attr: &str) -> PyResult<U256> {
@@ -37,10 +36,10 @@ pub fn extract_bytes32_from_attr(ob: &PyAny, attr: &str) -> PyResult<[u8; 32]> {
 pub fn extract_fees_from_attr(ob: &PyAny, attr: &str) -> PyResult<Fees> {
     let fees_obj = ob.getattr(attr)?;
 
-    let curve = extract_u256_from_attr(&fees_obj, "curve")?;
-    let flat = extract_u256_from_attr(&fees_obj, "flat")?;
-    let governance_lp = extract_u256_from_attr(&fees_obj, "governanceLP")?;
-    let governance_zombie = extract_u256_from_attr(&fees_obj, "governanceZombie")?;
+    let curve = extract_u256_from_attr(fees_obj, "curve")?;
+    let flat = extract_u256_from_attr(fees_obj, "flat")?;
+    let governance_lp = extract_u256_from_attr(fees_obj, "governanceLP")?;
+    let governance_zombie = extract_u256_from_attr(fees_obj, "governanceZombie")?;
 
     Ok(Fees {
         curve,

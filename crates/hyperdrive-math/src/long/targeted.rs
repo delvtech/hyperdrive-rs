@@ -88,7 +88,7 @@ impl State {
             }
             // Else, cut the initial guess down by an order of magnitude and go to Newton's method.
             else {
-                target_base_delta = target_base_delta / fixed!(10e18);
+                target_base_delta /= fixed!(10e18);
             }
         }
         // Else check if we are close enough to return.
@@ -155,8 +155,7 @@ impl State {
                 // Adding the negative loss derivative instead of subtracting the loss derivative
                 // ∆x_{n+1} = ∆x_{n} - l / l'
                 //          = ∆x_{n} + l / (-l')
-                possible_target_base_delta =
-                    possible_target_base_delta + loss / negative_loss_derivative;
+                possible_target_base_delta += loss / negative_loss_derivative;
             }
         }
 

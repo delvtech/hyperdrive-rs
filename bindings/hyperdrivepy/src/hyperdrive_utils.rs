@@ -1,15 +1,11 @@
 use ethers::core::types::{I256, U256};
 use fixed_point::FixedPoint;
-
-use pyo3::exceptions::PyValueError;
-use pyo3::prelude::*;
-use pyo3::PyErr;
-
 use hyperdrive_math::{
     calculate_effective_share_reserves as rs_calculate_effective_share_reserves,
     calculate_initial_bond_reserves as rs_calculate_initial_bond_reserves,
     calculate_time_stretch as rs_calculate_time_stretch,
 };
+use pyo3::{exceptions::PyValueError, prelude::*};
 
 #[pyfunction]
 pub fn calculate_initial_bond_reserves(
@@ -50,7 +46,7 @@ pub fn calculate_initial_bond_reserves(
         time_stretch_fp,
     );
     let result = U256::from(result_fp).to_string();
-    return Ok(result);
+    Ok(result)
 }
 
 #[pyfunction]
@@ -66,7 +62,7 @@ pub fn calculate_effective_share_reserves(
     })?;
     let result_fp = rs_calculate_effective_share_reserves(share_reserves_fp, share_adjustment_i);
     let result = U256::from(result_fp).to_string();
-    return Ok(result);
+    Ok(result)
 }
 
 #[pyfunction]
@@ -81,5 +77,5 @@ pub fn calculate_time_stretch(rate: &str, position_duration: &str) -> PyResult<S
     );
     let result_fp = rs_calculate_time_stretch(rate_fp, position_duration_fp);
     let result = U256::from(result_fp).to_string();
-    return Ok(result);
+    Ok(result)
 }

@@ -184,8 +184,7 @@ impl State {
         let scaled_position_duration = self.position_duration() * fixed!(1e36);
         if scaled_maturity_time > scaled_latest_checkpoint {
             // NOTE: Round down to underestimate the time remaining.
-            FixedPoint::from(scaled_maturity_time - scaled_latest_checkpoint)
-                .div_down(scaled_position_duration)
+            (scaled_maturity_time - scaled_latest_checkpoint).div_down(scaled_position_duration)
         } else {
             fixed!(0)
         }

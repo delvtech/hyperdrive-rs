@@ -1,7 +1,7 @@
+use hyperdrive_math::State;
 use pyo3::prelude::*;
 
 use crate::{PyPoolConfig, PyPoolInfo};
-use hyperdrive_math::State;
 
 #[pyclass(module = "hyperdrivepy", name = "HyperdriveState")]
 pub struct HyperdriveState {
