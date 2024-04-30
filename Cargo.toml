@@ -7,10 +7,8 @@ members = [
     "crates/hyperdrive-math",
     "crates/hyperdrive-wrappers",
     "crates/test-utils",
+    "bindings/hyperdrivepy",
 ]
-
-[build]
-build = "build.rs"
 
 [workspace.package]
 name="hyperdrive-rs"

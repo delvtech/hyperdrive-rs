@@ -1,0 +1,54 @@
+[project]
+name = "hyperdrivepy"
+version = "0.14.0"
+authors = [
+    { name = "Dylan Paiton", email = "dylan@delv.tech" },
+    { name = "Matthew Brown", email = "matt@delv.tech" },
+    { name = "Sheng Lundquist", email = "sheng@delv.tech" },
+]
+requires-python = ">=3.7"
+readme = "README.md"
+
+[project.urls]
+Homepage = "https://github.com/delvtech/hyperdrive-rs"
+Issues = "https://github.com/delvtech/hyperdrive-rs/issues"
+
+[tool.pytest.ini_options]
+minversion = "6.0"
+addopts = ["--tb=short"]
+norecursedirs = ".git examples hyperdrive"
+python_files = ["*_test.py", "*_tests.py"]
+
+[tool.pylint.format]
+max-line-length = "120"
+
+[tool.black]
+line-length = "120"
+extend-exclude = "\\.ipynb"
+
+[tool.pylint.MASTER]
+ignore = [
+  "hyperdrive",
+  ".venv",
+  ".vscode",
+  "docs",
+  "pypechain_types"
+]
+notes = ["FIXME"]
+max-line-length = 120
+ignore-docstrings = 'no'
+ignore-imports = 'no'
+disable='duplicate-code'
+extension-pkg-allow-list="hyperdrivepy"
+
+[tool.pyright]
+include = ["bindings/hyperdrivepy"]
+exclude = [
+  "crates/",
+  ".venv",
+  ".vscode",
+  "docs",
+  "**/pypechain_types",
+  "**/__pycache__"
+]
+reportMissingImports = false
