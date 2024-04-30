@@ -39,9 +39,6 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - uses: actions-rs/toolchain@v1
-        env:
-          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
-          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
         with:
           toolchain: nightly
           override: true
@@ -49,3 +46,6 @@ jobs:
 
       - name: lint
         run: make lint
+        env:
+          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
+          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
