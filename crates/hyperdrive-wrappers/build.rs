@@ -59,8 +59,8 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    // Re-run this script whenever .env, the build script itself, or a contract changes.
-    println!("cargo:rerun-if-changed=.env");
+    // Re-run this script whenever root .env, the build script itself, or a contract changes.
+    println!("cargo:rerun-if-changed=../../.env");
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=hyperdrive/contracts/");
 
