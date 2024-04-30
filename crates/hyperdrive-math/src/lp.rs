@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    panic::{catch_unwind, AssertUnwindSafe},
-};
+use std::cmp::Ordering;
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
@@ -39,7 +36,7 @@ impl State {
         let lp_total_supply = self.lp_total_supply();
 
         // Get the starting_present_value.
-        let starting_present_value = self.calculate_present_value(current_block_timestamp);
+        let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
 
         // Get the ending_present_value.
         let share_contribution = {
@@ -51,7 +48,7 @@ impl State {
             }
         };
         let new_state = self.get_state_after_liquidity_update(share_contribution);
-        let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+        let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
 
         // Ensure the present value didn't decrease after adding liquidity.
         if ending_present_value < starting_present_value {
@@ -584,8 +581,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             assert!(ending_present_value < starting_present_value);
                         }
 
@@ -593,8 +590,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             let lp_shares = (ending_present_value - starting_present_value)
                                 .mul_div_down(state.lp_total_supply(), starting_present_value);
                             assert!(lp_shares < state.minimum_transaction_amount());
@@ -604,8 +601,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             let lp_shares = (ending_present_value - starting_present_value)
                                 .mul_div_down(state.lp_total_supply(), starting_present_value);
                             assert!(contribution.div_down(lp_shares) < min_lp_share_price);
