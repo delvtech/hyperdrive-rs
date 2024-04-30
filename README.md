@@ -55,7 +55,18 @@ Proceed through the following steps to set up the repository:
 
 - [Install forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation)
 - Copy the `.env.example` file to `.env` and adjust as needed to point to the
-  correct version of the [Hyperdrive](https://github.com/delvtech/hyperdrive) repository.
+  correct version of the [Hyperdrive](https://github.com/delvtech/hyperdrive)
+  repository.
+
+> To build against a local version of the Hyperdrive contracts, create a sim-link
+> to the Hyperdrive contracts in the hyperdrive-wrappers crate:
+>
+> ```sh
+> ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
+> ```
+>
+> Then,update the `HYPERDRIVE_REF` in the `.env` file to point to the branch,
+> tag, or the commit hash you want to build against.
 
 ## Build
 
