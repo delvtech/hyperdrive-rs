@@ -7,7 +7,7 @@ python -m pip install --upgrade -r requirements-dev.txt
 python -m pip install auditwheel
 
 echo "nav into the crate so relative paths work"
-cd crates/hyperdrivepy
+cd bindings/hyperdrivepy
 
 echo "build the wheel for the current platform"
 python setup.py bdist_wheel
