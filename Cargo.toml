@@ -10,9 +10,6 @@ members = [
     "bindings/hyperdrivepy",
 ]
 
-# [build]
-# build = "build.rs"
-
 [workspace.package]
 name="hyperdrive-rs"
 version="0.1.0"
