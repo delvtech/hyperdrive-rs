@@ -159,13 +159,22 @@ impl State {
     /// if the variable rate stays the same.
     ///
     /// To do this, we must adjust the variable rate $r_{adjusted}$ according to
-    /// the position duration $t$. Since we start off from a compounded APY and
-    /// output a compounded APY, the compounding frequency $f$ is simplified away,
+    /// the annualized position duration $d$ (which equals `position_duration / 365 days`).
+    /// Since we start off from a compounded APY and output a compounded APY with a
+    /// normalizing constant of 1 year, the compounding frequency $f$ is simplified away,
     /// so the adjusted rate will be:
     ///
     /// $$
-    /// r_{adjusted} = ((1 + r_{variable})^{1/f})^{t*f}-1
-    /// r_{adjusted} = (1 + r_{variable})^t-1
+    /// APR = f \cdot (( 1 + APY)^{\tfrac{1}{f}}  - 1)
+    /// $$
+    ///
+    /// Therefore,
+    ///
+    /// $$
+    /// \begin{align}
+    /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
+    /// &= (1 + APY)^{d} - 1
+    /// \end{align}
     /// $$
     pub fn calculate_implied_rate(
         &self,
@@ -174,9 +183,9 @@ impl State {
         variable_apy: FixedPoint,
     ) -> Result<I256> {
         let base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
-        let base_proceeds = bond_amount
-            * ((fixed!(1e18) + variable_apy).pow(self.annualized_position_duration())
-                - fixed!(1e18));
+        let tpy =
+            (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration()) - fixed!(1e18);
+        let base_proceeds = bond_amount * tpy;
         if base_proceeds > base_paid {
             Ok(I256::try_from((base_proceeds - base_paid) / base_paid)?)
         } else {
