@@ -20,11 +20,3 @@ lint:
 
 spell-check:
 	npx cspell crates/**/**/*.rs --gitignore
-
-style-check:
-	npx prettier --check .
-
-### Prettier ###
-
-prettier:
-	npx prettier --write .
