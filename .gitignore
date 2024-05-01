@@ -46,6 +46,8 @@ test/Generated.t.sol
 # Rust
 target/
 crates/hyperdrive-wrappers/src/wrappers/
+crates/hyperdrive-wrappers/debug/
+.rustc_info.json
 
 # Crash Reports
 crash_report.json
