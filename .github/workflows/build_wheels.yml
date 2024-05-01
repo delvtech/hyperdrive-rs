@@ -39,18 +39,9 @@ jobs:
       - name: set up pip
         run: python -m pip install --upgrade pip
 
-      - name: Fetch latest release tag from hyperdrive
-        shell: bash
-        run: source scripts/fetch-latest-tag.sh delvtech hyperdrive
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: build hyperdrivepy
         shell: bash
         run: source scripts/build_python.sh
-        env:
-          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
-          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
 
       - name: upload artifacts
         uses: actions/upload-artifact@v4
@@ -79,12 +70,6 @@ jobs:
         with:
           version: nightly
 
-      - name: Fetch latest release tag from hyperdrive
-        shell: bash
-        run: scripts/fetch-latest-tag.sh delvtech hyperdrive
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: set up python
         uses: actions/setup-python@v4
         with:
@@ -96,8 +81,6 @@ jobs:
       - name: build wheels
         uses: pypa/cibuildwheel@v2.16.5
         env:
-          HYPERDRIVE_REPO_URL: https://github.com/delvtech/hyperdrive.git
-          HYPERDRIVE_REF: ${{ env.latest_tag_hyperdrive }}
           CIBW_BUILD: "${{ matrix.python-version }}-*"
           CIBW_ENVIRONMENT: 'PATH="$HOME/.cargo/bin:$HOME/.foundry/bin:$HOME/.cargo/env:$PATH" CARGO_TERM_COLOR="always"'
           CIBW_ENVIRONMENT_WINDOWS: 'PATH="$UserProfile\.cargo\bin;$UserProfile\.foundry\bin;$UserProfile\.cargo\env;$PATH"'
