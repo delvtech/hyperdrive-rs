@@ -1,7 +1,4 @@
-use std::{
-    cmp::Ordering,
-    panic::{catch_unwind, AssertUnwindSafe},
-};
+use std::cmp::Ordering;
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
@@ -39,7 +36,7 @@ impl State {
         let lp_total_supply = self.lp_total_supply();
 
         // Get the starting_present_value.
-        let starting_present_value = self.calculate_present_value(current_block_timestamp);
+        let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
 
         // Get the ending_present_value.
         let share_contribution = {
@@ -51,7 +48,7 @@ impl State {
             }
         };
         let new_state = self.get_state_after_liquidity_update(share_contribution);
-        let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+        let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
 
         // Ensure the present value didn't decrease after adding liquidity.
         if ending_present_value < starting_present_value {
@@ -194,7 +191,7 @@ impl State {
     }
 
     /// Calculates the present value of LPs capital in the pool.
-    pub fn calculate_present_value(&self, current_block_timestamp: U256) -> FixedPoint {
+    pub fn calculate_present_value(&self, current_block_timestamp: U256) -> Result<FixedPoint> {
         // Calculate the average time remaining for the longs and shorts.
 
         // To keep precision of long and short average maturity time (from contract call)
@@ -208,84 +205,28 @@ impl State {
             self.short_average_maturity_time(),
             current_block_timestamp,
         );
+        let net_curve_trade = self
+            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)
+            .unwrap();
+        let net_flat_trade = self
+            .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining);
 
-        let present_value: I256 = I256::try_from(self.share_reserves()).unwrap()
-            + self.calculate_net_curve_trade(
-                long_average_time_remaining,
-                short_average_time_remaining,
-            )
-            + self.calculate_net_flat_trade(
-                long_average_time_remaining,
-                short_average_time_remaining,
-            )
-            - I256::try_from(self.minimum_share_reserves()).unwrap();
+        let present_value: I256 =
+            I256::try_from(self.share_reserves()).unwrap() + net_curve_trade + net_flat_trade
+                - I256::try_from(self.minimum_share_reserves()).unwrap();
 
         if present_value < int256!(0) {
-            panic!("Negative present value!");
+            return Err(eyre!("Negative present value!"));
         }
-        present_value.into()
+
+        Ok(present_value.into())
     }
 
-    /// NOTE: This version will not panic.
-    /// TODO: Combine this with `calculate_present_value`.
-    ///
-    /// Calculates the present value of LPs capital in the pool.
-    pub fn calculate_present_value_safe(
-        &self,
-        current_block_timestamp: U256,
-    ) -> Result<FixedPoint> {
-        let result = catch_unwind(AssertUnwindSafe(|| {
-            // Assume the following methods return Results and can be handled with `?`
-            let long_average_time_remaining = self.calculate_normalized_time_remaining(
-                self.long_average_maturity_time().into(),
-                current_block_timestamp,
-            );
-
-            let short_average_time_remaining = self.calculate_normalized_time_remaining(
-                self.short_average_maturity_time().into(),
-                current_block_timestamp,
-            );
-
-            // Conversion and calculation
-            let share_reserves = I256::try_from(self.share_reserves())
-                .map_err(|_| eyre!("Failed to convert share_reserves"))?;
-
-            let minimum_share_reserves = I256::try_from(self.minimum_share_reserves())
-                .map_err(|_| eyre!("Failed to convert minimum_share_reserves"))?;
-
-            let present_value = share_reserves
-                + self.calculate_net_curve_trade(
-                    long_average_time_remaining,
-                    short_average_time_remaining,
-                )
-                + self.calculate_net_flat_trade(
-                    long_average_time_remaining,
-                    short_average_time_remaining,
-                )
-                - minimum_share_reserves;
-
-            // Check for non-positive present value
-            if present_value < I256::from(0) {
-                Err(eyre!("Negative present value!"))
-            } else {
-                Ok(present_value.into()) // Converting I256 to FixedPoint, assuming it's possible
-            }
-        }));
-
-        // Handling the Result of `catch_unwind`
-        match result {
-            Ok(Ok(present_value)) => Ok(present_value), // Unwrap successful result
-            Ok(Err(e)) => Err(e),                       // Propagate the inner error
-            Err(_) => Err(eyre!("Panic occurred during calculation")),
-        }
-    }
-
-    /// Calculates the result of closing the net curve position.
     pub fn calculate_net_curve_trade(
         &self,
         long_average_time_remaining: FixedPoint,
         short_average_time_remaining: FixedPoint,
-    ) -> I256 {
+    ) -> Result<I256> {
         // NOTE: To underestimate the impact of closing the net curve position,
         // we round up the long side of the net curve position (since this
         // results in a larger value removed from the share reserves) and round
@@ -318,16 +259,16 @@ impl State {
                     .unwrap();
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_out_given_bonds_in_down_safe(net_curve_position) {
-                        Ok(net_curve_trade) => -I256::try_from(net_curve_trade).unwrap(),
+                        Ok(net_curve_trade) => Ok(-I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
                             // minimum transaction amount and the trade fails,
                             // we mark it to 0. This prevents liveness problems
                             // when the net curve position is very small.
                             if net_curve_position < self.minimum_transaction_amount() {
-                                I256::zero()
+                                Ok(I256::zero())
                             } else {
-                                panic!("net_curve_trade failure: {}", err);
+                                Err(err)
                             }
                         }
                     }
@@ -338,18 +279,18 @@ impl State {
                     // shares that can be removed from the share reserves is
                     // `effectiveShareReserves - minimumShareReserves`.
                     if self.share_adjustment() >= I256::from(0) {
-                        -I256::try_from(
+                        Ok(-I256::try_from(
                             self.effective_share_reserves() - self.minimum_share_reserves(),
-                        )
-                        .unwrap()
+                        )?)
 
                     // Otherwise, the effective share reserves are greater than the
                     // share reserves. In this case, the maximum amount of shares
                     // that can be removed from the share reserves is
                     // `shareReserves - minimumShareReserves`.
                     } else {
-                        -I256::try_from(self.share_reserves() - self.minimum_share_reserves())
-                            .unwrap()
+                        Ok(-I256::try_from(
+                            self.share_reserves() - self.minimum_share_reserves(),
+                        )?)
                     }
                 }
             }
@@ -358,16 +299,16 @@ impl State {
                 let max_curve_trade = self.calculate_max_buy_bonds_out_safe().unwrap();
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
-                        Ok(net_curve_trade) => I256::try_from(net_curve_trade).unwrap(),
+                        Ok(net_curve_trade) => Ok(I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
                             // minimum transaction amount and the trade fails,
                             // we mark it to 0. This prevents liveness problems
                             // when the net curve position is very small.
                             if net_curve_position < self.minimum_transaction_amount() {
-                                I256::zero()
+                                Ok(I256::zero())
                             } else {
-                                panic!("net_curve_trade failure: {}", err);
+                                Err(err)
                             }
                         }
                     }
@@ -376,15 +317,14 @@ impl State {
 
                     // NOTE: We round the difference down to underestimate the
                     // impact of closing the net curve position.
-                    I256::try_from(
+                    Ok(I256::try_from(
                         max_share_payment
                             + (net_curve_position - max_curve_trade)
                                 .div_down(self.vault_share_price()),
-                    )
-                    .unwrap()
+                    )?)
                 }
             }
-            Ordering::Equal => int256!(0),
+            Ordering::Equal => Ok(int256!(0)),
         }
     }
 
@@ -416,15 +356,10 @@ impl State {
     /// positions.
     fn calculate_idle_share_reserves(&self) -> FixedPoint {
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
-        let idle_shares = {
-            if self.share_reserves() > long_exposure + self.minimum_share_reserves() {
-                self.share_reserves() - long_exposure - self.minimum_share_reserves()
-            } else {
-                fixed!(0)
-            }
-        };
-
-        idle_shares
+        match self.share_reserves() > long_exposure + self.minimum_share_reserves() {
+            true => self.share_reserves() - long_exposure - self.minimum_share_reserves(),
+            false => fixed!(0),
+        }
     }
 
     /// TODO: https://github.com/delvtech/hyperdrive/issues/965
@@ -557,7 +492,7 @@ impl State {
         // derivative = derivative * (1 - (zeta / z))
         let derivative = if original_share_adjustment >= I256::zero() {
             let right_hand_side =
-                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
+                FixedPoint::from(original_share_adjustment).div_up(original_share_reserves);
             if right_hand_side > fixed!(1e18) {
                 return Err(eyre!("Right hand side is greater than 1e18"));
             }
@@ -566,7 +501,7 @@ impl State {
         } else {
             derivative.mul_down(
                 fixed!(1e18)
-                    + FixedPoint::try_from(-original_share_adjustment)?
+                    + FixedPoint::from(-original_share_adjustment)
                         .div_down(original_share_reserves),
             )
         };
@@ -641,8 +576,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             assert!(ending_present_value < starting_present_value);
                         }
 
@@ -650,8 +585,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             let lp_shares = (ending_present_value - starting_present_value)
                                 .mul_div_down(state.lp_total_supply(), starting_present_value);
                             assert!(lp_shares < state.minimum_transaction_amount());
@@ -661,8 +596,8 @@ mod tests {
                             let share_contribution =
                                 I256::try_from(contribution / state.vault_share_price()).unwrap();
                             let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp);
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp);
+                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                             let lp_shares = (ending_present_value - starting_present_value)
                                 .mul_div_down(state.lp_total_supply(), starting_present_value);
                             assert!(contribution.div_down(lp_shares) < min_lp_share_price);
@@ -761,9 +696,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let current_block_timestamp = rng.gen_range(fixed!(1)..=fixed!(1e4));
-            let actual = panic::catch_unwind(|| {
-                state.calculate_present_value(current_block_timestamp.into())
-            });
+            let actual = state.calculate_present_value(current_block_timestamp.into());
             match chain
                 .mock_lp_math()
                 .calculate_present_value(PresentValueParams {
@@ -820,12 +753,10 @@ mod tests {
                 state.short_average_maturity_time().into(),
                 current_block_timestamp.into(),
             );
-            let actual = panic::catch_unwind(|| {
-                state.calculate_net_curve_trade(
-                    long_average_time_remaining,
-                    short_average_time_remaining,
-                )
-            });
+            let actual = state.calculate_net_curve_trade(
+                long_average_time_remaining,
+                short_average_time_remaining,
+            );
             match chain
                 .mock_lp_math()
                 .calculate_net_curve_trade(PresentValueParams {
@@ -846,7 +777,7 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), I256::from(expected));
+                    assert_eq!(actual.unwrap(), I256::try_from(expected)?);
                 }
                 Err(_) => assert!(actual.is_err()),
             }
@@ -938,7 +869,7 @@ mod tests {
 
             // This errors out a lot so we need to catch that here.
             let starting_present_value_result =
-                original_state.calculate_present_value_safe(U256::from(current_block_timestamp));
+                original_state.calculate_present_value(U256::from(current_block_timestamp));
             if starting_present_value_result.is_err() {
                 continue;
             }
