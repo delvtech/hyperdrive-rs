@@ -1,9 +1,16 @@
-use std::{env, fs::create_dir_all, io::Write, path::Path, process::Command};
+use std::{
+    env,
+    fs::{create_dir_all, read_to_string},
+    io::Write,
+    path::Path,
+    process::Command,
+};
 
-use dotenv::dotenv;
 use ethers::prelude::Abigen;
 use eyre::Result;
 use heck::ToSnakeCase;
+
+const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
 // The list of contracts we want to generate wrappers for.
 const TARGETS: &[&str] = &[
@@ -59,30 +66,24 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    // Re-run this script whenever root .env, the build script itself, or a contract changes.
-    println!("cargo:rerun-if-changed=../../.env");
+    // Re-run this script whenever the build script itself, the version file, or a contract changes.
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=hyperdrive.version");
     println!("cargo:rerun-if-changed=hyperdrive/contracts/");
-
-    // Fetch the environment variables
-    dotenv().ok();
-    let git_url = env::var("HYPERDRIVE_REPO_URL").expect("HYPERDRIVE_REPO_URL must be set");
-    let git_ref = env::var("HYPERDRIVE_REF").expect("HYPERDRIVE_REF must be set");
 
     // Get the root directory of the project
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
+    // Load the hyperdrive version to use from the hyperdrive.version file
+    let version_file = root.join("hyperdrive.version");
+    let git_ref = read_to_string(&version_file)?.trim().to_string();
+
     // Clone the hyperdrive repository if it doesn't exist
     let hyperdrive_dir = root.join("hyperdrive");
-    if !hyperdrive_dir.exists() {
-        clone_repo(&git_url, &hyperdrive_dir, &git_ref)?;
+    if hyperdrive_dir.exists() {
+        checkout_branch(&git_ref, &hyperdrive_dir)?;
     } else {
-        // If the repository exists, checkout the specified ref and pull the latest changes.
-        checkout_branch(&hyperdrive_dir, &git_ref)?;
-        Command::new("git")
-            .current_dir(&hyperdrive_dir)
-            .args(["pull", "origin", &git_ref])
-            .output()?;
+        clone_repo(&HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
     }
 
     // Compile the contracts.
@@ -170,7 +171,7 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
 
 // Git helpers
 
-fn clone_repo(url: &str, path: &Path, branch: &str) -> Result<()> {
+fn clone_repo(url: &str, branch: &str, path: &Path) -> Result<()> {
     let clone_status = Command::new("git")
         .args([
             "clone",
@@ -189,8 +190,8 @@ fn clone_repo(url: &str, path: &Path, branch: &str) -> Result<()> {
     Ok(())
 }
 
-fn checkout_branch(repo_path: &Path, git_ref: &str) -> Result<()> {
-    let status = Command::new("git")
+fn checkout_branch(git_ref: &str, repo_path: &Path) -> Result<()> {
+    let mut status = Command::new("git")
         .current_dir(repo_path)
         .args(["checkout", git_ref])
         .status()?;
@@ -198,6 +199,19 @@ fn checkout_branch(repo_path: &Path, git_ref: &str) -> Result<()> {
     if !status.success() {
         eyre::bail!(
             "Failed to checkout ref '{}' in repository at {:?}",
+            git_ref,
+            repo_path
+        );
+    }
+
+    status = Command::new("git")
+        .current_dir(&repo_path)
+        .args(["pull", "origin", &git_ref])
+        .status()?;
+
+    if !status.success() {
+        eyre::bail!(
+            "Failed to pull latest changes from ref '{}' in repository at {:?}",
             git_ref,
             repo_path
         );

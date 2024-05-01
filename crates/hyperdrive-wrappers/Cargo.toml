@@ -1,6 +1,6 @@
 [package]
 name = "hyperdrive-wrappers"
-version = {workspace=true}
+version = { workspace = true }
 edition = "2021"
 
 # Builds the Solidity contract wrappers.
@@ -20,7 +20,6 @@ fixed-point = { path = "../fixed-point" }
 [build-dependencies]
 
 # External dependencies
-dotenv = "0.15.0"
 ethers = "2.0.8"
 ethers-solc = "2.0.8"
 eyre = "0.6.8"

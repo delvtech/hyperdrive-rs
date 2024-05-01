@@ -49,30 +49,38 @@ everlasting liquidity, and explains how the AMM's pricing model works.
 
 ## Pre-requisites
 
+### Install forge
+
 This repository makes use of [foundry](https://github.com/foundry-rs/foundry) to
-build and test smart contracts against the Rust implementation.
-Proceed through the following steps to set up the repository:
-
-- [Install forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation)
-- Copy the `.env.example` file to `.env` and adjust as needed to point to the
-  correct version of the [Hyperdrive](https://github.com/delvtech/hyperdrive)
-  repository.
-
-> To build against a local version of the Hyperdrive contracts, create a symlink
-> to the Hyperdrive contracts in the hyperdrive-wrappers crate:
->
-> ```sh
-> ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
-> ```
->
-> Then, update the `HYPERDRIVE_REF` in the `.env` file to point to the branch,
-> tag, or the commit hash you want to build against.
+build and test smart contracts against the Rust implementation. If you haven't
+already, you will need to [Install
+forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation).
 
 ## Build
 
 ```sh
 make build
 ```
+
+### Updating the Hyperdrive contracts
+
+When the [hyperdrive-wrappers](./crates/hyperdrive-wrappers) crate is built,
+it will clone the [Hyperdrive
+repository](https://github.com/delvtech/hyperdrive) and generate type-safe Rust
+bindings using [ethers-rs](https://github.com/gakonst/ethers-rs). You can modify
+the version of the Hyperdrive contracts that are built against by updating the
+git ref in the
+[`hyperdrive.version`](./crates/hyperdrive-wrappers/hyperdrive.version) file.
+
+To build against an existing local Hyperdrive repository instead, you can
+symlink the local repository to the `hyperdrive-wrappers` directory:
+
+```sh
+ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
+```
+
+Ensure the `hyperdrive.version` file is updated to point to the correct branch
+if necessary.
 
 ## Test
 
