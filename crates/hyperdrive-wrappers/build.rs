@@ -10,7 +10,7 @@ use ethers::prelude::Abigen;
 use eyre::Result;
 use heck::ToSnakeCase;
 
-const HYPERDRIVE_URL: &str = "https://github.com/default/hyperdrive.git";
+const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
 // The list of contracts we want to generate wrappers for.
 const TARGETS: &[&str] = &[
