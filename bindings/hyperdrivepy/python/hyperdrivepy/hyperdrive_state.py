@@ -283,6 +283,32 @@ def calculate_open_short(
     return _get_interface(pool_config, pool_info).calculate_open_short(short_amount, open_vault_share_price)
 
 
+def calculate_open_short_share_adjustment(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    short_amount: str,
+) -> str:
+    """Gets the amount of shares the pool will add after opening a short.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    short_amount: str (FixedPoint)
+        The amount to of bonds to short.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The amount of base to add to the pool share reserves.
+    """
+    return _get_interface(pool_config, pool_info).calculate_open_short_share_adjustment(short_amount)
+
+
 def calculate_close_short(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
