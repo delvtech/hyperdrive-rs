@@ -331,11 +331,13 @@ impl HyperdriveState {
                     "Failed to convert current_block_timestamp string to U256",
                 )
             })?;
-        let result_fp = self
+        match self
             .state
-            .calculate_present_value(current_block_timestamp_int)?;
-        let result = U256::from(result_fp).to_string();
-        Ok(result)
+            .calculate_present_value(current_block_timestamp_int)
+        {
+            Ok(result) => Ok(U256::from(result).to_string()),
+            Err(err) => Err(PyErr::new::<PyValueError, _>(format!("{:?}", err))),
+        }
     }
 
     pub fn calculate_idle_share_reserves_in_base(&self) -> PyResult<String> {

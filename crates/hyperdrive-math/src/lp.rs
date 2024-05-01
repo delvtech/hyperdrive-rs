@@ -356,15 +356,10 @@ impl State {
     /// positions.
     fn calculate_idle_share_reserves(&self) -> FixedPoint {
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
-        let idle_shares = {
-            if self.share_reserves() > long_exposure + self.minimum_share_reserves() {
-                self.share_reserves() - long_exposure - self.minimum_share_reserves()
-            } else {
-                fixed!(0)
-            }
-        };
-
-        idle_shares
+        match self.share_reserves() > long_exposure + self.minimum_share_reserves() {
+            true => self.share_reserves() - long_exposure - self.minimum_share_reserves(),
+            false => fixed!(0),
+        }
     }
 
     /// TODO: https://github.com/delvtech/hyperdrive/issues/965
@@ -497,7 +492,7 @@ impl State {
         // derivative = derivative * (1 - (zeta / z))
         let derivative = if original_share_adjustment >= I256::zero() {
             let right_hand_side =
-                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
+                FixedPoint::from(original_share_adjustment).div_up(original_share_reserves);
             if right_hand_side > fixed!(1e18) {
                 return Err(eyre!("Right hand side is greater than 1e18"));
             }
@@ -506,7 +501,7 @@ impl State {
         } else {
             derivative.mul_down(
                 fixed!(1e18)
-                    + FixedPoint::try_from(-original_share_adjustment)?
+                    + FixedPoint::from(-original_share_adjustment)
                         .div_down(original_share_reserves),
             )
         };

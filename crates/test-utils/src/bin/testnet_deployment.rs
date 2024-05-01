@@ -224,7 +224,7 @@ async fn testnet_deployment(
     .await?;
 
     // Deploy the stETH deployer coordinator.
-    let steth_deployer_coordinator = {
+    let _steth_deployer_coordinator = {
         let core_deployer = StETHHyperdriveCoreDeployer::deploy(client.clone(), ())?
             .send()
             .await?;
