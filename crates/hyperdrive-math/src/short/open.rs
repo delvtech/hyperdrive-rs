@@ -96,6 +96,23 @@ impl State {
             - payment_factor
     }
 
+    pub fn calculate_open_short_share_adjustment(
+        &self,
+        bond_amount: FixedPoint,
+    ) -> Result<FixedPoint> {
+        let spot_price = self.calculate_spot_price();
+        let curve_fee = self.open_short_curve_fee(bond_amount, spot_price);
+        let gov_curve_fee = self.open_short_governance_fee(bond_amount, spot_price);
+        let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
+        if short_principal.mul_up(self.vault_share_price()) > bond_amount {
+            return Err(eyre!("InsufficientLiquidity: Negative Interest",));
+        }
+        if short_principal < (curve_fee - gov_curve_fee) {
+            return Err(eyre!("Short principal is too low to account for fees",));
+        }
+        Ok(short_principal - (curve_fee - gov_curve_fee))
+    }
+
     /// Calculates the spot price after opening a Hyperdrive short.
     pub fn calculate_spot_price_after_short(
         &self,
@@ -104,12 +121,7 @@ impl State {
     ) -> Result<FixedPoint> {
         let shares_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
-            None => {
-                let spot_price = self.calculate_spot_price();
-                self.calculate_short_principal(bond_amount)?
-                    - self.open_short_curve_fee(bond_amount, spot_price)
-                    + self.open_short_governance_fee(bond_amount, spot_price)
-            }
+            None => self.calculate_open_short_share_adjustment(bond_amount)?,
         };
         let mut state: State = self.clone();
         state.info.bond_reserves += bond_amount.into();
@@ -545,6 +557,63 @@ mod tests {
             bob.reset(Default::default());
         }
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_calculate_spot_price_after_short_defaults() -> Result<()> {
+        let mut rng = thread_rng();
+        let mut num_checks = 0;
+        for _ in 0..*FUZZ_RUNS {
+            // We use a random state but we will ignore any case where a call
+            // fails because we want to test the default behavior when the state
+            // allows all actions.
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                if rng.gen() {
+                    -I256::try_from(value).unwrap()
+                } else {
+                    I256::try_from(value).unwrap()
+                }
+            };
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let max_bond_amount = match panic::catch_unwind(|| {
+                state.calculate_max_short(
+                    U256::MAX,
+                    open_vault_share_price,
+                    checkpoint_exposure,
+                    None,
+                    None,
+                )
+            }) {
+                Ok(max_bond_amount) => max_bond_amount,
+                Err(_) => continue,
+            };
+            if max_bond_amount == fixed!(0) {
+                continue;
+            }
+            // Using the default behavior
+            let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
+            let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
+
+            // Using a pre-calculated base amount
+            let base_amount = match state.calculate_open_short_share_adjustment(bond_amount) {
+                Ok(share_amount) => Some(share_amount * state.vault_share_price()),
+                Err(_) => continue,
+            };
+            let price_with_base_amount =
+                state.calculate_spot_price_after_short(bond_amount, base_amount)?;
+
+            // Test equality
+            assert_eq!(
+                price_with_default, price_with_base_amount,
+                "`calculate_spot_price_after_short` is not handling default base_amount correctly."
+            );
+            num_checks += 1
+        }
+        // We want to make sure we didn't `continue` through all possible fuzz states
+        assert!(num_checks > 0);
         Ok(())
     }
 
