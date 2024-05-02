@@ -6,6 +6,7 @@ use std::{
     process::Command,
 };
 
+use dotenv::dotenv;
 use ethers::prelude::Abigen;
 use eyre::Result;
 use heck::ToSnakeCase;
@@ -71,6 +72,14 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=hyperdrive.version");
     println!("cargo:rerun-if-changed=hyperdrive/contracts/");
 
+    // load dotenv
+    dotenv().ok();
+
+    let local_development = match env::var("LOCAL_DEVELOPMENT") {
+        Ok(local_development) => local_development == "true",
+        _ => false,
+    };
+
     // Get the root directory of the project
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
@@ -80,10 +89,13 @@ fn main() -> Result<()> {
 
     // Clone the hyperdrive repository if it doesn't exist
     let hyperdrive_dir = root.join("hyperdrive");
-    if hyperdrive_dir.exists() {
-        checkout_branch(&git_ref, &hyperdrive_dir)?;
-    } else {
-        clone_repo(&HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
+
+    if !local_development {
+        if hyperdrive_dir.exists() {
+            checkout_branch(&git_ref, &hyperdrive_dir)?;
+        } else {
+            clone_repo(&HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
+        }
     }
 
     // Compile the contracts.
