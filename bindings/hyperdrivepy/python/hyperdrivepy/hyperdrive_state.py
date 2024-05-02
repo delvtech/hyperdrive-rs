@@ -283,7 +283,7 @@ def calculate_open_short(
     return _get_interface(pool_config, pool_info).calculate_open_short(short_amount, open_vault_share_price)
 
 
-def calculate_open_short_share_adjustment(
+def calculate_open_short_share_reserves_delta(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
     short_amount: str,
@@ -306,7 +306,7 @@ def calculate_open_short_share_adjustment(
     str (FixedPoint)
         The amount of base to add to the pool share reserves.
     """
-    return _get_interface(pool_config, pool_info).calculate_open_short_share_adjustment(short_amount)
+    return _get_interface(pool_config, pool_info).calculate_open_short_share_reserves_delta(short_amount)
 
 
 def calculate_close_short(

@@ -96,7 +96,7 @@ impl State {
             - payment_factor
     }
 
-    pub fn calculate_open_short_share_adjustment(
+    pub fn calculate_open_short_share_reserves_delta(
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
@@ -121,7 +121,7 @@ impl State {
     ) -> Result<FixedPoint> {
         let shares_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
-            None => self.calculate_open_short_share_adjustment(bond_amount)?,
+            None => self.calculate_open_short_share_reserves_delta(bond_amount)?,
         };
         let mut state: State = self.clone();
         state.info.bond_reserves += bond_amount.into();
@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_calculate_open_short_share_adjustment() -> Result<()> {
+    async fn test_calculate_open_short_share_reserves_delta() -> Result<()> {
         let chain = TestChain::new().await?;
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -357,7 +357,7 @@ mod tests {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
-            let actual = state.calculate_open_short_share_adjustment(bond_amount);
+            let actual = state.calculate_open_short_share_reserves_delta(bond_amount);
             let fees = state.open_short_curve_fee(bond_amount, state.calculate_spot_price())
                 - state.open_short_governance_fee(bond_amount, state.calculate_spot_price());
             match chain
@@ -366,7 +366,8 @@ mod tests {
                     state.effective_share_reserves().into(),
                     state.bond_reserves().into(),
                     bond_amount.into(),
-                    (fixed!(1e18) - state.time_stretch()).into(),
+                    // (fixed!(1e18) - state.time_stretch()).into(),
+                    state.time_stretch().into(),
                     state.vault_share_price().into(),
                     state.initial_vault_share_price().into(),
                 )
@@ -374,7 +375,15 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected) - fees);
+                    let expected_fp = FixedPoint::from(expected);
+                    // short principal is too low to account for fees
+                    if expected_fp < fees {
+                        assert!(actual.is_err());
+                    }
+                    // everything should be good
+                    else {
+                        assert_eq!(actual.unwrap(), FixedPoint::from(expected) - fees);
+                    }
                 }
                 Err(_) => assert!(actual.is_err()),
             };
@@ -654,7 +663,7 @@ mod tests {
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
 
             // Using a pre-calculated base amount
-            let base_amount = match state.calculate_open_short_share_adjustment(bond_amount) {
+            let base_amount = match state.calculate_open_short_share_reserves_delta(bond_amount) {
                 Ok(share_amount) => Some(share_amount * state.vault_share_price()),
                 Err(_) => continue,
             };
