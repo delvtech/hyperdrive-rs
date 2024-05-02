@@ -252,7 +252,7 @@ def calculate_close_long(
 def calculate_open_short(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
-    short_amount: str,
+    bond_amount: str,
     open_vault_share_price: str | None = None,
 ) -> str:
     """Gets the amount of base the trader will need to deposit for a short of a given size.
@@ -265,8 +265,8 @@ def calculate_open_short(
     pool_info: PoolInfo
         Current state information of the hyperdrive contract.
         Includes attributes like reserve levels and share prices.
-    short_amount: str (FixedPoint)
-        The amount to of bonds to short.
+    bond_amount: str (FixedPoint)
+        The amount of bonds to short.
     open_vault_share_price: str (FixedPoint) | None, optional
         Optionally provide the open share price for the short.
         If this is not provided or is None, then we will use the pool's current share price.
@@ -280,15 +280,15 @@ def calculate_open_short(
         # the underlying rust code uses current market share price if this is 0
         # zero value is used because the smart contract will return 0 if the checkpoint hasn't been minted
         open_vault_share_price = "0"
-    return _get_interface(pool_config, pool_info).calculate_open_short(short_amount, open_vault_share_price)
+    return _get_interface(pool_config, pool_info).calculate_open_short(bond_amount, open_vault_share_price)
 
 
-def calculate_open_short_share_reserves_delta(
+def calculate_pool_deltas_after_open_short(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
-    short_amount: str,
+    bond_amount: str,
 ) -> str:
-    """Gets the amount of shares the pool will add after opening a short.
+    """Calculate the share deltas to be applied to the pool after opening a short.
 
     Arguments
     ---------
@@ -298,15 +298,15 @@ def calculate_open_short_share_reserves_delta(
     pool_info: PoolInfo
         Current state information of the hyperdrive contract.
         Includes attributes like reserve levels and share prices.
-    short_amount: str (FixedPoint)
-        The amount to of bonds to short.
+    bond_amount: str (FixedPoint)
+        The amount of bonds to short.
 
     Returns
     -------
     str (FixedPoint)
-        The amount of base to add to the pool share reserves.
+        The amount of shares to add to the pool reserves.
     """
-    return _get_interface(pool_config, pool_info).calculate_open_short_share_reserves_delta(short_amount)
+    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_open_short(bond_amount)
 
 
 def calculate_close_short(
