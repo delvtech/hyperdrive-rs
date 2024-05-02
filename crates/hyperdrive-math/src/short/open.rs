@@ -327,6 +327,62 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_calculate_open_short_share_adjustment() -> Result<()> {
+        let chain = TestChain::new().await?;
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                if rng.gen() {
+                    -I256::try_from(value).unwrap()
+                } else {
+                    I256::try_from(value).unwrap()
+                }
+            };
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let max_bond_amount = match panic::catch_unwind(|| {
+                state.calculate_max_short(
+                    U256::MAX,
+                    open_vault_share_price,
+                    checkpoint_exposure,
+                    None,
+                    None,
+                )
+            }) {
+                Ok(max_bond_amount) => max_bond_amount,
+                Err(_) => continue,
+            };
+            if max_bond_amount == fixed!(0) {
+                continue;
+            }
+            let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
+            let actual = state.calculate_open_short_share_adjustment(bond_amount);
+            let fees = state.open_short_curve_fee(bond_amount, state.calculate_spot_price())
+                - state.open_short_governance_fee(bond_amount, state.calculate_spot_price());
+            match chain
+                .mock_hyperdrive_math()
+                .calculate_open_short(
+                    state.effective_share_reserves().into(),
+                    state.bond_reserves().into(),
+                    bond_amount.into(),
+                    (fixed!(1e18) - state.time_stretch()).into(),
+                    state.vault_share_price().into(),
+                    state.initial_vault_share_price().into(),
+                )
+                .call()
+                .await
+            {
+                Ok(expected) => {
+                    assert_eq!(actual.unwrap(), FixedPoint::from(expected) - fees);
+                }
+                Err(_) => assert!(actual.is_err()),
+            };
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_short_principal() -> Result<()> {
         // This test is the same as the yield_space.rs `fuzz_calculate_max_buy_shares_in_safe`,
         // but is worth having around in case we ever change how we compute short principal.
