@@ -206,8 +206,7 @@ impl State {
             current_block_timestamp,
         );
         let net_curve_trade = self
-            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)
-            .unwrap();
+            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
         let net_flat_trade = self
             .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining);
 
@@ -296,7 +295,7 @@ impl State {
             }
             Ordering::Less => {
                 let net_curve_position: FixedPoint = FixedPoint::from(-net_curve_position);
-                let max_curve_trade = self.calculate_max_buy_bonds_out_safe().unwrap();
+                let max_curve_trade = self.calculate_max_buy_bonds_out_safe()?;
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
                         Ok(net_curve_trade) => Ok(I256::try_from(net_curve_trade)?),
@@ -313,7 +312,7 @@ impl State {
                         }
                     }
                 } else {
-                    let max_share_payment = self.calculate_max_buy_shares_in_safe().unwrap();
+                    let max_share_payment = self.calculate_max_buy_shares_in_safe()?;
 
                     // NOTE: We round the difference down to underestimate the
                     // impact of closing the net curve position.
