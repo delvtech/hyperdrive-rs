@@ -41,17 +41,17 @@ jobs:
 
       - name: Get list of tests from main branch
         run: |
-          git checkout main
-          ./list_tests.sh > main_tests.txt
+          git remote update && git fetch && git checkout --track origin/main
+          sh scripts/list_tests.sh > main_tests.txt
 
       - name: Get list of tests from pull request branch
         run: |
           git checkout ${{ github.head_ref }}
-          ./list_tests.sh > pr_tests.txt
+          sh scripts/list_tests.sh > pr_tests.txt
 
       - name: Compare test lists and run new tests
         run: |
-          new_tests=$(comm -13 main_tests.txt pr_tests.txt)
+          new_tests=$(diff -y --suppress-common-lines main_tests.txt branch_tests.txt|awk -F' [>,]' '{gsub(/ /,"")} {print $2} ')
           if [ -n "$new_tests" ]; then
             echo "New tests found:"
             echo "$new_tests"
