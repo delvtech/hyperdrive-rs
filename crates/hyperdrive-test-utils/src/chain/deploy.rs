@@ -342,9 +342,9 @@ impl TestnetDeploy for Chain {
             sweep_collector: client.address(),
             governance: client.address(),
             fees: Fees {
-                curve: uint256!(0.05e18),
-                flat: uint256!(0.0005e18),
-                governance_lp: uint256!(0.15e18),
+                curve: uint256!(0.01e18),
+                flat: uint256!(0e18),
+                governance_lp: uint256!(0.1e18),
                 governance_zombie: uint256!(0.15e18),
             },
         };
