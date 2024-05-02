@@ -608,10 +608,8 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // TODO: We should fuzz over a range of fixed rates.
-            //
             // Fund Alice and Bob.
-            let fixed_rate = fixed!(0.05e18);
+            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 
