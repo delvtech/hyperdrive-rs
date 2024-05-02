@@ -47,18 +47,18 @@ jobs:
       - name: Get list of tests from pull request branch
         run: |
           git checkout ${{ github.head_ref }}
-          sh scripts/list_tests.sh > pr_tests.txt
+          sh scripts/list_tests.sh > branch_tests.txt
 
       - name: Compare test lists and run new tests
         run: |
-          new_tests=$(diff -y --suppress-common-lines main_tests.txt branch_tests.txt|awk -F' [>,]' '{gsub(/ /,"")} {print $2} ')
+          new_tests=$(diff main_tests.txt branch_tests.txt|awk -F'[>,]' '{gsub(/ /,"")} {print $2} '| sed '/^$/d')
           if [ -n "$new_tests" ]; then
             echo "New tests found:"
             echo "$new_tests"
-            echo "$new_tests" | while read test; do
+            while IFS= read -r test; do
               echo "Running test: $test"
-              HYPERDRIVE_FUZZ_RUNS=1000 HYPERDRIVE_FAST_FUZZ_RUNS=100000 cargo test $test --
-            done
+              env HYPERDRIVE_FUZZ_RUNS=1000 HYPERDRIVE_FAST_FUZZ_RUNS=100000 cargo test $test --
+            done <<< "$new_tests"
           else
             echo "No new tests found."
           fi
