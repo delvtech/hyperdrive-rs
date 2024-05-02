@@ -79,8 +79,11 @@ symlink the local repository to the `hyperdrive-wrappers` directory:
 ln -s <path-to-local-hyperdrive-clone> crates/hyperdrive-wrappers
 ```
 
-Ensure the `hyperdrive.version` file is updated to point to the correct branch
-if necessary.
+And then in the .env file in hyperdrive-wrappers, add:
+
+```sh
+LOCAL_DEVELOPMENT=true
+```
 
 ## Test
 

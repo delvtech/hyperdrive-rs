@@ -24,4 +24,5 @@ ethers = "2.0.8"
 ethers-solc = "2.0.8"
 eyre = "0.6.8"
 heck = "0.4.1"
+dotenv = "0.15.0"
 tokio = { version = "1", features = ["full"] }
