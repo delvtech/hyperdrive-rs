@@ -366,7 +366,6 @@ mod tests {
                     state.effective_share_reserves().into(),
                     state.bond_reserves().into(),
                     bond_amount.into(),
-                    // (fixed!(1e18) - state.time_stretch()).into(),
                     state.time_stretch().into(),
                     state.vault_share_price().into(),
                     state.initial_vault_share_price().into(),
