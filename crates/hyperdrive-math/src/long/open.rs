@@ -4,6 +4,13 @@ use fixed_point::FixedPoint;
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
 impl State {
+    // pub fn preview_open_long
+    //     &self,
+    //     base_amount: FixedPoint,
+    //     maybe_bond_amount: Option<FixedPoint>,
+    // ) -> Result<Self> {
+    // }
+
     /// Calculates the long amount that will be opened for a given base amount.
     ///
     /// The long amount $y(x)$ that a trader will receive is given by:
