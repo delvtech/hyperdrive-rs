@@ -39,5 +39,29 @@ jobs:
           override: true
           components: rustfmt, clippy
 
+      - name: Get list of tests from main branch
+        run: |
+          git remote update && git fetch && git checkout --track origin/main
+          sh scripts/list_tests.sh > main_tests.txt
+
+      - name: Get list of tests from pull request branch
+        run: |
+          git checkout ${{ github.head_ref }}
+          sh scripts/list_tests.sh > branch_tests.txt
+
+      - name: Compare test lists and run new tests
+        run: |
+          new_tests=$(diff main_tests.txt branch_tests.txt|awk -F'[>,]' '{gsub(/ /,"")} {print $2} '| sed '/^$/d')
+          if [ -n "$new_tests" ]; then
+            echo "New tests found:"
+            echo "$new_tests"
+            while IFS= read -r test; do
+              echo "Running test: $test"
+              env HYPERDRIVE_FUZZ_RUNS=500 HYPERDRIVE_FAST_FUZZ_RUNS=50000 cargo test $test --
+            done <<< "$new_tests"
+          else
+            echo "No new tests found."
+          fi
+
       - name: test
         run: make test

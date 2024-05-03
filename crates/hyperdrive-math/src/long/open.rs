@@ -122,11 +122,78 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use fixed_point_macros::fixed;
-    use rand::{thread_rng, Rng};
-    use test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+    use ethers::{signers::LocalWallet, types::U256};
+    use fixed_point_macros::{fixed, uint256};
+    use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
+    use rand::{thread_rng, Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
+    use test_utils::{
+        agent::Agent,
+        chain::{ChainClient, TestChain},
+        constants::FUZZ_RUNS,
+    };
 
     use super::*;
+
+    /// Executes random trades throughout a Hyperdrive term.
+    async fn preamble(
+        rng: &mut ChaCha8Rng,
+        alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
+        bob: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
+        celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
+        fixed_rate: FixedPoint,
+    ) -> Result<()> {
+        // Fund the agent accounts and initialize the pool.
+        alice
+            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
+            .await?;
+        bob.fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
+            .await?;
+        celine
+            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
+            .await?;
+
+        // Alice initializes the pool.
+        alice.initialize(fixed_rate, alice.base(), None).await?;
+
+        // Advance the time for over a term and make trades in some of the checkpoints.
+        let mut time_remaining = alice.get_config().position_duration;
+        while time_remaining > uint256!(0) {
+            // Bob opens a long.
+            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
+            let long_amount =
+                rng.gen_range(fixed!(1e12)..=bob.calculate_max_long(None).await? * discount);
+            bob.open_long(long_amount, None, None).await?;
+
+            // Celine opens a short.
+            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
+            let min_short =
+                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
+            let max_short = celine.calculate_max_short(None).await? * discount;
+            let short_amount = rng.gen_range(min_short..=max_short);
+            celine.open_short(short_amount, None, None).await?;
+
+            // Advance the time and mint all of the intermediate checkpoints.
+            let multiplier = rng.gen_range(fixed!(5e18)..=fixed!(50e18));
+            let delta = FixedPoint::from(time_remaining)
+                .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
+            time_remaining -= U256::from(delta);
+            alice
+                .advance_time(
+                    fixed!(0), // TODO: Use a real rate.
+                    delta,
+                )
+                .await?;
+        }
+
+        // Mint a checkpoint to close any matured positions from the first checkpoint
+        // of trading.
+        alice
+            .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
+            .await?;
+
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_long() -> Result<()> {
@@ -267,10 +334,89 @@ mod tests {
     // implementing checkpointing in the rust sdk.
     // https://github.com/delvtech/hyperdrive/issues/862
 
-    // TODO ideally we would add a solidity fuzz test that tests `calculate_open_long` against
-    // opening longs in solidity, where we attempt to trade outside of expected values (so that
-    // we can also test error parities as well). However, the current test chain only exposes
-    // the underlying hyperdrive math functions, which doesn't take into account fees and negative
-    // interest checks.
-    // https://github.com/delvtech/hyperdrive/issues/937
+    #[tokio::test]
+    pub async fn fuzz_calc_open_long() -> Result<()> {
+        let tolerance = fixed!(1e10);
+
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+
+        // Initialize the test chain.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+
+        for _ in 0..*FUZZ_RUNS {
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Run the preamble.
+            let fixed_rate = fixed!(0.05e18);
+            preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
+
+            // Get state and trade details.
+            let state = alice.get_state().await?;
+            let Checkpoint {
+                vault_share_price: open_vault_share_price,
+            } = alice
+                .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                .await?;
+            let max_long = bob.calculate_max_long(None).await?;
+            let min_base_amount = FixedPoint::from(state.config.minimum_transaction_amount)
+                * FixedPoint::from(state.info.vault_share_price);
+            let long_amount = rng.gen_range(min_base_amount..=max_long);
+
+            // Compare the open short call output against calculate_open_long.
+            let bonds_purchased = state.calculate_open_long(long_amount);
+
+            match bob
+                .hyperdrive()
+                .open_long(
+                    long_amount.into(),
+                    fixed!(0).into(),
+                    fixed!(0).into(),
+                    Options {
+                        destination: bob.address(),
+                        as_base: true,
+                        extra_data: [].into(),
+                    },
+                )
+                .call()
+                .await
+            {
+                Ok((_, expected_bonds_purchased)) => {
+                    let actual = bonds_purchased.unwrap();
+                    let error = if actual >= expected_bonds_purchased.into() {
+                        actual - FixedPoint::from(expected_bonds_purchased)
+                    } else {
+                        FixedPoint::from(expected_bonds_purchased) - actual
+                    };
+                    assert!(
+                        error <= tolerance,
+                        "error {} exceeds tolerance of {}",
+                        error,
+                        tolerance
+                    );
+                }
+                Err(err) => {
+                    assert!(bonds_purchased.is_err());
+                }
+            }
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default());
+            bob.reset(Default::default());
+            celine.reset(Default::default());
+        }
+
+        Ok(())
+    }
 }
