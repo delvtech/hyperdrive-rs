@@ -98,8 +98,9 @@ impl State {
 
     /// Calculate an updated pool state after opening a short.
     ///
-    /// For a given bond amount and share amount, the reserves are updated
-    /// such that the `state.bond_reserves += bond_amount` and
+    /// For a given bond amount and share amount,
+    /// the reserves are updated such that
+    /// `state.bond_reserves += bond_amount` and
     /// `state.share_reserves -= share_amount`.
     pub fn calculate_pool_state_after_open_short(
         &self,
@@ -113,7 +114,7 @@ impl State {
         let mut state = self.clone();
         state.info.bond_reserves += bond_amount.into();
         state.info.share_reserves -= shares_delta.into();
-        return Ok(state);
+        Ok(state)
     }
 
     /// Calculate the share deltas to be applied to the pool after opening a short.
@@ -134,7 +135,7 @@ impl State {
         Ok(short_principal - (curve_fee - gov_curve_fee))
     }
 
-    /// Calculates the spot price after opening a Hyperdrive short.
+    /// Calculates the spot price after opening a short.
     pub fn calculate_spot_price_after_short(
         &self,
         bond_amount: FixedPoint,

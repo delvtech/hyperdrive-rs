@@ -46,6 +46,36 @@ impl State {
         Ok(long_amount - self.open_long_curve_fees(base_amount))
     }
 
+    /// Calculate an updated pool state after opening a long.
+    ///
+    /// For a given base amount and bond amount, base is converted to
+    /// shares and the reserves are updated such that
+    /// `state.bond_reserves -= bond_amount` and
+    /// `state.share_reserves += base_amount / vault_share_price`.
+    pub fn calculate_pool_state_after_open_long(
+        &self,
+        base_amount: FixedPoint,
+        maybe_bond_amount: Option<FixedPoint>,
+    ) -> Result<Self> {
+        let bond_amount = match maybe_bond_amount {
+            Some(bond_amount) => bond_amount,
+            None => self.calculate_open_long(base_amount)?,
+        };
+        let mut state = self.clone();
+        state.info.bond_reserves -= bond_amount.into();
+        state.info.share_reserves += (base_amount / self.vault_share_price()).into();
+        Ok(state)
+    }
+
+    /// Calculate the share deltas to be applied to the pool after opening a long.
+    pub fn calculate_pool_deltas_after_open_long(
+        &self,
+        base_amount: FixedPoint,
+    ) -> Result<FixedPoint> {
+        let bond_amount = self.calculate_open_long(base_amount)?;
+        Ok(bond_amount)
+    }
+
     /// Calculates the spot price after opening a Hyperdrive long.
     /// If a bond_amount is not provided, then one is estimated using `calculate_open_long`.
     pub fn calculate_spot_price_after_long(
