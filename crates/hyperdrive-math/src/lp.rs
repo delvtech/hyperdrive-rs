@@ -90,25 +90,22 @@ impl State {
         min_apr: FixedPoint,
         max_apr: FixedPoint,
         as_base: bool,
-    ) -> Result<(FixedPoint, I256, FixedPoint), &'static str> {
-        let (share_reserves, share_adjustment, bond_reserves) = self
-            .calculate_update_liquidity(
-                self.share_reserves(),
-                self.share_adjustment(),
-                self.bond_reserves(),
-                self.minimum_share_reserves(),
-                I256::try_from(0).unwrap(),
-            )
-            .unwrap();
+    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
+            self.share_reserves(),
+            self.share_adjustment(),
+            self.bond_reserves(),
+            self.minimum_share_reserves(),
+            I256::try_from(0)?,
+        )?;
         let (new_share_reserves, new_share_adjustment, new_bond_reserves) = self
             .calculate_update_liquidity(
                 self.share_reserves(),
                 self.share_adjustment(),
                 self.bond_reserves(),
                 self.minimum_share_reserves(),
-                I256::try_from(contribution).unwrap(),
-            )
-            .unwrap();
+                I256::try_from(contribution)?,
+            )?;
         Ok((
             new_share_reserves - share_reserves,
             new_share_adjustment - share_adjustment,
@@ -154,7 +151,7 @@ impl State {
         bond_reserves: FixedPoint,
         minimum_share_reserves: FixedPoint,
         share_reserves_delta: I256,
-    ) -> Result<(FixedPoint, I256, FixedPoint), &'static str> {
+    ) -> Result<(FixedPoint, I256, FixedPoint)> {
         if share_reserves_delta == I256::zero() {
             return Ok((share_reserves, share_adjustment, bond_reserves));
         }
@@ -168,7 +165,9 @@ impl State {
 
         // Ensure the minimum share reserve level.
         if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
-            return Err("Update would result in share reserves below minimum.");
+            return Err(eyre!(
+                "Update would result in share reserves below minimum."
+            ));
         }
 
         // Convert to Fixedpoint to allow the math below.
@@ -177,12 +176,10 @@ impl State {
         // Get the updated share adjustment.
         let new_share_adjustment = if share_adjustment >= I256::zero() {
             let share_adjustment_fp = FixedPoint::from(share_adjustment);
-            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))
-                .unwrap()
+            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
         } else {
             let share_adjustment_fp = FixedPoint::from(-share_adjustment);
-            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))
-                .unwrap()
+            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
         };
 
         // Get the updated bond reserves.
