@@ -16,7 +16,7 @@ jobs:
   detect-changes:
     uses: ./.github/workflows/check_diff.yml
     with:
-      pattern: ^bindings/hyperdrivepy/\|^contracts/\|^test/\|^crates/\|^lib/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/rust_test\.yml$
+      pattern: ^bindings/\|^test/\|^crates/\|^lib/\|^target/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/python_test\.yml$
 
   test:
     needs: detect-changes

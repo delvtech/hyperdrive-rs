@@ -14,7 +14,7 @@ jobs:
   detect-changes:
     uses: ./.github/workflows/check_diff.yml
     with:
-      pattern: ^bindings/hyperdrivepy/\|^contracts/\|^test/\|^crates/\|^lib/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/rust_test\.yml$
+      pattern: ^bindings/hyperdrivepy/\|^test/\|^crates/\|^lib/\|^target/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/build_wheels\.yml$
 
   build-wheels-linux:
     name: build on linux
