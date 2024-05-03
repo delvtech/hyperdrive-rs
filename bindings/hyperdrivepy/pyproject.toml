@@ -1,6 +1,6 @@
 [project]
 name = "hyperdrivepy"
-version = "0.14.3"
+version = "0.14.5"
 requires-python = ">=3.7"
 classifiers = [
   "Programming Language :: Rust",
