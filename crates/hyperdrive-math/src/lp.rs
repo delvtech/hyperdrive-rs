@@ -18,14 +18,6 @@ impl State {
         max_apr: FixedPoint,
         as_base: bool,
     ) -> Result<FixedPoint> {
-        // Ensure that the contribution is greater than or equal to the minimum
-        // transaction amount.
-        if contribution < self.minimum_transaction_amount() {
-            return Err(eyre!(
-                "MinimumTransactionAmount: Contribution is smaller than the minimum transaction."
-            ));
-        }
-
         // Enforce the slippage guard.
         let apr = self.calculate_spot_rate();
         if apr < min_apr || apr > max_apr {
@@ -39,15 +31,7 @@ impl State {
         let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
 
         // Get the ending_present_value.
-        let share_contribution = {
-            if as_base {
-                // Attempt a crude conversion from base to shares.
-                I256::try_from(contribution / self.vault_share_price()).unwrap()
-            } else {
-                I256::try_from(contribution).unwrap()
-            }
-        };
-        let new_state = self.get_state_after_liquidity_update(share_contribution);
+        let new_state = self.calculate_pool_state_after_add_liquidity(contribution, as_base)?;
         let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
 
         // Ensure the present value didn't decrease after adding liquidity.
@@ -72,6 +56,64 @@ impl State {
         }
 
         Ok(lp_shares)
+    }
+
+    pub fn calculate_pool_state_after_add_liquidity(
+        &self,
+        contribution: FixedPoint,
+        as_base: bool,
+    ) -> Result<State> {
+        // Ensure that the contribution is greater than or equal to the minimum
+        // transaction amount.
+        if contribution < self.minimum_transaction_amount() {
+            return Err(eyre!(
+                "MinimumTransactionAmount: Contribution is smaller than the minimum transaction."
+            ));
+        }
+
+        let share_contribution = {
+            if as_base {
+                // Attempt a crude conversion from base to shares.
+                I256::try_from(contribution / self.vault_share_price()).unwrap()
+            } else {
+                I256::try_from(contribution).unwrap()
+            }
+        };
+        Ok(self.get_state_after_liquidity_update(share_contribution))
+    }
+
+    pub fn calculate_pool_deltas_after_add_liquidity(
+        &self,
+        current_block_timestamp: U256,
+        contribution: FixedPoint,
+        min_lp_share_price: FixedPoint,
+        min_apr: FixedPoint,
+        max_apr: FixedPoint,
+        as_base: bool,
+    ) -> Result<(FixedPoint, I256, FixedPoint), &'static str> {
+        let (share_reserves, share_adjustment, bond_reserves) = self
+            .calculate_update_liquidity(
+                self.share_reserves(),
+                self.share_adjustment(),
+                self.bond_reserves(),
+                self.minimum_share_reserves(),
+                I256::try_from(0).unwrap(),
+            )
+            .unwrap();
+        let (new_share_reserves, new_share_adjustment, new_bond_reserves) = self
+            .calculate_update_liquidity(
+                self.share_reserves(),
+                self.share_adjustment(),
+                self.bond_reserves(),
+                self.minimum_share_reserves(),
+                I256::try_from(contribution).unwrap(),
+            )
+            .unwrap();
+        Ok((
+            new_share_reserves - share_reserves,
+            new_share_adjustment - share_adjustment,
+            new_bond_reserves - bond_reserves,
+        ))
     }
 
     /// Gets the resulting state when updating liquidity.
