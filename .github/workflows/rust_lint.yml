@@ -8,12 +8,12 @@ on:
   merge_group:
 
 jobs:
-  # Check if files in the /contracts, /test, /crates, or /lib directories or the
-  # /foundry.toml, /Cargo.lock, or /Cargo.toml files were changed in this PR.
+  # Check if files in the /test, /crates, or /lib directories or the
+  # /Cargo.lock, or /Cargo.toml files were changed in this PR.
   detect-changes:
     uses: ./.github/workflows/check_diff.yml
     with:
-      pattern: ^crates/\|^Cargo\.lock$\|^Cargo\.toml$\|^rustfmt\.toml$\|^\.github/workflows/rust_lint\.yml$
+      pattern: ^test/\|^crates/\|^lib/\|^target/\|^Cargo\.lock$\|^Cargo\.toml$\|^rustfmt\.toml$\|^\.github/workflows/rust_lint\.yml$
 
   lint:
     name: rust lint
