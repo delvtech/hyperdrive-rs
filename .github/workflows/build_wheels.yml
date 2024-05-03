@@ -120,6 +120,8 @@ jobs:
   upload_pypi:
     needs: [build-wheels-linux, build-wheels-cibw, build-sdist]
     runs-on: ubuntu-latest
+    # Only publish on tags
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     environment: pypi
     permissions:
       id-token: write
