@@ -11,9 +11,16 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  detect-changes:
+    uses: ./.github/workflows/check_diff.yml
+    with:
+      pattern: ^bindings/hyperdrivepy/\|^contracts/\|^test/\|^crates/\|^lib/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/rust_test\.yml$
+
   build-wheels-linux:
     name: build on linux
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed == 'true'
     steps:
       - name: Checkout hyperdrive-rs
         uses: actions/checkout@v4
@@ -53,6 +60,8 @@ jobs:
   build-wheels-cibw:
     name: Build on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -106,6 +115,8 @@ jobs:
   build-sdist:
     name: Build source distribution
     runs-on: ubuntu-latest
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed == 'true'
     steps:
       - uses: actions/checkout@v4
 
