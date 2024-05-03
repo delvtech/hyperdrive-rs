@@ -1,4 +1,4 @@
-name: Dynamic Fuzz
+name: dynamic fuzz
 
 on:
   pull_request:
@@ -12,7 +12,7 @@ jobs:
       pattern: ^test/\|^crates/\|^lib/\|^target/\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/dynamic_fuzz\.yml$
 
   test:
-    name: rust test
+    name: dymaic fuzz
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.changed == 'true'

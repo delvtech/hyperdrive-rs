@@ -17,7 +17,7 @@ jobs:
       pattern: ^bindings/hyperdrivepy/\|^test/\|^crates/\|^lib/\|^target/\|^foundry\.toml$\|^Cargo\.lock$\|^Cargo\.toml$\|^\.github/workflows/build_wheels\.yml$
 
   build-wheels-linux:
-    name: build on linux
+    name: build wheels on linux
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.changed == 'true'
@@ -113,7 +113,7 @@ jobs:
           path: ./wheelhouse/*.whl
 
   build-sdist:
-    name: Build source distribution
+    name: build source distribution
     runs-on: ubuntu-latest
     needs: detect-changes
     if: needs.detect-changes.outputs.changed == 'true'
