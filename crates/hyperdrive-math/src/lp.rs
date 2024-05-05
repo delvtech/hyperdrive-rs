@@ -18,14 +18,6 @@ impl State {
         max_apr: FixedPoint,
         as_base: bool,
     ) -> Result<FixedPoint> {
-        // Ensure that the contribution is greater than or equal to the minimum
-        // transaction amount.
-        if contribution < self.minimum_transaction_amount() {
-            return Err(eyre!(
-                "MinimumTransactionAmount: Contribution is smaller than the minimum transaction."
-            ));
-        }
-
         // Enforce the slippage guard.
         let apr = self.calculate_spot_rate();
         if apr < min_apr || apr > max_apr {
@@ -39,15 +31,7 @@ impl State {
         let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
 
         // Get the ending_present_value.
-        let share_contribution = {
-            if as_base {
-                // Attempt a crude conversion from base to shares.
-                I256::try_from(contribution / self.vault_share_price()).unwrap()
-            } else {
-                I256::try_from(contribution).unwrap()
-            }
-        };
-        let new_state = self.get_state_after_liquidity_update(share_contribution);
+        let new_state = self.calculate_pool_state_after_add_liquidity(contribution, as_base)?;
         let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
 
         // Ensure the present value didn't decrease after adding liquidity.
@@ -72,6 +56,61 @@ impl State {
         }
 
         Ok(lp_shares)
+    }
+
+    pub fn calculate_pool_state_after_add_liquidity(
+        &self,
+        contribution: FixedPoint,
+        as_base: bool,
+    ) -> Result<State> {
+        // Ensure that the contribution is greater than or equal to the minimum
+        // transaction amount.
+        if contribution < self.minimum_transaction_amount() {
+            return Err(eyre!(
+                "MinimumTransactionAmount: Contribution is smaller than the minimum transaction."
+            ));
+        }
+
+        let share_contribution = {
+            if as_base {
+                // Attempt a crude conversion from base to shares.
+                I256::try_from(contribution / self.vault_share_price()).unwrap()
+            } else {
+                I256::try_from(contribution).unwrap()
+            }
+        };
+        Ok(self.get_state_after_liquidity_update(share_contribution))
+    }
+
+    pub fn calculate_pool_deltas_after_add_liquidity(
+        &self,
+        current_block_timestamp: U256,
+        contribution: FixedPoint,
+        min_lp_share_price: FixedPoint,
+        min_apr: FixedPoint,
+        max_apr: FixedPoint,
+        as_base: bool,
+    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
+            self.share_reserves(),
+            self.share_adjustment(),
+            self.bond_reserves(),
+            self.minimum_share_reserves(),
+            I256::try_from(0)?,
+        )?;
+        let (new_share_reserves, new_share_adjustment, new_bond_reserves) = self
+            .calculate_update_liquidity(
+                self.share_reserves(),
+                self.share_adjustment(),
+                self.bond_reserves(),
+                self.minimum_share_reserves(),
+                I256::try_from(contribution)?,
+            )?;
+        Ok((
+            new_share_reserves - share_reserves,
+            new_share_adjustment - share_adjustment,
+            new_bond_reserves - bond_reserves,
+        ))
     }
 
     /// Gets the resulting state when updating liquidity.
@@ -112,7 +151,7 @@ impl State {
         bond_reserves: FixedPoint,
         minimum_share_reserves: FixedPoint,
         share_reserves_delta: I256,
-    ) -> Result<(FixedPoint, I256, FixedPoint), &'static str> {
+    ) -> Result<(FixedPoint, I256, FixedPoint)> {
         if share_reserves_delta == I256::zero() {
             return Ok((share_reserves, share_adjustment, bond_reserves));
         }
@@ -126,7 +165,9 @@ impl State {
 
         // Ensure the minimum share reserve level.
         if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
-            return Err("Update would result in share reserves below minimum.");
+            return Err(eyre!(
+                "Update would result in share reserves below minimum."
+            ));
         }
 
         // Convert to Fixedpoint to allow the math below.
@@ -135,12 +176,10 @@ impl State {
         // Get the updated share adjustment.
         let new_share_adjustment = if share_adjustment >= I256::zero() {
             let share_adjustment_fp = FixedPoint::from(share_adjustment);
-            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))
-                .unwrap()
+            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
         } else {
             let share_adjustment_fp = FixedPoint::from(-share_adjustment);
-            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))
-                .unwrap()
+            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
         };
 
         // Get the updated bond reserves.
@@ -686,6 +725,87 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn fuzz_test_calculate_pool_state_after_add_liquidity() -> Result<()> {
+        // Spawn a test chain and create two agents -- Alice and Bob.
+        let mut rng = thread_rng();
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let config = bob.get_config().clone();
+
+        // Test happy paths.
+        for _ in 0..*FUZZ_RUNS {
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Fund Alice and Bob.
+            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
+            let contribution = rng.gen_range(fixed!(10_000e18)..=fixed!(500_000_000e18));
+            let budget = rng.gen_range(fixed!(10e18)..=fixed!(500_000_000e18));
+            alice.fund(contribution).await?;
+            bob.fund(budget).await?;
+
+            // Alice initializes the pool.
+            alice.initialize(fixed_rate, contribution, None).await?;
+
+            // Some of the checkpoint passes and variable interest accrues.
+            alice
+                .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
+                .await?;
+            let rate = fixed!(0);
+            alice
+                .advance_time(
+                    rate,
+                    FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
+                )
+                .await?;
+
+            // Get the State from solidity before adding liquidity.
+            let state = State {
+                config: bob.get_state().await?.config.clone(),
+                info: bob.get_state().await?.info.clone(),
+            };
+
+            // Bob adds liquidity
+            bob.add_liquidity(budget, None).await?;
+
+            // Get the State from solidity after adding liquidity.
+            let expected_state = State {
+                config: bob.get_state().await?.config.clone(),
+                info: bob.get_state().await?.info.clone(),
+            };
+
+            // Calculate lp_shares from the rust function.
+            let actual_state = state
+                .calculate_pool_state_after_add_liquidity(budget, true)
+                .unwrap();
+
+            // Ensure the states are equal within a tolerance.
+            let share_reserves_equal = expected_state.share_reserves()
+                <= actual_state.share_reserves() + fixed!(1e9)
+                && expected_state.share_reserves() >= actual_state.share_reserves() - fixed!(1e9);
+            assert!(share_reserves_equal, "Should be equal.");
+
+            let bond_reserves_equal = expected_state.bond_reserves()
+                <= actual_state.bond_reserves() + fixed!(1e10)
+                && expected_state.bond_reserves() >= actual_state.bond_reserves() - fixed!(1e10);
+            assert!(bond_reserves_equal, "Should be equal.");
+
+            let share_adjustment_equal = expected_state.share_adjustment()
+                <= actual_state.share_adjustment() + int256!(1)
+                && expected_state.share_adjustment()
+                    >= actual_state.share_adjustment() - int256!(1);
+            assert!(share_adjustment_equal, "Should be equal.");
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default());
+            bob.reset(Default::default());
+        }
+
+        Ok(())
+    }
     #[tokio::test]
     async fn fuzz_calculate_present_value() -> Result<()> {
         let chain = TestChain::new().await?;
