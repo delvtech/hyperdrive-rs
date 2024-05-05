@@ -726,6 +726,87 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fuzz_test_calculate_pool_state_after_add_liquidity() -> Result<()> {
+        // Spawn a test chain and create two agents -- Alice and Bob.
+        let mut rng = thread_rng();
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let config = bob.get_config().clone();
+
+        // Test happy paths.
+        for _ in 0..*FUZZ_RUNS {
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Fund Alice and Bob.
+            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
+            let contribution = rng.gen_range(fixed!(10_000e18)..=fixed!(500_000_000e18));
+            let budget = rng.gen_range(fixed!(10e18)..=fixed!(500_000_000e18));
+            alice.fund(contribution).await?;
+            bob.fund(budget).await?;
+
+            // Alice initializes the pool.
+            alice.initialize(fixed_rate, contribution, None).await?;
+
+            // Some of the checkpoint passes and variable interest accrues.
+            alice
+                .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
+                .await?;
+            let rate = fixed!(0);
+            alice
+                .advance_time(
+                    rate,
+                    FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
+                )
+                .await?;
+
+            // Get the State from solidity before adding liquidity.
+            let state = State {
+                config: bob.get_state().await?.config.clone(),
+                info: bob.get_state().await?.info.clone(),
+            };
+
+            // Bob adds liquidity
+            bob.add_liquidity(budget, None).await?;
+
+            // Get the State from solidity after adding liquidity.
+            let expected_state = State {
+                config: bob.get_state().await?.config.clone(),
+                info: bob.get_state().await?.info.clone(),
+            };
+
+            // Calculate lp_shares from the rust function.
+            let actual_state = state
+                .calculate_pool_state_after_add_liquidity(budget, true)
+                .unwrap();
+
+            // Ensure the states are equal within a tolerance.
+            let share_reserves_equal = expected_state.share_reserves()
+                <= actual_state.share_reserves() + fixed!(1e9)
+                && expected_state.share_reserves() >= actual_state.share_reserves() - fixed!(1e9);
+            assert!(share_reserves_equal, "Should be equal.");
+
+            let bond_reserves_equal = expected_state.bond_reserves()
+                <= actual_state.bond_reserves() + fixed!(1e10)
+                && expected_state.bond_reserves() >= actual_state.bond_reserves() - fixed!(1e10);
+            assert!(bond_reserves_equal, "Should be equal.");
+
+            let share_adjustment_equal = expected_state.share_adjustment()
+                <= actual_state.share_adjustment() + int256!(1)
+                && expected_state.share_adjustment()
+                    >= actual_state.share_adjustment() - int256!(1);
+            assert!(share_adjustment_equal, "Should be equal.");
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default());
+            bob.reset(Default::default());
+        }
+
+        Ok(())
+    }
+    #[tokio::test]
     async fn fuzz_calculate_present_value() -> Result<()> {
         let chain = TestChain::new().await?;
 
