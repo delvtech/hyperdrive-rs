@@ -11,9 +11,8 @@ use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable, erc4626_hyperdrive::ERC4626Hyperdrive,
     erc4626_target0::ERC4626Target0, erc4626_target1::ERC4626Target1,
-    erc4626_target2::ERC4626Target2, erc4626_target3::ERC4626Target3,
-    erc4626_target4::ERC4626Target4, etching_vault::EtchingVault, ihyperdrive::IHyperdrive,
-    mock_erc4626::MockERC4626,
+    erc4626_target2::ERC4626Target2, erc4626_target3::ERC4626Target3, etching_vault::EtchingVault,
+    ihyperdrive::IHyperdrive, mock_erc4626::MockERC4626,
 };
 
 use super::Chain;
@@ -33,7 +32,6 @@ impl Chain {
         let target1_address = hyperdrive.target_1().call().await?;
         let target2_address = hyperdrive.target_2().call().await?;
         let target3_address = hyperdrive.target_3().call().await?;
-        let target4_address = hyperdrive.target_4().call().await?;
         let vault_address = hyperdrive.vault_shares_token().call().await?;
 
         // Deploy templates for each of the contracts that should be etched and
@@ -108,13 +106,6 @@ impl Chain {
                     .await?;
             pairs.push((target3_address, target3_template.address()));
 
-            // Deploy the target4 template.
-            let target4_template =
-                ERC4626Target4::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
-            pairs.push((target4_address, target4_template.address()));
-
             // Etch the "etching vault" onto the current vault contract. The
             // etching vault implements `convertToAssets` to return the immutable
             // that was passed on deployment. This is necessary because the
@@ -143,7 +134,6 @@ impl Chain {
                     target1_address,
                     target2_address,
                     target3_address,
-                    target4_address,
                     vault_address,
                     Vec::<Address>::new(),
                 ),

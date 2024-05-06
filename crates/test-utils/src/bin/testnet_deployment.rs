@@ -8,14 +8,12 @@
 /// - ERC4626HyperdriveTarget1Deployer
 /// - ERC4626HyperdriveTarget2Deployer
 /// - ERC4626HyperdriveTarget3Deployer
-/// - ERC4626HyperdriveTarget4Deployer
 /// - StETHHyperdriveDeployerCoordinator
 /// - StETHHyperdriveCoreDeployer
 /// - StETHHyperdriveTarget0Deployer
 /// - StETHHyperdriveTarget1Deployer
 /// - StETHHyperdriveTarget2Deployer
 /// - StETHHyperdriveTarget3Deployer
-/// - StETHHyperdriveTarget4Deployer
 /// - MockERC4626
 /// - MockLido
 ///
@@ -37,14 +35,12 @@ use hyperdrive_wrappers::wrappers::{
     erc4626_target0_deployer::ERC4626Target0Deployer,
     erc4626_target1_deployer::ERC4626Target1Deployer,
     erc4626_target2_deployer::ERC4626Target2Deployer,
-    erc4626_target3_deployer::ERC4626Target3Deployer,
-    erc4626_target4_deployer::ERC4626Target4Deployer, hyperdrive_factory::HyperdriveFactory,
+    erc4626_target3_deployer::ERC4626Target3Deployer, hyperdrive_factory::HyperdriveFactory,
     hyperdrive_registry::HyperdriveRegistry, mock_erc4626::MockERC4626, mock_lido::MockLido,
     steth_hyperdrive_core_deployer::StETHHyperdriveCoreDeployer,
     steth_hyperdrive_deployer_coordinator::StETHHyperdriveDeployerCoordinator,
     steth_target0_deployer::StETHTarget0Deployer, steth_target1_deployer::StETHTarget1Deployer,
     steth_target2_deployer::StETHTarget2Deployer, steth_target3_deployer::StETHTarget3Deployer,
-    steth_target4_deployer::StETHTarget4Deployer,
 };
 use test_utils::chain::{Chain, ChainClient};
 
@@ -205,9 +201,6 @@ async fn testnet_deployment(
     let target3 = ERC4626Target3Deployer::deploy(client.clone(), ())?
         .send()
         .await?;
-    let target4 = ERC4626Target4Deployer::deploy(client.clone(), ())?
-        .send()
-        .await?;
     ERC4626HyperdriveDeployerCoordinator::deploy(
         client.clone(),
         (
@@ -217,7 +210,6 @@ async fn testnet_deployment(
             target1.address(),
             target2.address(),
             target3.address(),
-            target4.address(),
         ),
     )?
     .send()
@@ -240,9 +232,6 @@ async fn testnet_deployment(
         let target3 = StETHTarget3Deployer::deploy(client.clone(), ())?
             .send()
             .await?;
-        let target4 = StETHTarget4Deployer::deploy(client.clone(), ())?
-            .send()
-            .await?;
         StETHHyperdriveDeployerCoordinator::deploy(
             client.clone(),
             (
@@ -252,7 +241,6 @@ async fn testnet_deployment(
                 target1.address(),
                 target2.address(),
                 target3.address(),
-                target4.address(),
                 lido.address(),
             ),
         )?

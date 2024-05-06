@@ -25,8 +25,6 @@ use hyperdrive_wrappers::wrappers::{
     erc4626_target2_deployer::ERC4626Target2Deployer,
     erc4626_target3::ERC4626Target3,
     erc4626_target3_deployer::ERC4626Target3Deployer,
-    erc4626_target4::ERC4626Target4,
-    erc4626_target4_deployer::ERC4626Target4Deployer,
     hyperdrive_factory::{
         Fees as FactoryFees, HyperdriveFactory, HyperdriveFactoryEvents, Options, PoolDeployConfig,
     },
@@ -40,7 +38,6 @@ use hyperdrive_wrappers::wrappers::{
     steth_target1_deployer::StETHTarget1Deployer,
     steth_target2_deployer::StETHTarget2Deployer,
     steth_target3_deployer::StETHTarget3Deployer,
-    steth_target4_deployer::StETHTarget4Deployer,
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -310,9 +307,6 @@ impl Chain {
         let target3 = ERC4626Target3::deploy(client.clone(), (config.clone(),))?
             .send()
             .await?;
-        let target4 = ERC4626Target4::deploy(client.clone(), (config.clone(),))?
-            .send()
-            .await?;
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
             (
@@ -321,7 +315,6 @@ impl Chain {
                 target1.address(),
                 target2.address(),
                 target3.address(),
-                target4.address(),
             ),
         )?
         .send()
@@ -485,9 +478,6 @@ impl Chain {
             let target3 = ERC4626Target3Deployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target4 = ERC4626Target4Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -497,7 +487,6 @@ impl Chain {
                     target1.address(),
                     target2.address(),
                     target3.address(),
-                    target4.address(),
                 ),
             )?
             .send()
@@ -658,9 +647,6 @@ impl Chain {
             let target3 = StETHTarget3Deployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target4 = StETHTarget4Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -670,7 +656,6 @@ impl Chain {
                     target1.address(),
                     target2.address(),
                     target3.address(),
-                    target4.address(),
                     lido.address(),
                 ),
             )?
