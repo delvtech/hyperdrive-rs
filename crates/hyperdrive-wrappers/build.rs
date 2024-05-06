@@ -35,12 +35,10 @@ const TARGETS: &[&str] = &[
     "ERC4626Target1",
     "ERC4626Target2",
     "ERC4626Target3",
-    "ERC4626Target4",
     "ERC4626Target0Deployer",
     "ERC4626Target1Deployer",
     "ERC4626Target2Deployer",
     "ERC4626Target3Deployer",
-    "ERC4626Target4Deployer",
     // stETH Hyperdrive
     "StETHHyperdrive",
     "StETHHyperdriveDeployerCoordinator",
@@ -49,12 +47,10 @@ const TARGETS: &[&str] = &[
     "StETHTarget1",
     "StETHTarget2",
     "StETHTarget3",
-    "StETHTarget4",
     "StETHTarget0Deployer",
     "StETHTarget1Deployer",
     "StETHTarget2Deployer",
     "StETHTarget3Deployer",
-    "StETHTarget4Deployer",
     // Test Contracts
     "ERC20Mintable",
     "EtchingVault",
@@ -136,18 +132,6 @@ fn main() -> Result<()> {
         Abigen::new(name, source)?
             .add_derive("serde::Serialize")?
             .add_derive("serde::Deserialize")?
-            // Alias the `IHyperdriveDeployerCoordinator.deploy()` to
-            // `deploy_hyperdrive()` to avoid conflicts with the builtin
-            // `deploy()` in the wrapper used to call the constructor.
-            .add_method_alias("deploy(bytes32,(address,address,address,bytes32,uint256,uint256,uint256,uint256,uint256,address,address,address,(uint256,uint256,uint256,uint256)),bytes,bytes32)", "deploy_hyperdrive")
-            // Alias the `IHyperdriveCoreDeployer.deploy()` to
-            // `deploy_hyperdrive()` to avoid conflicts with the builtin
-            // `deploy()` in the wrapper used to call the constructor.
-            .add_method_alias("deploy((address,address,address,bytes32,uint256,uint256,uint256,uint256,uint256,uint256,address,address,address,(uint256,uint256,uint256,uint256)),bytes,address,address,address,address,address,bytes32)", "deploy_hyperdrive")
-            // Alias the `IHyperdriveTarget.deploy()` to `deploy_target()`
-            // to avoid conflicts with the builtin `deploy()` in the wrapper
-            // used to call the constructor.
-            .add_method_alias("deploy((address,address,address,bytes32,uint256,uint256,uint256,uint256,uint256,uint256,address,address,address,(uint256,uint256,uint256,uint256)),bytes,bytes32)", "deploy_target")
             .generate()?
             .write_to_file(target_file)?;
 
