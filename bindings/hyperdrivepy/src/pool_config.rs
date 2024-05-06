@@ -25,6 +25,7 @@ impl FromPyObject<'_> for PyPoolConfig {
         let initial_vault_share_price = extract_u256_from_attr(ob, "initialVaultSharePrice")?;
         let minimum_share_reserves = extract_u256_from_attr(ob, "minimumShareReserves")?;
         let minimum_transaction_amount = extract_u256_from_attr(ob, "minimumTransactionAmount")?;
+        let circuit_breaker_delta = extract_u256_from_attr(ob, "circuitBreakerDelta")?;
         let position_duration = extract_u256_from_attr(ob, "positionDuration")?;
         let checkpoint_duration = extract_u256_from_attr(ob, "checkpointDuration")?;
         let time_stretch = extract_u256_from_attr(ob, "timeStretch")?;
@@ -41,6 +42,7 @@ impl FromPyObject<'_> for PyPoolConfig {
             initial_vault_share_price,
             minimum_share_reserves,
             minimum_transaction_amount,
+            circuit_breaker_delta,
             position_duration,
             checkpoint_duration,
             time_stretch,

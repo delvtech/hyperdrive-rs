@@ -46,6 +46,7 @@ impl Distribution<State> for Standard {
             initial_vault_share_price: rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18)).into(),
             minimum_share_reserves: rng.gen_range(fixed!(0.1e18)..=fixed!(1e18)).into(),
             minimum_transaction_amount: rng.gen_range(fixed!(0.1e18)..=fixed!(1e18)).into(),
+            circuit_breaker_delta: rng.gen_range(fixed!(0.01e18)..=fixed!(10e18)).into(),
             time_stretch: rng.gen_range(fixed!(0.005e18)..=fixed!(0.5e18)).into(),
             position_duration: rng
                 .gen_range(
