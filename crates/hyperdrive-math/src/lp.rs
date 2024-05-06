@@ -73,8 +73,7 @@ impl State {
 
         let share_contribution = {
             if as_base {
-                // Attempt a crude conversion from base to shares.
-                I256::try_from(contribution / self.vault_share_price()).unwrap()
+                I256::try_from(contribution.div_down(self.vault_share_price())).unwrap()
             } else {
                 I256::try_from(contribution).unwrap()
             }
@@ -84,11 +83,7 @@ impl State {
 
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
-        current_block_timestamp: U256,
         contribution: FixedPoint,
-        min_lp_share_price: FixedPoint,
-        min_apr: FixedPoint,
-        max_apr: FixedPoint,
         as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
@@ -757,7 +752,7 @@ mod tests {
             alice
                 .advance_time(
                     rate,
-                    FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
+                    FixedPoint::from(config.checkpoint_duration).mul_down(fixed!(0.5e18)),
                 )
                 .await?;
 
