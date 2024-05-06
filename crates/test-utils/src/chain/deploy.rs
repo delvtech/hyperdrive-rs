@@ -89,6 +89,10 @@ pub struct TestChainConfig {
     #[serde(deserialize_with = "deserialize_u256")]
     factory_max_position_duration: U256,
     #[serde(deserialize_with = "deserialize_u256")]
+    factory_min_circuit_breaker_delta: U256,
+    #[serde(deserialize_with = "deserialize_u256")]
+    factory_max_circuit_breaker_delta: U256,
+    #[serde(deserialize_with = "deserialize_u256")]
     factory_min_fixed_apr: U256,
     #[serde(deserialize_with = "deserialize_u256")]
     factory_max_fixed_apr: U256,
@@ -124,6 +128,8 @@ pub struct TestChainConfig {
     #[serde(deserialize_with = "deserialize_u256")]
     erc4626_hyperdrive_minimum_transaction_amount: U256,
     #[serde(deserialize_with = "deserialize_u256")]
+    erc4626_hyperdrive_circuit_breaker_delta: U256,
+    #[serde(deserialize_with = "deserialize_u256")]
     erc4626_hyperdrive_position_duration: U256,
     #[serde(deserialize_with = "deserialize_u256")]
     erc4626_hyperdrive_checkpoint_duration: U256,
@@ -146,6 +152,8 @@ pub struct TestChainConfig {
     steth_hyperdrive_minimum_share_reserves: U256,
     #[serde(deserialize_with = "deserialize_u256")]
     steth_hyperdrive_minimum_transaction_amount: U256,
+    #[serde(deserialize_with = "deserialize_u256")]
+    steth_hyperdrive_circuit_breaker_delta: U256,
     #[serde(deserialize_with = "deserialize_u256")]
     steth_hyperdrive_position_duration: U256,
     #[serde(deserialize_with = "deserialize_u256")]
@@ -182,6 +190,8 @@ impl Default for TestChainConfig {
             factory_max_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
             factory_min_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
             factory_max_position_duration: U256::from(60 * 60 * 24 * 365 * 10), // 10 years
+            factory_min_circuit_breaker_delta: uint256!(0.15e18),
+            factory_max_circuit_breaker_delta: uint256!(2e18),
             factory_min_fixed_apr: uint256!(0.01e18),
             factory_max_fixed_apr: uint256!(0.5e18),
             factory_min_time_stretch_apr: uint256!(0.01e18),
@@ -200,6 +210,7 @@ impl Default for TestChainConfig {
             erc4626_hyperdrive_time_stretch_apr: uint256!(0.05e18),
             erc4626_hyperdrive_minimum_share_reserves: uint256!(10e18),
             erc4626_hyperdrive_minimum_transaction_amount: uint256!(0.001e18),
+            erc4626_hyperdrive_circuit_breaker_delta: uint256!(2e18),
             erc4626_hyperdrive_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
             erc4626_hyperdrive_checkpoint_duration: U256::from(60 * 60),        // 1 hour
             erc4626_hyperdrive_curve_fee: uint256!(0.01e18),
@@ -212,6 +223,7 @@ impl Default for TestChainConfig {
             steth_hyperdrive_time_stretch_apr: uint256!(0.035e18),
             steth_hyperdrive_minimum_share_reserves: uint256!(1e15),
             steth_hyperdrive_minimum_transaction_amount: uint256!(1e15),
+            steth_hyperdrive_circuit_breaker_delta: uint256!(2e18),
             steth_hyperdrive_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
             steth_hyperdrive_checkpoint_duration: U256::from(60 * 60),        // 1 hour
             steth_hyperdrive_curve_fee: uint256!(0.01e18),
@@ -268,6 +280,7 @@ impl Chain {
             initial_vault_share_price: uint256!(1e18),
             minimum_share_reserves: uint256!(10e18),
             minimum_transaction_amount: uint256!(0.001e18),
+            circuit_breaker_delta: uint256!(2e18),
             position_duration: U256::from(60 * 60 * 24 * 365), // 1 year
             checkpoint_duration: U256::from(60 * 60 * 24),     // 1 day
             time_stretch: calculate_time_stretch(
@@ -517,6 +530,7 @@ impl Chain {
                 vault_shares_token: vault.address(),
                 minimum_share_reserves: config.erc4626_hyperdrive_minimum_share_reserves,
                 minimum_transaction_amount: config.erc4626_hyperdrive_minimum_transaction_amount,
+                circuit_breaker_delta: config.erc4626_hyperdrive_circuit_breaker_delta,
                 position_duration: config.erc4626_hyperdrive_position_duration,
                 checkpoint_duration: config.erc4626_hyperdrive_checkpoint_duration,
                 fees: FactoryFees {
@@ -683,6 +697,7 @@ impl Chain {
                 vault_shares_token: lido.address(),
                 minimum_share_reserves: config.steth_hyperdrive_minimum_share_reserves,
                 minimum_transaction_amount: config.steth_hyperdrive_minimum_transaction_amount,
+                circuit_breaker_delta: config.steth_hyperdrive_circuit_breaker_delta,
                 position_duration: config.steth_hyperdrive_position_duration,
                 checkpoint_duration: config.steth_hyperdrive_checkpoint_duration,
                 fees: FactoryFees {
