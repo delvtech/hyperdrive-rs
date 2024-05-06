@@ -126,7 +126,12 @@ impl HyperdriveState {
         let (result_fp1, result_fp2, result_fp3) = self
             .state
             .calculate_pool_deltas_after_add_liquidity(contribution_fp, true)
-            .unwrap();
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!(
+                    "calculate_pool_deltas_after_add_liquidity returned the error: {:?}",
+                    err
+                ))
+            })?;
         let result1 = U256::from(result_fp1).to_string();
         let result2 = I256::from(result_fp2).to_string();
         let result3 = U256::from(result_fp3).to_string();
