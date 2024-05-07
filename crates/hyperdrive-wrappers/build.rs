@@ -1,15 +1,11 @@
-use std::{
-    env,
-    fs::{create_dir_all, read_to_string},
-    io::Write,
-    path::Path,
-    process::Command,
-};
+use std::{env, fs::read_to_string, io::Write, path::Path, process::Command};
 
 use dotenv::dotenv;
-use ethers::prelude::Abigen;
+use ethers::{abi::RawAbi, prelude::Abigen};
 use eyre::Result;
 use heck::ToSnakeCase;
+use serde::{Deserialize, Serialize};
+use serde_json;
 
 const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
@@ -23,6 +19,8 @@ const TARGETS: &[&str] = &[
     // Tokens
     "ERC20Mintable",
     "ERC20ForwarderFactory",
+    // Libraries
+    "LPMath",
     // Hyperdrive Factory
     "HyperdriveFactory",
     // Hyperdrive Registry
@@ -119,7 +117,9 @@ fn main() -> Result<()> {
     let mut artifacts = get_artifacts(&artifacts)?;
     artifacts.sort_by(|a, b| a.1.cmp(&b.1));
     artifacts.dedup_by(|a, b| a.1.eq(&b.1));
-    for (source, name) in artifacts {
+
+    // For each artifact, generate a wrapper.
+    for (source, name, bytecode) in artifacts {
         let target = name
             // Ensure that `StETH` is converted to `steth` in snake case.
             .replace("StETH", "STETH")
@@ -127,24 +127,84 @@ fn main() -> Result<()> {
             .replace("IHyperdrive", "IHYPERDRIVE")
             .to_snake_case();
 
-        // Write the generated contract wrapper.
+        // Make the generated contract wrapper file.
         let target_file = generated.join(format!("{}.rs", target));
-        Abigen::new(name, source)?
+
+        // Generate the wrapper with Abigen.
+        let mut output = Abigen::new(&name, source)?
             .add_derive("serde::Serialize")?
             .add_derive("serde::Deserialize")?
             .generate()?
-            .write_to_file(target_file)?;
+            .to_string();
 
-        // Append the generated contract wrapper to the mod file.
+        // Check if bytecode contains placeholders, indicating it is "invalid"
+        match bytecode.contains("__$") {
+            true => {
+                // Find the last '}' in the file to insert before it
+                if let Some(pos) = output.rfind('}') {
+                    let (start, end) = output.split_at(pos);
+                    output = format!(
+                        r#"
+{}
+    impl<M: ::ethers::providers::Middleware> {}<M> {{
+        pub async fn deploy_linked_contract<T: ::ethers::abi::Tokenize>(
+            libraries: Vec<(&str, ::ethers::abi::Address)>,
+            provider: ::std::sync::Arc<M>,
+            constructor_args: T,
+        ) -> Result<::ethers::contract::ContractInstance<::std::sync::Arc<M>, M>, ::ethers::contract::ContractError<M>>
+        where
+            M: ::ethers::providers::Middleware,
+        {{
+            // Replace placeholders in bytecode
+            let bytecode = {}_UNLINKED_BYTECODE;
+            let mut linked_bytecode = bytecode.to_string();
+            for (lib_name, address) in libraries {{
+                if let Some(placeholder) = crate::LIBRARY_PLACEHOLDERS.get(lib_name) {{
+                    use ethers::abi::AbiEncode;
+                    linked_bytecode = linked_bytecode.replace(placeholder, &address.encode_hex().split_at(26).1);
+                }} else {{
+                    return Err(::ethers::contract::ContractError::AbiError(
+                        ethers::abi::AbiError::DecodingError(::ethers::abi::Error::InvalidData),
+                    ));
+                }}
+            }}
+
+            // Create the contract factory with the linked bytecode
+            let factory = ::ethers::contract::ContractFactory::new(__abi(), linked_bytecode.parse().unwrap(), provider.clone());
+
+            // Deploy the contract
+            let contract = factory.deploy(constructor_args)?.send().await?;
+
+            Ok(contract)
+        }}
+    }}
+
+    pub const {}_UNLINKED_BYTECODE: &str = "{}";
+{}"#,
+                        start,
+                        name,
+                        name.to_uppercase(),
+                        name.to_uppercase(),
+                        bytecode,
+                        end
+                    );
+                }
+            }
+            false => (),
+        }
+
+        // Write the modified output to the target file.
+        std::fs::write(&target_file, output)?;
+
+        // Append the module declaration to the mod.rs file.
         writeln!(mod_file, "pub mod {};", target)?;
     }
-
     Ok(())
 }
 
-fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
+fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String, String)>> {
     if !artifacts_path.exists() {
-        create_dir_all(artifacts_path)?;
+        std::fs::create_dir_all(artifacts_path)?;
     }
     let mut artifacts = Vec::new();
     for entry in std::fs::read_dir(artifacts_path)? {
@@ -153,10 +213,11 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
         if path.is_file() {
             let source = path.clone().into_os_string().into_string().unwrap();
             let name = String::from(path.file_stem().unwrap().to_str().unwrap());
-
             // If the artifact is one of our targets, add it to the list.
             if TARGETS.contains(&name.as_str()) {
-                artifacts.push((source, name));
+                let contents = std::fs::read_to_string(&path)?;
+                let bytecode = contract_bytecode(&contents)?;
+                artifacts.push((source, name, bytecode));
             }
         } else {
             artifacts.extend(get_artifacts(&path)?);
@@ -165,8 +226,24 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String)>> {
     Ok(artifacts)
 }
 
-// Git helpers
+#[derive(Serialize, Deserialize)]
+pub struct BytesObject {
+    object: String,
+}
 
+#[derive(Serialize, Deserialize)]
+pub struct AbiObj {
+    pub abi: RawAbi,
+    pub bytecode: BytesObject,
+}
+
+fn contract_bytecode(abi_json: &str) -> std::io::Result<String> {
+    let artifact = serde_json::from_str::<AbiObj>(&abi_json)?;
+    let bytecode = artifact.bytecode.object;
+    Ok(bytecode)
+}
+
+// Git helpers
 fn clone_repo(url: &str, branch: &str, path: &Path) -> Result<()> {
     let clone_status = Command::new("git")
         .args([
