@@ -871,6 +871,8 @@ mod tests {
             let state = alice.get_state().await?;
             let Checkpoint {
                 vault_share_price: open_vault_share_price,
+                weighted_spot_price: _,
+                last_weighted_spot_price_update_time: _,
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;
