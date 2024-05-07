@@ -30,6 +30,7 @@ use hyperdrive_wrappers::wrappers::{
     },
     hyperdrive_registry::HyperdriveRegistry,
     ihyperdrive::{Fees, PoolConfig},
+    lp_math::LPMath,
     mock_erc4626::MockERC4626,
     mock_lido::MockLido,
     steth_hyperdrive_core_deployer::StETHHyperdriveCoreDeployer,
@@ -238,6 +239,8 @@ impl Chain {
     pub async fn test_deploy<S: Signer + 'static>(&self, signer: S) -> Result<Addresses> {
         // Create a client using the signer.
         let client = self.client(signer).await?;
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
+        let libraries = vec![("LPMath", lp_math.address())];
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -295,18 +298,31 @@ impl Chain {
                 governance_zombie: uint256!(0.15e18),
             },
         };
-        let target0 = ERC4626Target0::deploy(client.clone(), (config.clone(),))?
-            .send()
-            .await?;
-        let target1 = ERC4626Target1::deploy(client.clone(), (config.clone(),))?
-            .send()
-            .await?;
-        let target2 = ERC4626Target2::deploy(client.clone(), (config.clone(),))?
-            .send()
-            .await?;
-        let target3 = ERC4626Target3::deploy(client.clone(), (config.clone(),))?
-            .send()
-            .await?;
+
+        let target0 = ERC4626Target0::deploy_linked_contract(
+            libraries.clone(),
+            client.clone(),
+            (config.clone(),),
+        )
+        .await?;
+        let target1 = ERC4626Target1::deploy_linked_contract(
+            libraries.clone(),
+            client.clone(),
+            (config.clone(),),
+        )
+        .await?;
+        let target2 = ERC4626Target2::deploy_linked_contract(
+            libraries.clone(),
+            client.clone(),
+            (config.clone(),),
+        )
+        .await?;
+        let target3 = ERC4626Target3::deploy_linked_contract(
+            libraries.clone(),
+            client.clone(),
+            (config.clone(),),
+        )
+        .await?;
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
             (
@@ -339,6 +355,9 @@ impl Chain {
         // Set up a client.
         let address = signer.address();
         let client = self.client(signer).await?;
+
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
+        let libraries = vec![("LPMath", lp_math.address())];
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -466,18 +485,30 @@ impl Chain {
             let core_deployer = ERC4626HyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target0 = ERC4626Target0Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target1 = ERC4626Target1Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target2 = ERC4626Target2Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target3 = ERC4626Target3Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
+            let target0 = ERC4626Target0Deployer::deploy_linked_contract(
+                libraries.clone(),
+                client.clone(),
+                (),
+            )
+            .await?;
+            let target1 = ERC4626Target1Deployer::deploy_linked_contract(
+                libraries.clone(),
+                client.clone(),
+                (),
+            )
+            .await?;
+            let target2 = ERC4626Target2Deployer::deploy_linked_contract(
+                libraries.clone(),
+                client.clone(),
+                (),
+            )
+            .await?;
+            let target3 = ERC4626Target3Deployer::deploy_linked_contract(
+                libraries.clone(),
+                client.clone(),
+                (),
+            )
+            .await?;
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -635,18 +666,18 @@ impl Chain {
             let core_deployer = StETHHyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target0 = StETHTarget0Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target1 = StETHTarget1Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target2 = StETHTarget2Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
-            let target3 = StETHTarget3Deployer::deploy(client.clone(), ())?
-                .send()
-                .await?;
+            let target0 =
+                StETHTarget0Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
+                    .await?;
+            let target1 =
+                StETHTarget1Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
+                    .await?;
+            let target2 =
+                StETHTarget2Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
+                    .await?;
+            let target3 =
+                StETHTarget3Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
+                    .await?;
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
