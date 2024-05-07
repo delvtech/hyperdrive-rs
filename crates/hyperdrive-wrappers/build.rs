@@ -1,11 +1,17 @@
-use std::{env, fs::read_to_string, io::Write, path::Path, process::Command};
+use std::{
+    collections::HashMap,
+    env,
+    fs::{create_dir_all, read_to_string, OpenOptions},
+    io::Write,
+    path::Path,
+    process::Command,
+};
 
 use dotenv::dotenv;
-use ethers::{abi::RawAbi, prelude::Abigen};
+use ethers::prelude::Abigen;
 use eyre::Result;
 use heck::ToSnakeCase;
 use serde::{Deserialize, Serialize};
-use serde_json;
 
 const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
@@ -16,11 +22,11 @@ const TARGETS: &[&str] = &[
     "IStETHHyperdrive",
     "IHyperdrive",
     "IHyperdriveFactory",
+    // Libraries
+    "LPMath",
     // Tokens
     "ERC20Mintable",
     "ERC20ForwarderFactory",
-    // Libraries
-    "LPMath",
     // Hyperdrive Factory
     "HyperdriveFactory",
     // Hyperdrive Registry
@@ -115,109 +121,141 @@ fn main() -> Result<()> {
     // Generate the relevant contract wrappers from Foundry's artifacts.
     let artifacts = hyperdrive_dir.join("out");
     let mut artifacts = get_artifacts(&artifacts)?;
-    artifacts.sort_by(|a, b| a.1.cmp(&b.1));
-    artifacts.dedup_by(|a, b| a.1.eq(&b.1));
-
-    // For each artifact, generate a wrapper.
-    for (source, name, bytecode) in artifacts {
-        let target = name
+    artifacts.sort_by(|a, b| a.name.cmp(&b.name));
+    artifacts.dedup_by(|a, b| a.name.eq(&b.name));
+    for artifact in artifacts {
+        let target = artifact
+            .name
             // Ensure that `StETH` is converted to `steth` in snake case.
             .replace("StETH", "STETH")
             // Ensure that `IHyperdrive` is converted to `ihyperdrive` in snake case.
             .replace("IHyperdrive", "IHYPERDRIVE")
             .to_snake_case();
 
-        // Make the generated contract wrapper file.
+        // Write the generated contract wrapper.
         let target_file = generated.join(format!("{}.rs", target));
-
-        // Generate the wrapper with Abigen.
-        let mut output = Abigen::new(&name, source)?
+        Abigen::new(&artifact.name, artifact.path)?
             .add_derive("serde::Serialize")?
             .add_derive("serde::Deserialize")?
             .generate()?
-            .to_string();
+            .write_to_file(&target_file)?;
 
-        // Check if bytecode contains placeholders, indicating it is "invalid"
-        match bytecode.contains("__$") {
-            true => {
-                // Find the last '}' in the file to insert before it
-                if let Some(pos) = output.rfind('}') {
-                    let (start, end) = output.split_at(pos);
-                    output = format!(
-                        r#"
-{}
-    impl<M: ::ethers::providers::Middleware> {}<M> {{
-        pub async fn deploy_linked_contract<T: ::ethers::abi::Tokenize>(
-            libraries: Vec<(&str, ::ethers::abi::Address)>,
-            provider: ::std::sync::Arc<M>,
-            constructor_args: T,
-        ) -> Result<::ethers::contract::ContractInstance<::std::sync::Arc<M>, M>, ::ethers::contract::ContractError<M>>
-        where
-            M: ::ethers::providers::Middleware,
-        {{
-            // Replace placeholders in bytecode
-            let bytecode = {}_UNLINKED_BYTECODE;
-            let mut linked_bytecode = bytecode.to_string();
-            for (lib_name, address) in libraries {{
-                if let Some(placeholder) = crate::LIBRARY_PLACEHOLDERS.get(lib_name) {{
-                    use ethers::abi::AbiEncode;
-                    linked_bytecode = linked_bytecode.replace(placeholder, &address.encode_hex().split_at(26).1);
-                }} else {{
-                    return Err(::ethers::contract::ContractError::AbiError(
-                        ethers::abi::AbiError::DecodingError(::ethers::abi::Error::InvalidData),
-                    ));
-                }}
-            }}
+        // Check if there are any external libraries that the contract depends
+        // on. If there are, append a `link_and_deploy` function to the
+        // generated contract wrapper that can be used to deploy the contract.
+        if !artifact.libs.is_empty() {
+            let mut generated_file = OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(target_file)?;
 
-            // Create the contract factory with the linked bytecode
-            let factory = ::ethers::contract::ContractFactory::new(__abi(), linked_bytecode.parse().unwrap(), provider.clone());
+            writeln!(
+                generated_file,
+                "{}",
+                format!(
+                    r#"
+pub struct {name}Libs {{
+    {libs}
+}}
 
-            // Deploy the contract
-            let contract = factory.deploy(constructor_args)?.send().await?;
-
-            Ok(contract)
-        }}
+impl<M: ::ethers::providers::Middleware> {name}<M> {{
+    pub fn link_and_deploy<T: ::ethers::core::abi::Tokenize>(
+        client: ::std::sync::Arc<M>,
+        constructor_args: T,
+        libs: {name}Libs,
+    ) -> ::core::result::Result<
+        ::ethers::contract::builders::ContractDeployer<M, Self>,
+        ::ethers::contract::ContractError<M>,
+    > {{
+        let factory = crate::linked_factory::create(
+            {all_caps_name}_ABI.clone(),
+            "{bytecode}",
+            [
+                {lib_entries}
+            ],
+            client.clone(),
+        ).unwrap();
+        let deployer = factory.deploy(constructor_args)?;
+        let deployer = ::ethers::contract::ContractDeployer::new(deployer);
+        Ok(deployer)
     }}
-
-    pub const {}_UNLINKED_BYTECODE: &str = "{}";
-{}"#,
-                        start,
-                        name,
-                        name.to_uppercase(),
-                        name.to_uppercase(),
-                        bytecode,
-                        end
-                    );
-                }
-            }
-            false => (),
+}}
+"#,
+                    name = artifact.name,
+                    all_caps_name = artifact.name.to_uppercase(),
+                    bytecode = artifact.bytecode,
+                    libs = artifact
+                        .libs
+                        .iter()
+                        .map(|lib| {
+                            format!(
+                                "pub {}: ::ethers::types::Address,",
+                                lib.lib_name.to_snake_case()
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join("\n    "),
+                    lib_entries = artifact
+                        .libs
+                        .iter()
+                        .map(|lib| {
+                            format!(
+                                r#"(
+                    "{path}:{name}",
+                    libs.{key},
+                )"#,
+                                path = lib.file_path,
+                                name = lib.lib_name,
+                                key = lib.lib_name.to_snake_case()
+                            )
+                        })
+                        .collect::<Vec<String>>()
+                        .join(",\n            "),
+                )
+            )?;
         }
 
-        // Write the modified output to the target file.
-        std::fs::write(&target_file, output)?;
-
-        // Append the module declaration to the mod.rs file.
+        // Append the generated contract wrapper to the mod file.
         writeln!(mod_file, "pub mod {};", target)?;
     }
+
     Ok(())
 }
 
-fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String, String)>> {
+struct ArtifactLibs {
+    file_path: String,
+    lib_name: String,
+}
+
+struct Artifact {
+    path: String,
+    name: String,
+    bytecode: String,
+    libs: Vec<ArtifactLibs>,
+}
+
+fn get_artifacts(artifacts_path: &Path) -> Result<Vec<Artifact>> {
     if !artifacts_path.exists() {
-        std::fs::create_dir_all(artifacts_path)?;
+        create_dir_all(artifacts_path)?;
     }
     let mut artifacts = Vec::new();
     for entry in std::fs::read_dir(artifacts_path)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
-            let source = path.clone().into_os_string().into_string().unwrap();
+            let artifact_path = path.clone().into_os_string().into_string().unwrap();
             let name = String::from(path.file_stem().unwrap().to_str().unwrap());
             // If the artifact is one of our targets, add it to the list.
             if TARGETS.contains(&name.as_str()) {
-                let contents = std::fs::read_to_string(&path)?;
-                let bytecode = contract_bytecode(&contents)?;
-                artifacts.push((source, name, bytecode));
+                // Parse the artifact to get the bytecode and the the external
+                // libraries it depends on.
+                let (bytecode, libs) = parse_bytecode(&artifact_path)?;
+                artifacts.push(Artifact {
+                    path: artifact_path,
+                    name,
+                    bytecode,
+                    libs,
+                });
             }
         } else {
             artifacts.extend(get_artifacts(&path)?);
@@ -227,23 +265,45 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<(String, String, String)>>
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct BytesObject {
+#[allow(non_snake_case)]
+struct ArtifactByteCode {
     object: String,
+    linkReferences: HashMap<
+        String, // file_path
+        HashMap<
+            String, // lib_name
+            serde_json::Value,
+        >,
+    >,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct AbiObj {
-    pub abi: RawAbi,
-    pub bytecode: BytesObject,
+struct ArtifactWithBytecode {
+    bytecode: ArtifactByteCode,
 }
 
-fn contract_bytecode(abi_json: &str) -> std::io::Result<String> {
-    let artifact = serde_json::from_str::<AbiObj>(&abi_json)?;
-    let bytecode = artifact.bytecode.object;
-    Ok(bytecode)
+fn parse_bytecode(artifact_path: &str) -> eyre::Result<(String, Vec<ArtifactLibs>)> {
+    let source_code = read_to_string(artifact_path)?;
+    let artifact = serde_json::from_str::<ArtifactWithBytecode>(&source_code)?;
+    let libs = artifact
+        .bytecode
+        .linkReferences
+        .iter()
+        .map(|(file_path, libs)| {
+            libs.iter()
+                .map(|(lib_name, _)| ArtifactLibs {
+                    file_path: file_path.clone(),
+                    lib_name: lib_name.clone(),
+                })
+                .collect::<Vec<ArtifactLibs>>()
+        })
+        .flatten()
+        .collect::<Vec<ArtifactLibs>>();
+    Ok((artifact.bytecode.object, libs))
 }
 
 // Git helpers
+
 fn clone_repo(url: &str, branch: &str, path: &Path) -> Result<()> {
     let clone_status = Command::new("git")
         .args([
