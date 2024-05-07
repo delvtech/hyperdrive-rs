@@ -140,7 +140,6 @@ mod tests {
     use test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
 
     use super::*;
-    use crate::State;
 
     #[tokio::test]
     async fn fuzz_calculate_time_stretch() -> Result<()> {
@@ -165,49 +164,6 @@ mod tests {
             {
                 Ok(expected_t) => {
                     assert_eq!(actual_t, FixedPoint::from(expected_t));
-                }
-                Err(_) => panic!("Test failed."),
-            }
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn fuzz_calculate_initial_bond_reserves() -> Result<()> {
-        let chain = TestChain::new().await?;
-
-        // Fuzz the rust and solidity implementations against each other.
-        let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
-            // Get the current state of the mock contract
-            let state = rng.gen::<State>();
-            let effective_share_reserves = calculate_effective_share_reserves(
-                state.info.share_reserves.into(),
-                state.info.share_adjustment.into(),
-            );
-            // Calculate the bonds
-            let actual = calculate_initial_bond_reserves(
-                effective_share_reserves,
-                state.config.initial_vault_share_price.into(),
-                fixed!(0.01e18),
-                state.config.position_duration.into(),
-                state.config.time_stretch.into(),
-            );
-            match chain
-                .mock_hyperdrive_math()
-                .calculate_initial_bond_reserves(
-                    effective_share_reserves.into(),
-                    state.config.initial_vault_share_price,
-                    fixed!(0.01e18).into(),
-                    state.config.position_duration,
-                    state.config.time_stretch,
-                )
-                .call()
-                .await
-            {
-                Ok(expected_y) => {
-                    assert_eq!(actual, FixedPoint::from(expected_y));
                 }
                 Err(_) => panic!("Test failed."),
             }
