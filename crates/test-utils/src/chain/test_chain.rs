@@ -7,6 +7,7 @@ use ethers::types::{Address, U256};
 use eyre::Result;
 use fixed_point_macros::uint256;
 use hyperdrive_addresses::Addresses;
+use hyperdrive_wrappers::wrappers::lp_math::LPMath;
 use hyperdrive_wrappers::wrappers::{
     mock_fixed_point_math::MockFixedPointMath, mock_hyperdrive_math::MockHyperdriveMath,
     mock_lp_math::MockLPMath, mock_yield_space_math::MockYieldSpaceMath,
@@ -59,7 +60,13 @@ impl TestChain {
         let mock_hyperdrive_math = MockHyperdriveMath::deploy(client.clone(), ())?
             .send()
             .await?;
-        let mock_lp_math = MockLPMath::deploy(client.clone(), ())?.send().await?;
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
+        let mock_lp_math = MockLPMath::deploy_linked_contract(
+            [("LPMath", lp_math.address())].into(),
+            client.clone(),
+            (),
+        )
+        .await?;
         let mock_yield_space_math = MockYieldSpaceMath::deploy(client.clone(), ())?
             .send()
             .await?;
@@ -72,7 +79,7 @@ impl TestChain {
             addresses,
             mock_fixed_point_math,
             mock_hyperdrive_math,
-            mock_lp_math,
+            mock_lp_math: mock_lp_math.into(),
             mock_yield_space_math,
         })
     }
