@@ -7,10 +7,12 @@ use ethers::types::{Address, U256};
 use eyre::Result;
 use fixed_point_macros::uint256;
 use hyperdrive_addresses::Addresses;
-use hyperdrive_wrappers::wrappers::lp_math::LPMath;
 use hyperdrive_wrappers::wrappers::{
-    mock_fixed_point_math::MockFixedPointMath, mock_hyperdrive_math::MockHyperdriveMath,
-    mock_lp_math::MockLPMath, mock_yield_space_math::MockYieldSpaceMath,
+    lp_math::LPMath,
+    mock_fixed_point_math::MockFixedPointMath,
+    mock_hyperdrive_math::MockHyperdriveMath,
+    mock_lp_math::{MockLPMath, MockLPMathLibs},
+    mock_yield_space_math::MockYieldSpaceMath,
 };
 use rand_chacha::ChaCha8Rng;
 
@@ -61,11 +63,14 @@ impl TestChain {
             .send()
             .await?;
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-        let mock_lp_math = MockLPMath::deploy_linked_contract(
-            [("LPMath", lp_math.address())].into(),
+        let mock_lp_math = MockLPMath::link_and_deploy(
             client.clone(),
             (),
-        )
+            MockLPMathLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
         .await?;
         let mock_yield_space_math = MockYieldSpaceMath::deploy(client.clone(), ())?
             .send()

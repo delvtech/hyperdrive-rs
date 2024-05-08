@@ -9,10 +9,16 @@ use eyre::Result;
 use fixed_point_macros::uint256;
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
-    erc20_mintable::ERC20Mintable, erc4626_hyperdrive::ERC4626Hyperdrive,
-    erc4626_target0::ERC4626Target0, erc4626_target1::ERC4626Target1,
-    erc4626_target2::ERC4626Target2, erc4626_target3::ERC4626Target3, etching_vault::EtchingVault,
-    ihyperdrive::IHyperdrive, lp_math::LPMath, mock_erc4626::MockERC4626,
+    erc20_mintable::ERC20Mintable,
+    erc4626_hyperdrive::ERC4626Hyperdrive,
+    erc4626_target0::{ERC4626Target0, ERC4626Target0Libs},
+    erc4626_target1::{ERC4626Target1, ERC4626Target1Libs},
+    erc4626_target2::{ERC4626Target2, ERC4626Target2Libs},
+    erc4626_target3::{ERC4626Target3, ERC4626Target3Libs},
+    etching_vault::EtchingVault,
+    ihyperdrive::IHyperdrive,
+    lp_math::LPMath,
+    mock_erc4626::MockERC4626,
 };
 
 use super::Chain;
@@ -78,41 +84,52 @@ impl Chain {
             pairs.push((vault_address, vault_template.address()));
 
             let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-            let libraries = vec![("LPMath", lp_math.address())];
             // Deploy the target0 template.
             let config = hyperdrive.get_pool_config().call().await?;
-            let target0_template = ERC4626Target0::deploy_linked_contract(
-                libraries.clone(),
+            let target0_template = ERC4626Target0::link_and_deploy(
                 client.clone(),
                 (config.clone(), vault_address),
-            )
+                ERC4626Target0Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
             pairs.push((target0_address, target0_template.address()));
 
             // Deploy the target1 template.
-            let target1_template = ERC4626Target1::deploy_linked_contract(
-                libraries.clone(),
+            let target1_template = ERC4626Target1::link_and_deploy(
                 client.clone(),
                 (config.clone(), vault_address),
-            )
+                ERC4626Target1Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
             pairs.push((target1_address, target1_template.address()));
 
             // Deploy the target2 template.
-            let target2_template = ERC4626Target2::deploy_linked_contract(
-                libraries.clone(),
+            let target2_template = ERC4626Target2::link_and_deploy(
                 client.clone(),
                 (config.clone(), vault_address),
-            )
+                ERC4626Target2Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
             pairs.push((target2_address, target2_template.address()));
 
             // Deploy the target3 template.
-            let target3_template = ERC4626Target3::deploy_linked_contract(
-                libraries.clone(),
+            let target3_template = ERC4626Target3::link_and_deploy(
                 client.clone(),
                 (config.clone(), vault_address),
-            )
+                ERC4626Target3Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
             pairs.push((target3_address, target3_template.address()));
 

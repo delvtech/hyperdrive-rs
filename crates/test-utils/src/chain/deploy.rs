@@ -17,16 +17,17 @@ use hyperdrive_wrappers::wrappers::{
     erc4626_hyperdrive::ERC4626Hyperdrive,
     erc4626_hyperdrive_core_deployer::ERC4626HyperdriveCoreDeployer,
     erc4626_hyperdrive_deployer_coordinator::ERC4626HyperdriveDeployerCoordinator,
-    erc4626_target0::ERC4626Target0,
-    erc4626_target0_deployer::ERC4626Target0Deployer,
-    erc4626_target1::ERC4626Target1,
-    erc4626_target1_deployer::ERC4626Target1Deployer,
-    erc4626_target2::ERC4626Target2,
-    erc4626_target2_deployer::ERC4626Target2Deployer,
-    erc4626_target3::ERC4626Target3,
-    erc4626_target3_deployer::ERC4626Target3Deployer,
+    erc4626_target0::{ERC4626Target0, ERC4626Target0Libs},
+    erc4626_target0_deployer::{ERC4626Target0Deployer, ERC4626Target0DeployerLibs},
+    erc4626_target1::{ERC4626Target1, ERC4626Target1Libs},
+    erc4626_target1_deployer::{ERC4626Target1Deployer, ERC4626Target1DeployerLibs},
+    erc4626_target2::{ERC4626Target2, ERC4626Target2Libs},
+    erc4626_target2_deployer::{ERC4626Target2Deployer, ERC4626Target2DeployerLibs},
+    erc4626_target3::{ERC4626Target3, ERC4626Target3Libs},
+    erc4626_target3_deployer::{ERC4626Target3Deployer, ERC4626Target3DeployerLibs},
     hyperdrive_factory::{
-        Fees as FactoryFees, HyperdriveFactory, HyperdriveFactoryEvents, Options, PoolDeployConfig,
+        self, FactoryConfig, Fees as FactoryFees, HyperdriveFactory, HyperdriveFactoryEvents,
+        Options, PoolDeployConfig,
     },
     hyperdrive_registry::HyperdriveRegistry,
     ihyperdrive::{Fees, PoolConfig},
@@ -35,10 +36,10 @@ use hyperdrive_wrappers::wrappers::{
     mock_lido::MockLido,
     steth_hyperdrive_core_deployer::StETHHyperdriveCoreDeployer,
     steth_hyperdrive_deployer_coordinator::StETHHyperdriveDeployerCoordinator,
-    steth_target0_deployer::StETHTarget0Deployer,
-    steth_target1_deployer::StETHTarget1Deployer,
-    steth_target2_deployer::StETHTarget2Deployer,
-    steth_target3_deployer::StETHTarget3Deployer,
+    steth_target0_deployer::{StETHTarget0Deployer, StETHTarget0DeployerLibs},
+    steth_target1_deployer::{StETHTarget1Deployer, StETHTarget1DeployerLibs},
+    steth_target2_deployer::{StETHTarget2Deployer, StETHTarget2DeployerLibs},
+    steth_target3_deployer::{StETHTarget3Deployer, StETHTarget3DeployerLibs},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 
@@ -240,7 +241,6 @@ impl Chain {
         // Create a client using the signer.
         let client = self.client(signer).await?;
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-        let libraries = vec![("LPMath", lp_math.address())];
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -299,29 +299,41 @@ impl Chain {
             },
         };
 
-        let target0 = ERC4626Target0::deploy_linked_contract(
-            libraries.clone(),
+        let target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
             (config.clone(),),
-        )
+            ERC4626Target0Libs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
         .await?;
-        let target1 = ERC4626Target1::deploy_linked_contract(
-            libraries.clone(),
+        let target1 = ERC4626Target1::link_and_deploy(
             client.clone(),
             (config.clone(),),
-        )
+            ERC4626Target1Libs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
         .await?;
-        let target2 = ERC4626Target2::deploy_linked_contract(
-            libraries.clone(),
+        let target2 = ERC4626Target2::link_and_deploy(
             client.clone(),
             (config.clone(),),
-        )
+            ERC4626Target2Libs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
         .await?;
-        let target3 = ERC4626Target3::deploy_linked_contract(
-            libraries.clone(),
+        let target3 = ERC4626Target3::link_and_deploy(
             client.clone(),
             (config.clone(),),
-        )
+            ERC4626Target3Libs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
         .await?;
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
@@ -357,7 +369,6 @@ impl Chain {
         let client = self.client(signer).await?;
 
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-        let libraries = vec![("LPMath", lp_math.address())];
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -443,36 +454,39 @@ impl Chain {
             HyperdriveFactory::deploy(
                 client.clone(),
                 (
-                    (
-                        address,            // governance
-                        config.admin,       // hyperdrive governance
-                        vec![config.admin], // default pausers
-                        config.admin,       // fee collector
-                        config.admin,       // sweep collector
-                        config.factory_checkpoint_duration_resolution,
-                        config.factory_min_checkpoint_duration,
-                        config.factory_max_checkpoint_duration,
-                        config.factory_min_position_duration,
-                        config.factory_max_position_duration,
-                        config.factory_min_fixed_apr,
-                        config.factory_max_fixed_apr,
-                        config.factory_min_time_stretch_apr,
-                        config.factory_max_time_stretch_apr,
-                        (
-                            config.factory_min_curve_fee,
-                            config.factory_min_flat_fee,
-                            config.factory_min_governance_lp_fee,
-                            config.factory_min_governance_zombie_fee,
-                        ),
-                        (
-                            config.factory_max_curve_fee,
-                            config.factory_max_flat_fee,
-                            config.factory_max_governance_lp_fee,
-                            config.factory_max_governance_zombie_fee,
-                        ),
-                        erc20_forwarder_factory.address(),
-                        erc20_forwarder_factory.erc20link_hash().await?,
-                    ),
+                    FactoryConfig {
+                        governance: address,
+                        hyperdrive_governance: config.admin,
+                        default_pausers: vec![config.admin],
+                        fee_collector: config.admin,
+                        sweep_collector: config.admin,
+                        checkpoint_duration_resolution: config
+                            .factory_checkpoint_duration_resolution,
+                        min_checkpoint_duration: config.factory_min_checkpoint_duration,
+                        max_checkpoint_duration: config.factory_max_checkpoint_duration,
+                        min_position_duration: config.factory_min_position_duration,
+                        max_position_duration: config.factory_max_position_duration,
+                        min_circuit_breaker_delta: config.factory_min_circuit_breaker_delta,
+                        max_circuit_breaker_delta: config.factory_max_circuit_breaker_delta,
+                        min_fixed_apr: config.factory_min_fixed_apr,
+                        max_fixed_apr: config.factory_max_fixed_apr,
+                        min_time_stretch_apr: config.factory_min_time_stretch_apr,
+                        max_time_stretch_apr: config.factory_max_time_stretch_apr,
+                        min_fees: hyperdrive_factory::Fees {
+                            curve: config.factory_min_curve_fee,
+                            flat: config.factory_min_flat_fee,
+                            governance_lp: config.factory_min_governance_lp_fee,
+                            governance_zombie: config.factory_min_governance_zombie_fee,
+                        },
+                        max_fees: hyperdrive_factory::Fees {
+                            curve: config.factory_max_curve_fee,
+                            flat: config.factory_max_flat_fee,
+                            governance_lp: config.factory_max_governance_lp_fee,
+                            governance_zombie: config.factory_max_governance_zombie_fee,
+                        },
+                        linker_factory: erc20_forwarder_factory.address(),
+                        linker_code_hash: erc20_forwarder_factory.erc20link_hash().await?,
+                    },
                     "HyperdriveFactory".to_string(),
                 ),
             )?
@@ -485,29 +499,41 @@ impl Chain {
             let core_deployer = ERC4626HyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target0 = ERC4626Target0Deployer::deploy_linked_contract(
-                libraries.clone(),
+            let target0 = ERC4626Target0Deployer::link_and_deploy(
                 client.clone(),
                 (),
-            )
+                ERC4626Target0DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
-            let target1 = ERC4626Target1Deployer::deploy_linked_contract(
-                libraries.clone(),
+            let target1 = ERC4626Target1Deployer::link_and_deploy(
                 client.clone(),
                 (),
-            )
+                ERC4626Target1DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
-            let target2 = ERC4626Target2Deployer::deploy_linked_contract(
-                libraries.clone(),
+            let target2 = ERC4626Target2Deployer::link_and_deploy(
                 client.clone(),
                 (),
-            )
+                ERC4626Target2DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
-            let target3 = ERC4626Target3Deployer::deploy_linked_contract(
-                libraries.clone(),
+            let target3 = ERC4626Target3Deployer::link_and_deploy(
                 client.clone(),
                 (),
-            )
+                ERC4626Target3DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
             .await?;
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
@@ -612,19 +638,6 @@ impl Chain {
                 )
                 .send()
                 .await?;
-            factory
-                .deploy_target(
-                    [0x01; 32],
-                    erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
-                    Vec::new().into(),
-                    config.erc4626_hyperdrive_fixed_apr,
-                    config.erc4626_hyperdrive_time_stretch_apr,
-                    U256::from(4),
-                    [0x01; 32],
-                )
-                .send()
-                .await?;
             let tx = factory
                 .deploy_and_initialize(
                     [0x01; 32],
@@ -666,18 +679,42 @@ impl Chain {
             let core_deployer = StETHHyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
                 .await?;
-            let target0 =
-                StETHTarget0Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                    .await?;
-            let target1 =
-                StETHTarget1Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                    .await?;
-            let target2 =
-                StETHTarget2Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                    .await?;
-            let target3 =
-                StETHTarget3Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                    .await?;
+            let target0 = StETHTarget0Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                StETHTarget0DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
+            let target1 = StETHTarget1Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                StETHTarget1DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
+            let target2 = StETHTarget2Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                StETHTarget2DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
+            let target3 = StETHTarget3Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                StETHTarget3DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -771,19 +808,6 @@ impl Chain {
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
                     U256::from(3),
-                    [0x02; 32],
-                )
-                .send()
-                .await?;
-            factory
-                .deploy_target(
-                    [0x02; 32],
-                    steth_deployer_coordinator.address(),
-                    pool_config.clone(),
-                    Vec::new().into(),
-                    config.steth_hyperdrive_fixed_apr,
-                    config.steth_hyperdrive_time_stretch_apr,
-                    U256::from(4),
                     [0x02; 32],
                 )
                 .send()
