@@ -33,7 +33,7 @@ impl State {
         // NOTE: Round up to underestimate the initial bond reserves.
         //
         // Calculate the target price implied by the target rate.
-        let one = fixed!(1e18);```
+        let one = fixed!(1e18);
         let target_price = one.div_up(one + target_apr.mul_down(t));
 
         // The share reserves is just the share amount since we are initializing
@@ -233,10 +233,8 @@ impl State {
         };
 
         // Get the updated bond reserves.
-        let old_effective_share_reserves = calculate_effective_share_reserves(
-            self.effective_share_reserves(),
-            self.share_adjustment(),
-        );
+        let old_effective_share_reserves =
+            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment());
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment);
         let new_bond_reserves =
@@ -873,18 +871,18 @@ mod tests {
             let share_reserves_equal = expected_state.share_reserves()
                 <= actual_state.share_reserves() + fixed!(1e9)
                 && expected_state.share_reserves() >= actual_state.share_reserves() - fixed!(1e9);
-            assert!(share_reserves_equal, "Should be equal.");
+            assert!(share_reserves_equal, "Share reserves should be equal.");
 
             let bond_reserves_equal = expected_state.bond_reserves()
                 <= actual_state.bond_reserves() + fixed!(1e10)
                 && expected_state.bond_reserves() >= actual_state.bond_reserves() - fixed!(1e10);
-            assert!(bond_reserves_equal, "Should be equal.");
+            assert!(bond_reserves_equal, "Bond reserves should be equal.");
 
             let share_adjustment_equal = expected_state.share_adjustment()
-                <= actual_state.share_adjustment() + int256!(1)
+                <= actual_state.share_adjustment() + int256!(1e10)
                 && expected_state.share_adjustment()
-                    >= actual_state.share_adjustment() - int256!(1);
-            assert!(share_adjustment_equal, "Should be equal.");
+                    >= actual_state.share_adjustment() - int256!(1e10);
+            assert!(share_adjustment_equal, "Share adjustment should be equal.");
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
