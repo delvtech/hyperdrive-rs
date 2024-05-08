@@ -7,9 +7,7 @@ mod utils;
 
 use hyperdrive_state::HyperdriveState;
 pub use hyperdrive_state_methods::*;
-pub use hyperdrive_utils::{
-    calculate_effective_share_reserves, calculate_time_stretch,
-};
+pub use hyperdrive_utils::{calculate_effective_share_reserves, calculate_time_stretch};
 pub use pool_config::PyPoolConfig;
 pub use pool_info::PyPoolInfo;
 use pyo3::prelude::*;

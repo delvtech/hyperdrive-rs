@@ -8,7 +8,6 @@ use fixed_point_macros::{fixed, int256};
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
-
     ///      Calculates the initial reserves. We solve for the initial reserves
     ///      by solving the following equations simultaneously:
     ///
@@ -35,7 +34,7 @@ impl State {
         // NOTE: Round up to underestimate the initial bond reserves.
         //
         // Calculate the target price implied by the target rate.
-        let one =  FixedPoint::from(U256::one());
+        let one = FixedPoint::from(U256::one());
         let target_price = one.div_up(one + target_apr.mul_down(t));
 
         // The share reserves is just the share amount since we are initializing
@@ -48,9 +47,9 @@ impl State {
         //
         // y = (mu * c * z) / (c * p_target ** (1 / t_s) + mu * p_target)
         let bond_reserves = initial_vault_share_price.mul_div_down(
-                vault_share_price.mul_down(share_reserves),
-                vault_share_price.mul_down(target_price.pow(one.div_down(time_stretch)))
-                    + initial_vault_share_price.mul_up(target_price)
+            vault_share_price.mul_down(share_reserves),
+            vault_share_price.mul_down(target_price.pow(one.div_down(time_stretch)))
+                + initial_vault_share_price.mul_up(target_price),
         );
 
         // NOTE: Round down to underestimate the initial share adjustment.
@@ -58,7 +57,8 @@ impl State {
         // Calculate the initial share adjustment. This is given by:
         //
         // zeta = (p_target * y) / c
-        let share_adjustment = I256::try_from(bond_reserves.mul_div_down(target_price, vault_share_price)).unwrap();
+        let share_adjustment =
+            I256::try_from(bond_reserves.mul_div_down(target_price, vault_share_price)).unwrap();
 
         Ok((share_reserves, share_adjustment, bond_reserves))
     }
@@ -637,7 +637,8 @@ mod tests {
                 )
             });
             match chain
-                .mock_lp_math().calculate_initial_reserves(
+                .mock_lp_math()
+                .calculate_initial_reserves(
                     initial_contribution,
                     state.vault_share_price().into(),
                     state.initial_vault_share_price().into(),
