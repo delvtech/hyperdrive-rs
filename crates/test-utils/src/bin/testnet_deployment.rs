@@ -29,18 +29,25 @@ use ethers::{
 use eyre::Result;
 use fixed_point_macros::uint256;
 use hyperdrive_wrappers::wrappers::{
-    erc20_forwarder_factory::ERC20ForwarderFactory, erc20_mintable::ERC20Mintable,
+    erc20_forwarder_factory::ERC20ForwarderFactory,
+    erc20_mintable::ERC20Mintable,
     erc4626_hyperdrive_core_deployer::ERC4626HyperdriveCoreDeployer,
     erc4626_hyperdrive_deployer_coordinator::ERC4626HyperdriveDeployerCoordinator,
-    erc4626_target0_deployer::ERC4626Target0Deployer,
-    erc4626_target1_deployer::ERC4626Target1Deployer,
-    erc4626_target2_deployer::ERC4626Target2Deployer,
-    erc4626_target3_deployer::ERC4626Target3Deployer, hyperdrive_factory::HyperdriveFactory,
-    hyperdrive_registry::HyperdriveRegistry, lp_math::LPMath, mock_erc4626::MockERC4626,
-    mock_lido::MockLido, steth_hyperdrive_core_deployer::StETHHyperdriveCoreDeployer,
+    erc4626_target0_deployer::{ERC4626Target0Deployer, ERC4626Target0DeployerLibs},
+    erc4626_target1_deployer::{ERC4626Target1Deployer, ERC4626Target1DeployerLibs},
+    erc4626_target2_deployer::{ERC4626Target2Deployer, ERC4626Target2DeployerLibs},
+    erc4626_target3_deployer::{ERC4626Target3Deployer, ERC4626Target3DeployerLibs},
+    hyperdrive_factory::HyperdriveFactory,
+    hyperdrive_registry::HyperdriveRegistry,
+    lp_math::LPMath,
+    mock_erc4626::MockERC4626,
+    mock_lido::MockLido,
+    steth_hyperdrive_core_deployer::StETHHyperdriveCoreDeployer,
     steth_hyperdrive_deployer_coordinator::StETHHyperdriveDeployerCoordinator,
-    steth_target0_deployer::StETHTarget0Deployer, steth_target1_deployer::StETHTarget1Deployer,
-    steth_target2_deployer::StETHTarget2Deployer, steth_target3_deployer::StETHTarget3Deployer,
+    steth_target0_deployer::{StETHTarget0Deployer, StETHTarget0DeployerLibs},
+    steth_target1_deployer::{StETHTarget1Deployer, StETHTarget1DeployerLibs},
+    steth_target2_deployer::{StETHTarget2Deployer, StETHTarget2DeployerLibs},
+    steth_target3_deployer::{StETHTarget3Deployer, StETHTarget3DeployerLibs},
 };
 use test_utils::chain::{Chain, ChainClient};
 
@@ -186,24 +193,47 @@ async fn testnet_deployment(
     };
 
     let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-    let libraries = vec![("LPMath", lp_math.address())];
 
     // Deploy the ERC4626 deployer coordinator.
     let core_deployer = ERC4626HyperdriveCoreDeployer::deploy(client.clone(), ())?
         .send()
         .await?;
-    let target0 =
-        ERC4626Target0Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-            .await?;
-    let target1 =
-        ERC4626Target1Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-            .await?;
-    let target2 =
-        ERC4626Target2Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-            .await?;
-    let target3 =
-        ERC4626Target3Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-            .await?;
+    let target0 = ERC4626Target0Deployer::link_and_deploy(
+        client.clone(),
+        (),
+        ERC4626Target0DeployerLibs {
+            lp_math: lp_math.address(),
+        },
+    )?
+    .send()
+    .await?;
+    let target1 = ERC4626Target1Deployer::link_and_deploy(
+        client.clone(),
+        (),
+        ERC4626Target1DeployerLibs {
+            lp_math: lp_math.address(),
+        },
+    )?
+    .send()
+    .await?;
+    let target2 = ERC4626Target2Deployer::link_and_deploy(
+        client.clone(),
+        (),
+        ERC4626Target2DeployerLibs {
+            lp_math: lp_math.address(),
+        },
+    )?
+    .send()
+    .await?;
+    let target3 = ERC4626Target3Deployer::link_and_deploy(
+        client.clone(),
+        (),
+        ERC4626Target3DeployerLibs {
+            lp_math: lp_math.address(),
+        },
+    )?
+    .send()
+    .await?;
     ERC4626HyperdriveDeployerCoordinator::deploy(
         client.clone(),
         (
@@ -223,18 +253,42 @@ async fn testnet_deployment(
         let core_deployer = StETHHyperdriveCoreDeployer::deploy(client.clone(), ())?
             .send()
             .await?;
-        let target0 =
-            StETHTarget0Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                .await?;
-        let target1 =
-            StETHTarget1Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                .await?;
-        let target2 =
-            StETHTarget2Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                .await?;
-        let target3 =
-            StETHTarget3Deployer::deploy_linked_contract(libraries.clone(), client.clone(), ())
-                .await?;
+        let target0 = StETHTarget0Deployer::link_and_deploy(
+            client.clone(),
+            (),
+            StETHTarget0DeployerLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
+        let target1 = StETHTarget1Deployer::link_and_deploy(
+            client.clone(),
+            (),
+            StETHTarget1DeployerLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
+        let target2 = StETHTarget2Deployer::link_and_deploy(
+            client.clone(),
+            (),
+            StETHTarget2DeployerLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
+        let target3 = StETHTarget3Deployer::link_and_deploy(
+            client.clone(),
+            (),
+            StETHTarget3DeployerLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
         StETHHyperdriveDeployerCoordinator::deploy(
             client.clone(),
             (
