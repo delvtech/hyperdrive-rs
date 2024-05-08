@@ -24,12 +24,13 @@ impl State {
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,
-        mut open_vault_share_price: FixedPoint,
+        open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
         if bond_amount < self.config.minimum_transaction_amount.into() {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
+        let mut open_vault_share_price = open_vault_share_price;
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
         // in the next transaction.
