@@ -33,7 +33,7 @@ impl State {
         // NOTE: Round up to underestimate the initial bond reserves.
         //
         // Calculate the target price implied by the target rate.
-        let one = FixedPoint::from(U256::one());
+        let one = fixed!(1e18);```
         let target_price = one.div_up(one + target_apr.mul_down(t));
 
         // The share reserves is just the share amount since we are initializing
