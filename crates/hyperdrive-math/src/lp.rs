@@ -28,7 +28,7 @@ impl State {
         // rate is an APR.
         let t = self
             .position_duration()
-            .div_down(FixedPoint::from(U256::from(60 * 60 * 24 * 365)));
+            .div_down(U256::from(60 * 60 * 24 * 365).into());
 
         // NOTE: Round up to underestimate the initial bond reserves.
         //
