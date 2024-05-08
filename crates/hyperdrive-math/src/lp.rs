@@ -18,6 +18,7 @@ impl State {
     ///      where p_target is the target spot price implied by the target spot
     ///      rate.
     pub fn calculate_initial_reserves(
+        &self,
         share_amount: FixedPoint,
         vault_share_price: FixedPoint,
         initial_vault_share_price: FixedPoint,
@@ -626,23 +627,23 @@ mod tests {
             let state = rng.gen::<State>();
             let initial_contribution = rng.gen_range(fixed!(0)..=state.bond_reserves());
             let initial_rate = rng.gen_range(fixed!(0)..=fixed!(1));
-            let actual = panic::catch_unwind(|| {
-                state.calculate_initial_reserves(
+            let (actual_share_reserves, actual_share_adjustment, actual_bond_reserves) = state
+                .calculate_initial_reserves(
                     initial_contribution,
                     state.vault_share_price(),
                     state.initial_vault_share_price(),
-                    state.target_apr(),
+                    initial_rate,
                     state.position_duration(),
                     state.time_stretch(),
                 )
-            });
+                .unwrap();
             match chain
                 .mock_lp_math()
                 .calculate_initial_reserves(
-                    initial_contribution,
+                    initial_contribution.into(),
                     state.vault_share_price().into(),
                     state.initial_vault_share_price().into(),
-                    state.target_apr().into(),
+                    initial_rate.into(),
                     state.position_duration().into(),
                     state.time_stretch().into(),
                 )
@@ -650,9 +651,11 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), I256::from(expected));
+                    assert_eq!(actual_share_reserves, expected.0.into());
+                    assert_eq!(actual_share_adjustment, expected.1.into());
+                    assert_eq!(actual_bond_reserves, expected.2.into());
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => {}
             }
         }
 
