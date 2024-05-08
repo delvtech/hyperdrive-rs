@@ -84,7 +84,6 @@ impl State {
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
         contribution: FixedPoint,
-        as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
             self.share_reserves(),
