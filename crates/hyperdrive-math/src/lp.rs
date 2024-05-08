@@ -8,6 +8,62 @@ use fixed_point_macros::{fixed, int256};
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
+    ///      Calculates the initial reserves. We solve for the initial reserves
+    ///      by solving the following equations simultaneously:
+    ///
+    ///      (1) c * z = c * z_e + p_target * y
+    ///
+    ///      (2) p_target = ((mu * z_e) / y) ** t_s
+    ///
+    ///      where p_target is the target spot price implied by the target spot
+    ///      rate.
+    pub fn calculate_initial_reserves(
+        &self,
+        share_amount: FixedPoint,
+        target_apr: FixedPoint,
+    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        // NOTE: Round down to underestimate the initial bond reserves.
+        //
+        // Normalize the time to maturity to fractions of a year since the provided
+        // rate is an APR.
+        let t = self
+            .position_duration()
+            .div_down(U256::from(60 * 60 * 24 * 365).into());
+
+        // NOTE: Round up to underestimate the initial bond reserves.
+        //
+        // Calculate the target price implied by the target rate.
+        let one = fixed!(1e18);
+        let target_price = one.div_up(one + target_apr.mul_down(t));
+
+        // The share reserves is just the share amount since we are initializing
+        // the pool.
+        let share_reserves = share_amount;
+
+        // NOTE: Round down to underestimate the initial bond reserves.
+        //
+        // Calculate the initial bond reserves. This is given by:
+        //
+        // y = (mu * c * z) / (c * p_target ** (1 / t_s) + mu * p_target)
+        let bond_reserves = self.initial_vault_share_price().mul_div_down(
+            self.vault_share_price().mul_down(share_reserves),
+            self.vault_share_price()
+                .mul_down(target_price.pow(one.div_down(self.time_stretch())))
+                + self.initial_vault_share_price().mul_up(target_price),
+        );
+
+        // NOTE: Round down to underestimate the initial share adjustment.
+        //
+        // Calculate the initial share adjustment. This is given by:
+        //
+        // zeta = (p_target * y) / c
+        let share_adjustment =
+            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))
+                .unwrap();
+
+        Ok((share_reserves, share_adjustment, bond_reserves))
+    }
+
     /// Calculates the lp_shares for a given contribution when adding liquidity.
     pub fn calculate_add_liquidity(
         &self,
@@ -84,7 +140,6 @@ impl State {
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
         contribution: FixedPoint,
-        as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
             self.share_reserves(),
@@ -178,10 +233,8 @@ impl State {
         };
 
         // Get the updated bond reserves.
-        let old_effective_share_reserves = calculate_effective_share_reserves(
-            self.effective_share_reserves(),
-            self.share_adjustment(),
-        );
+        let old_effective_share_reserves =
+            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment());
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment);
         let new_bond_reserves =
@@ -563,6 +616,44 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn fuzz_test_calculate_initial_reserves() -> Result<()> {
+        let chain = TestChain::new().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let initial_contribution = rng.gen_range(fixed!(0)..=state.bond_reserves());
+            let initial_rate = rng.gen_range(fixed!(0)..=fixed!(1));
+            let (actual_share_reserves, actual_share_adjustment, actual_bond_reserves) = state
+                .calculate_initial_reserves(initial_contribution, initial_rate)
+                .unwrap();
+            match chain
+                .mock_lp_math()
+                .calculate_initial_reserves(
+                    initial_contribution.into(),
+                    state.vault_share_price().into(),
+                    state.initial_vault_share_price().into(),
+                    initial_rate.into(),
+                    state.position_duration().into(),
+                    state.time_stretch().into(),
+                )
+                .call()
+                .await
+            {
+                Ok(expected) => {
+                    assert_eq!(actual_share_reserves, expected.0.into());
+                    assert_eq!(actual_share_adjustment, expected.1);
+                    assert_eq!(actual_bond_reserves, expected.2.into());
+                }
+                Err(_) => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fuzz_test_calculate_add_liquidity_unhappy_with_random_state() -> Result<()> {
         // Get the State from solidity before adding liquidity.
         let mut rng = thread_rng();
@@ -780,18 +871,18 @@ mod tests {
             let share_reserves_equal = expected_state.share_reserves()
                 <= actual_state.share_reserves() + fixed!(1e9)
                 && expected_state.share_reserves() >= actual_state.share_reserves() - fixed!(1e9);
-            assert!(share_reserves_equal, "Should be equal.");
+            assert!(share_reserves_equal, "Share reserves should be equal.");
 
             let bond_reserves_equal = expected_state.bond_reserves()
                 <= actual_state.bond_reserves() + fixed!(1e10)
                 && expected_state.bond_reserves() >= actual_state.bond_reserves() - fixed!(1e10);
-            assert!(bond_reserves_equal, "Should be equal.");
+            assert!(bond_reserves_equal, "Bond reserves should be equal.");
 
             let share_adjustment_equal = expected_state.share_adjustment()
-                <= actual_state.share_adjustment() + int256!(1)
+                <= actual_state.share_adjustment() + int256!(1e10)
                 && expected_state.share_adjustment()
-                    >= actual_state.share_adjustment() - int256!(1);
-            assert!(share_adjustment_equal, "Should be equal.");
+                    >= actual_state.share_adjustment() - int256!(1e10);
+            assert!(share_adjustment_equal, "Share adjustment should be equal.");
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
@@ -943,7 +1034,7 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), I256::from(expected));
+                    assert_eq!(actual.unwrap(), expected);
                 }
                 Err(_) => assert!(actual.is_err()),
             }

@@ -12,6 +12,7 @@ POOL_CONFIG = PoolConfig(
     initialVaultSharePrice=1 * 10**18,  # 1e18
     minimumShareReserves=1 * 10**17,  # 0.1e18
     minimumTransactionAmount=1 * 10**16,  # 0.001e18
+    circuitBreakerDelta=15 * 10**16,  # 0.15e18
     positionDuration=60 * 60 * 24 * 365,  # 1 year
     checkpointDuration=86_400,
     timeStretch=1 * 10**17,  # 0.1e18
@@ -136,24 +137,6 @@ def test_calculate_effective_share_reserves():
     assert effective_share_reserves is not None, "Failed to calculate effective_share_reserves."
     assert isinstance(effective_share_reserves, str), "Expected effective_share_reserves to be a string."
     assert int(effective_share_reserves) > 0, "Expected effective_share_reserves to be > 0."
-
-
-def test_calculate_initial_bond_reserves():
-    """Test calculate_initial_bond_reserves."""
-    effective_share_reserves = hyperdrivepy.calculate_effective_share_reserves(
-        str(POOL_INFO.shareReserves),
-        str(POOL_INFO.shareAdjustment),
-    )
-    bonds = hyperdrivepy.calculate_initial_bond_reserves(
-        effective_share_reserves,
-        str(POOL_CONFIG.initialVaultSharePrice),
-        hyperdrivepy.calculate_spot_rate(POOL_CONFIG, POOL_INFO),
-        str(POOL_CONFIG.positionDuration),
-        str(POOL_CONFIG.timeStretch),
-    )
-    assert bonds is not None, "Failed to calculate bonds."
-    assert isinstance(bonds, str), "Expected bonds to be a string."
-    assert int(bonds) > 0, "Expected bonds to be > 0."
 
 
 def test_calculate_bonds_out_given_shares_in_down():

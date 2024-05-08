@@ -32,6 +32,7 @@ class PoolConfig:
     initialVaultSharePrice: str
     minimumShareReserves: str
     minimumTransactionAmount: str
+    circuitBreakerDelta: str
     positionDuration: str
     checkpointDuration: str
     timeStretch: str
@@ -104,6 +105,7 @@ class PoolConfigType(Protocol):
     initialVaultSharePrice: int
     minimumShareReserves: int
     minimumTransactionAmount: int
+    circuitBreakerDelta: int
     positionDuration: int
     checkpointDuration: int
     timeStretch: int

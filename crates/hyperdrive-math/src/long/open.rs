@@ -124,7 +124,7 @@ impl State {
 mod tests {
     use ethers::{signers::LocalWallet, types::U256};
     use fixed_point_macros::{fixed, uint256};
-    use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
+    use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
     use test_utils::{
@@ -363,11 +363,6 @@ mod tests {
 
             // Get state and trade details.
             let state = alice.get_state().await?;
-            let Checkpoint {
-                vault_share_price: open_vault_share_price,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
             let max_long = bob.calculate_max_long(None).await?;
             let min_base_amount = FixedPoint::from(state.config.minimum_transaction_amount)
                 * FixedPoint::from(state.info.vault_share_price);
@@ -405,7 +400,7 @@ mod tests {
                         tolerance
                     );
                 }
-                Err(err) => {
+                Err(_) => {
                     assert!(bonds_purchased.is_err());
                 }
             }

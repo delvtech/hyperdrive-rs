@@ -36,6 +36,8 @@ class Options:
 class Checkpoint:
     """Checkpoint struct."""
 
+    weightedSpotPrice: int
+    lastWeightedSpotPriceUpdateTime: int
     vaultSharePrice: int
 
 
@@ -78,6 +80,7 @@ class PoolConfig:
     initialVaultSharePrice: int
     minimumShareReserves: int
     minimumTransactionAmount: int
+    circuitBreakerDelta: int
     positionDuration: int
     checkpointDuration: int
     timeStretch: int
@@ -387,6 +390,13 @@ BelowMinimumContributionError = ErrorInfo(
     signature="BelowMinimumContribution()",
 )
 
+CircuitBreakerTriggeredError = ErrorInfo(
+    inputs=[],
+    name="CircuitBreakerTriggered",
+    selector="0x2a958098",
+    signature="CircuitBreakerTriggered()",
+)
+
 DecreasedPresentValueWhenAddingLiquidityError = ErrorInfo(
     inputs=[],
     name="DecreasedPresentValueWhenAddingLiquidity",
@@ -448,6 +458,13 @@ InvalidERC20BridgeError = ErrorInfo(
     name="InvalidERC20Bridge",
     selector="0x2aab8bd3",
     signature="InvalidERC20Bridge()",
+)
+
+InvalidEffectiveShareReservesError = ErrorInfo(
+    inputs=[],
+    name="InvalidEffectiveShareReserves",
+    selector="0x85bd2ac4",
+    signature="InvalidEffectiveShareReserves()",
 )
 
 InvalidFeeDestinationError = ErrorInfo(

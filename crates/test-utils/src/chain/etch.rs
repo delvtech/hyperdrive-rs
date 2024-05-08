@@ -9,10 +9,15 @@ use eyre::Result;
 use fixed_point_macros::uint256;
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
-    erc20_mintable::ERC20Mintable, erc4626_hyperdrive::ERC4626Hyperdrive,
-    erc4626_target0::ERC4626Target0, erc4626_target1::ERC4626Target1,
-    erc4626_target2::ERC4626Target2, erc4626_target3::ERC4626Target3,
-    erc4626_target4::ERC4626Target4, etching_vault::EtchingVault, ihyperdrive::IHyperdrive,
+    erc20_mintable::ERC20Mintable,
+    erc4626_hyperdrive::ERC4626Hyperdrive,
+    erc4626_target0::{ERC4626Target0, ERC4626Target0Libs},
+    erc4626_target1::{ERC4626Target1, ERC4626Target1Libs},
+    erc4626_target2::{ERC4626Target2, ERC4626Target2Libs},
+    erc4626_target3::{ERC4626Target3, ERC4626Target3Libs},
+    etching_vault::EtchingVault,
+    ihyperdrive::IHyperdrive,
+    lp_math::LPMath,
     mock_erc4626::MockERC4626,
 };
 
@@ -33,7 +38,6 @@ impl Chain {
         let target1_address = hyperdrive.target_1().call().await?;
         let target2_address = hyperdrive.target_2().call().await?;
         let target3_address = hyperdrive.target_3().call().await?;
-        let target4_address = hyperdrive.target_4().call().await?;
         let vault_address = hyperdrive.vault_shares_token().call().await?;
 
         // Deploy templates for each of the contracts that should be etched and
@@ -79,41 +83,55 @@ impl Chain {
             .await?;
             pairs.push((vault_address, vault_template.address()));
 
+            let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
             // Deploy the target0 template.
             let config = hyperdrive.get_pool_config().call().await?;
-            let target0_template =
-                ERC4626Target0::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
+            let target0_template = ERC4626Target0::link_and_deploy(
+                client.clone(),
+                (config.clone(), vault_address),
+                ERC4626Target0Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             pairs.push((target0_address, target0_template.address()));
 
             // Deploy the target1 template.
-            let target1_template =
-                ERC4626Target1::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
+            let target1_template = ERC4626Target1::link_and_deploy(
+                client.clone(),
+                (config.clone(), vault_address),
+                ERC4626Target1Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             pairs.push((target1_address, target1_template.address()));
 
             // Deploy the target2 template.
-            let target2_template =
-                ERC4626Target2::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
+            let target2_template = ERC4626Target2::link_and_deploy(
+                client.clone(),
+                (config.clone(), vault_address),
+                ERC4626Target2Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             pairs.push((target2_address, target2_template.address()));
 
             // Deploy the target3 template.
-            let target3_template =
-                ERC4626Target3::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
+            let target3_template = ERC4626Target3::link_and_deploy(
+                client.clone(),
+                (config.clone(), vault_address),
+                ERC4626Target3Libs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             pairs.push((target3_address, target3_template.address()));
-
-            // Deploy the target4 template.
-            let target4_template =
-                ERC4626Target4::deploy(client.clone(), (config.clone(), vault_address))?
-                    .send()
-                    .await?;
-            pairs.push((target4_address, target4_template.address()));
 
             // Etch the "etching vault" onto the current vault contract. The
             // etching vault implements `convertToAssets` to return the immutable
@@ -143,7 +161,6 @@ impl Chain {
                     target1_address,
                     target2_address,
                     target3_address,
-                    target4_address,
                     vault_address,
                     Vec::<Address>::new(),
                 ),

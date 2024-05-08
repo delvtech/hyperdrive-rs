@@ -599,7 +599,7 @@ mod tests {
                 .mock_yield_space_math()
                 .calculate_max_sell_bonds_in_safe(
                     state.z().into(),
-                    state.zeta().into(),
+                    state.zeta(),
                     state.y().into(),
                     z_min.into(),
                     (fixed!(1e18) - state.t()).into(),

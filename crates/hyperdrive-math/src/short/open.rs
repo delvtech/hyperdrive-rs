@@ -24,12 +24,13 @@ impl State {
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,
-        mut open_vault_share_price: FixedPoint,
+        open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
         if bond_amount < self.config.minimum_transaction_amount.into() {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
+        let mut open_vault_share_price = open_vault_share_price;
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
         // in the next transaction.
@@ -122,9 +123,8 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let spot_price = self.calculate_spot_price();
-        let curve_fee = self.open_short_curve_fee(bond_amount, spot_price);
-        let gov_curve_fee = self.open_short_governance_fee(bond_amount, spot_price);
+        let curve_fee = self.open_short_curve_fee(bond_amount);
+        let gov_curve_fee = self.open_short_governance_fee(bond_amount);
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
@@ -379,8 +379,8 @@ mod tests {
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let fees = state.open_short_curve_fee(bond_amount, state.calculate_spot_price())
-                - state.open_short_governance_fee(bond_amount, state.calculate_spot_price());
+            let fees = state.open_short_curve_fee(bond_amount)
+                - state.open_short_governance_fee(bond_amount);
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
@@ -459,20 +459,19 @@ mod tests {
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
             let p1_result = state.calculate_short_principal(amount - empirical_derivative_epsilon);
-            let p1;
-            let p2;
-            match p1_result {
+
+            let p1 = match p1_result {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p1 = p,
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
 
             let p2_result = state.calculate_short_principal(amount + empirical_derivative_epsilon);
-            match p2_result {
+            let p2 = match p2_result {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p2 = p,
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
             // Sanity check
             assert!(p2 > p1);
 
@@ -737,11 +736,14 @@ mod tests {
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
-            let bond_amount = rng.gen_range(fixed!(1e18)..=contribution);
+            let bond_amount = rng.gen_range(
+                FixedPoint::from(bob.get_config().minimum_transaction_amount)
+                    ..=bob.calculate_max_short(None).await? * fixed!(0.9e18),
+            );
             let implied_rate = bob.get_state().await?.calculate_implied_rate(
                 bond_amount,
                 bob.get_state().await?.vault_share_price(),
-                variable_rate.into(),
+                variable_rate,
             )?;
             let (maturity_time, base_paid) = bob.open_short(bond_amount, None, None).await?;
 
@@ -823,7 +825,7 @@ mod tests {
                     // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
                     // calc_open_short must be incorrect for the additional amount to have to be so large.
                     let result = state.calculate_open_short(
-                        (max_trade + fixed!(100_000_000e18)).into(),
+                        (max_trade + fixed!(100_000_000e18)),
                         state.vault_share_price(),
                     );
                     match result {
@@ -871,6 +873,8 @@ mod tests {
             let state = alice.get_state().await?;
             let Checkpoint {
                 vault_share_price: open_vault_share_price,
+                weighted_spot_price: _,
+                last_weighted_spot_price_update_time: _,
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;

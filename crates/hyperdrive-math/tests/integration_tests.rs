@@ -2,7 +2,6 @@ use ethers::{signers::LocalWallet, types::U256};
 use eyre::Result;
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, uint256};
-use hyperdrive_math::{calculate_effective_share_reserves, calculate_initial_bond_reserves};
 use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
 use rand::{thread_rng, Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
@@ -104,6 +103,8 @@ pub async fn test_integration_calculate_max_short() -> Result<()> {
         let state = alice.get_state().await?;
         let Checkpoint {
             vault_share_price: open_vault_share_price,
+            weighted_spot_price: _,
+            last_weighted_spot_price_update_time: _,
         } = alice
             .get_checkpoint(state.to_checkpoint(alice.now().await?))
             .await?;
@@ -210,59 +211,5 @@ pub async fn test_integration_calculate_max_long() -> Result<()> {
         celine.reset(Default::default());
     }
 
-    Ok(())
-}
-
-#[tokio::test]
-async fn test_calculate_bonds_given_shares_and_rate() -> Result<()> {
-    // Set up a random number generator. We use ChaCha8Rng with a randomly
-    // generated seed, which makes it easy to reproduce test failures given
-    // the seed.
-    let mut rng = {
-        let mut rng = thread_rng();
-        let seed = rng.gen();
-        ChaCha8Rng::seed_from_u64(seed)
-    };
-
-    // Initialize the test chain and agents.
-    let chain = TestChain::new().await?;
-    let mut alice = chain.alice().await?;
-    let mut bob = chain.bob().await?;
-    let mut celine = chain.celine().await?;
-
-    // Snapshot the chain and run the preamble.
-    let fixed_rate = fixed!(0.05e18);
-    preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
-
-    // Calculate the bond reserves that target the current rate with the current
-    // share reserves.
-    let state = alice.get_state().await?;
-    let effective_share_reserves = calculate_effective_share_reserves(
-        state.info.share_reserves.into(),
-        state.info.share_adjustment.into(),
-    );
-    let rust_reserves = calculate_initial_bond_reserves(
-        effective_share_reserves,
-        state.config.initial_vault_share_price.into(),
-        state.calculate_spot_rate(),
-        state.config.position_duration.into(),
-        state.config.time_stretch.into(),
-    );
-
-    // Ensure that the calculated reserves are approximately equal
-    // to the starting reserves. These won't be exactly equal because
-    // compressing through "rate space" loses information.
-    let sol_reserves = state.info.bond_reserves.into();
-    let delta = if rust_reserves > sol_reserves {
-        rust_reserves - sol_reserves
-    } else {
-        sol_reserves - rust_reserves
-    };
-    assert!(
-        delta < fixed!(1e12), // Better than 1e-6 error.
-        "Invalid bond reserve calculation.rust_reserves={} != sol_reserves={} within 1e12",
-        rust_reserves,
-        sol_reserves
-    );
     Ok(())
 }
