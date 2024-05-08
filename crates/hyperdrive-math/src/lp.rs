@@ -20,17 +20,15 @@ impl State {
     pub fn calculate_initial_reserves(
         &self,
         share_amount: FixedPoint,
-        vault_share_price: FixedPoint,
-        initial_vault_share_price: FixedPoint,
         target_apr: FixedPoint,
-        position_duration: FixedPoint,
-        time_stretch: FixedPoint,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         // NOTE: Round down to underestimate the initial bond reserves.
         //
         // Normalize the time to maturity to fractions of a year since the provided
         // rate is an APR.
-        let t = position_duration.div_down(FixedPoint::from(U256::from(60 * 60 * 24 * 365)));
+        let t = self
+            .position_duration()
+            .div_down(FixedPoint::from(U256::from(60 * 60 * 24 * 365)));
 
         // NOTE: Round up to underestimate the initial bond reserves.
         //
@@ -47,10 +45,11 @@ impl State {
         // Calculate the initial bond reserves. This is given by:
         //
         // y = (mu * c * z) / (c * p_target ** (1 / t_s) + mu * p_target)
-        let bond_reserves = initial_vault_share_price.mul_div_down(
-            vault_share_price.mul_down(share_reserves),
-            vault_share_price.mul_down(target_price.pow(one.div_down(time_stretch)))
-                + initial_vault_share_price.mul_up(target_price),
+        let bond_reserves = self.initial_vault_share_price().mul_div_down(
+            self.vault_share_price().mul_down(share_reserves),
+            self.vault_share_price()
+                .mul_down(target_price.pow(one.div_down(self.time_stretch())))
+                + self.initial_vault_share_price().mul_up(target_price),
         );
 
         // NOTE: Round down to underestimate the initial share adjustment.
@@ -59,7 +58,8 @@ impl State {
         //
         // zeta = (p_target * y) / c
         let share_adjustment =
-            I256::try_from(bond_reserves.mul_div_down(target_price, vault_share_price)).unwrap();
+            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))
+                .unwrap();
 
         Ok((share_reserves, share_adjustment, bond_reserves))
     }
@@ -628,14 +628,7 @@ mod tests {
             let initial_contribution = rng.gen_range(fixed!(0)..=state.bond_reserves());
             let initial_rate = rng.gen_range(fixed!(0)..=fixed!(1));
             let (actual_share_reserves, actual_share_adjustment, actual_bond_reserves) = state
-                .calculate_initial_reserves(
-                    initial_contribution,
-                    state.vault_share_price(),
-                    state.initial_vault_share_price(),
-                    initial_rate,
-                    state.position_duration(),
-                    state.time_stretch(),
-                )
+                .calculate_initial_reserves(initial_contribution, initial_rate)
                 .unwrap();
             match chain
                 .mock_lp_math()
@@ -871,10 +864,12 @@ mod tests {
                 info: bob.get_state().await?.info.clone(),
             };
 
+            println!("Expected: {:?}", expected_state);
             // Calculate lp_shares from the rust function.
             let actual_state = state
                 .calculate_pool_state_after_add_liquidity(budget, true)
                 .unwrap();
+            println!("Actual: {:?}", actual_state);
 
             // Ensure the states are equal within a tolerance.
             let share_reserves_equal = expected_state.share_reserves()
