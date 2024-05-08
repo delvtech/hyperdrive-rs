@@ -868,7 +868,6 @@ mod tests {
             let actual_state = state
                 .calculate_pool_state_after_add_liquidity(budget, true)
                 .unwrap();
-            println!("Actual: {:?}", actual_state);
 
             // Ensure the states are equal within a tolerance.
             let share_reserves_equal = expected_state.share_reserves()
