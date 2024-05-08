@@ -84,12 +84,7 @@ impl State {
 
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
-        current_block_timestamp: U256,
         contribution: FixedPoint,
-        min_lp_share_price: FixedPoint,
-        min_apr: FixedPoint,
-        max_apr: FixedPoint,
-        as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
             self.share_reserves(),
