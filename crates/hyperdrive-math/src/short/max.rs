@@ -293,7 +293,7 @@ impl State {
             optimal_bond_reserves - self.bond_reserves()
         };
         if self
-            .solvency_after_short(absolute_max_bond_amount, spot_price, checkpoint_exposure)
+            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
             .is_some()
         {
             return absolute_max_bond_amount;
@@ -318,7 +318,7 @@ impl State {
         // we converge to the solution.
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure);
         let mut maybe_solvency =
-            self.solvency_after_short(max_bond_amount, spot_price, checkpoint_exposure);
+            self.solvency_after_short(max_bond_amount, checkpoint_exposure);
         if maybe_solvency.is_none() {
             panic!("Initial guess in `absolute_max_short` is insolvent.");
         }
@@ -346,7 +346,6 @@ impl State {
             // iterating. Otherwise, we update our guess and continue.
             maybe_solvency = self.solvency_after_short(
                 possible_max_bond_amount,
-                spot_price,
                 checkpoint_exposure,
             );
             if let Some(s) = maybe_solvency {
@@ -430,7 +429,6 @@ impl State {
     fn solvency_after_short(
         &self,
         bond_amount: FixedPoint,
-        spot_price: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Option<FixedPoint> {
         let principal = if let Ok(p) = self.calculate_short_principal(bond_amount) {
@@ -440,8 +438,8 @@ impl State {
         };
         let share_reserves = self.share_reserves()
             - (principal
-                - (self.open_short_curve_fee(bond_amount, spot_price)
-                    - self.open_short_governance_fee(bond_amount, spot_price))
+                - (self.open_short_curve_fee(bond_amount)
+                    - self.open_short_governance_fee(bond_amount))
                     / self.vault_share_price());
         let exposure = {
             let checkpoint_exposure: FixedPoint = checkpoint_exposure.max(I256::zero()).into();

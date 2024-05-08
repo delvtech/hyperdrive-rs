@@ -123,9 +123,8 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let spot_price = self.calculate_spot_price();
-        let curve_fee = self.open_short_curve_fee(bond_amount, spot_price);
-        let gov_curve_fee = self.open_short_governance_fee(bond_amount, spot_price);
+        let curve_fee = self.open_short_curve_fee(bond_amount);
+        let gov_curve_fee = self.open_short_governance_fee(bond_amount);
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
@@ -380,8 +379,8 @@ mod tests {
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let fees = state.open_short_curve_fee(bond_amount, state.calculate_spot_price())
-                - state.open_short_governance_fee(bond_amount, state.calculate_spot_price());
+            let fees = state.open_short_curve_fee(bond_amount)
+                - state.open_short_governance_fee(bond_amount);
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
