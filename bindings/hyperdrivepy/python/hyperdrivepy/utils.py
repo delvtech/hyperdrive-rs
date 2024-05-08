@@ -25,6 +25,7 @@ def _serialize_pool_config(
         initialVaultSharePrice=str(pool_config.initialVaultSharePrice),
         minimumShareReserves=str(pool_config.minimumShareReserves),
         minimumTransactionAmount=str(pool_config.minimumTransactionAmount),
+        circuitBreakerDelta=str(pool_config.circuitBreakerDelta),
         positionDuration=str(pool_config.positionDuration),
         checkpointDuration=str(pool_config.checkpointDuration),
         timeStretch=str(pool_config.timeStretch),
