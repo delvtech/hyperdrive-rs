@@ -317,8 +317,7 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure);
-        let mut maybe_solvency =
-            self.solvency_after_short(max_bond_amount, checkpoint_exposure);
+        let mut maybe_solvency = self.solvency_after_short(max_bond_amount, checkpoint_exposure);
         if maybe_solvency.is_none() {
             panic!("Initial guess in `absolute_max_short` is insolvent.");
         }
@@ -344,10 +343,8 @@ impl State {
 
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
-            maybe_solvency = self.solvency_after_short(
-                possible_max_bond_amount,
-                checkpoint_exposure,
-            );
+            maybe_solvency =
+                self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure);
             if let Some(s) = maybe_solvency {
                 solvency = s;
                 max_bond_amount = possible_max_bond_amount;
