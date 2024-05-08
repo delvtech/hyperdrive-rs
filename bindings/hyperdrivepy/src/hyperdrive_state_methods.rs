@@ -125,7 +125,7 @@ impl HyperdriveState {
         })?);
         let (result_fp1, result_fp2, result_fp3) = self
             .state
-            .calculate_pool_deltas_after_add_liquidity(contribution_fp, true)
+            .calculate_pool_deltas_after_add_liquidity(contribution_fp)
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!(
                     "calculate_pool_deltas_after_add_liquidity returned the error: {:?}",
