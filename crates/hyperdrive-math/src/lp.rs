@@ -864,7 +864,6 @@ mod tests {
                 info: bob.get_state().await?.info.clone(),
             };
 
-            println!("Expected: {:?}", expected_state);
             // Calculate lp_shares from the rust function.
             let actual_state = state
                 .calculate_pool_state_after_add_liquidity(budget, true)
