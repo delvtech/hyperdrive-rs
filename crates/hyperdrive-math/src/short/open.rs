@@ -739,7 +739,7 @@ mod tests {
             // short, we calculate the implied rate.
             let bond_amount = rng.gen_range(
                 FixedPoint::from(bob.get_config().minimum_transaction_amount)
-                    ..=bob.calculate_max_short(None).await?,
+                    ..=bob.calculate_max_short(None).await? * fixed!(0.9e18),
             );
             let implied_rate = bob.get_state().await?.calculate_implied_rate(
                 bond_amount,
