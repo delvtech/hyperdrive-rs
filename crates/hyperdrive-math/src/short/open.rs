@@ -737,7 +737,10 @@ mod tests {
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
-            let bond_amount = rng.gen_range(fixed!(1e18)..=contribution);
+            let bond_amount = rng.gen_range(
+                FixedPoint::from(bob.get_config().minimum_transaction_amount)
+                    ..=bob.calculate_max_short(None).await?,
+            );
             let implied_rate = bob.get_state().await?.calculate_implied_rate(
                 bond_amount,
                 bob.get_state().await?.vault_share_price(),
