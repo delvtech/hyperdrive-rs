@@ -27,25 +27,10 @@ pub mod linked_factory {
         for (lib, addr) in libs {
             let hex_addr = hex::encode(addr);
             let place_holder = library_hash_placeholder(lib.as_ref());
-            println!(
-                "Replacing {} with {} ({})",
-                place_holder,
-                hex_addr,
-                lib.as_ref()
-            );
             linked_bytecode = linked_bytecode.replace(&format!("__{place_holder}__"), &hex_addr);
         }
 
-        let raw_bytecode: Bytes = match hex::decode(&linked_bytecode) {
-            Ok(bytecode) => bytecode.into(),
-            Err(e) => {
-                // println!("Linked bytecode: {}", linked_bytecode.as_str());
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("could not decode bytecode: {}", e),
-                ));
-            }
-        };
+        let raw_bytecode: Bytes = hex::decode(&linked_bytecode).unwrap().into();
         let factory = ContractFactory::new(abi, raw_bytecode, client);
         Ok(factory)
     }
