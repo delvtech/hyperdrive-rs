@@ -85,7 +85,7 @@ fn main() -> Result<()> {
 
     // Load the hyperdrive version to use from the hyperdrive.version file
     let version_file = root.join("hyperdrive.version");
-    let git_ref = read_to_string(&version_file)?.trim().to_string();
+    let git_ref = read_to_string(version_file)?.trim().to_string();
 
     // Clone the hyperdrive repository if it doesn't exist
     let hyperdrive_dir = root.join("hyperdrive");
@@ -94,7 +94,7 @@ fn main() -> Result<()> {
         if hyperdrive_dir.exists() {
             checkout_branch(&git_ref, &hyperdrive_dir)?;
         } else {
-            clone_repo(&HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
+            clone_repo(HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
         }
     }
 
@@ -289,7 +289,7 @@ fn parse_bytecode(artifact_path: &str) -> eyre::Result<(String, Vec<ArtifactLibs
         .bytecode
         .linkReferences
         .iter()
-        .map(|(file_path, libs)| {
+        .flat_map(|(file_path, libs)| {
             libs.iter()
                 .map(|(lib_name, _)| ArtifactLibs {
                     file_path: file_path.clone(),
@@ -297,7 +297,6 @@ fn parse_bytecode(artifact_path: &str) -> eyre::Result<(String, Vec<ArtifactLibs
                 })
                 .collect::<Vec<ArtifactLibs>>()
         })
-        .flatten()
         .collect::<Vec<ArtifactLibs>>();
     Ok((artifact.bytecode.object, libs))
 }
@@ -338,7 +337,7 @@ fn checkout_branch(git_ref: &str, repo_path: &Path) -> Result<()> {
     }
 
     status = Command::new("git")
-        .current_dir(&repo_path)
+        .current_dir(repo_path)
         .args(["pull", "origin", &git_ref])
         .status()?;
 

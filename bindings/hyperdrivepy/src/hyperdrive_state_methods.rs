@@ -133,7 +133,7 @@ impl HyperdriveState {
                 ))
             })?;
         let result1 = U256::from(result_fp1).to_string();
-        let result2 = I256::from(result_fp2).to_string();
+        let result2 = result_fp2.to_string();
         let result3 = U256::from(result_fp3).to_string();
         Ok((result1, result2, result3))
     }

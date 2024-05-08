@@ -643,7 +643,7 @@ mod tests {
             {
                 Ok(expected) => {
                     assert_eq!(actual_share_reserves, expected.0.into());
-                    assert_eq!(actual_share_adjustment, expected.1.into());
+                    assert_eq!(actual_share_adjustment, expected.1);
                     assert_eq!(actual_bond_reserves, expected.2.into());
                 }
                 Err(_) => {}
@@ -1034,7 +1034,7 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), I256::from(expected));
+                    assert_eq!(actual.unwrap(), expected);
                 }
                 Err(_) => assert!(actual.is_err()),
             }

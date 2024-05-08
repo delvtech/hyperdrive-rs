@@ -459,20 +459,19 @@ mod tests {
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
             let p1_result = state.calculate_short_principal(amount - empirical_derivative_epsilon);
-            let p1;
-            let p2;
-            match p1_result {
+
+            let p1 = match p1_result {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p1 = p,
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
 
             let p2_result = state.calculate_short_principal(amount + empirical_derivative_epsilon);
-            match p2_result {
+            let p2 = match p2_result {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p2 = p,
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
             // Sanity check
             assert!(p2 > p1);
 
@@ -744,7 +743,7 @@ mod tests {
             let implied_rate = bob.get_state().await?.calculate_implied_rate(
                 bond_amount,
                 bob.get_state().await?.vault_share_price(),
-                variable_rate.into(),
+                variable_rate,
             )?;
             let (maturity_time, base_paid) = bob.open_short(bond_amount, None, None).await?;
 
@@ -826,7 +825,7 @@ mod tests {
                     // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
                     // calc_open_short must be incorrect for the additional amount to have to be so large.
                     let result = state.calculate_open_short(
-                        (max_trade + fixed!(100_000_000e18)).into(),
+                        (max_trade + fixed!(100_000_000e18)),
                         state.vault_share_price(),
                     );
                     match result {

@@ -497,7 +497,7 @@ mod tests {
 
             let new_rate = current_state.calculate_spot_rate();
             // If the budget was NOT consumed, then we assume the target was hit.
-            if !(bob.base() <= allowable_budget_error) {
+            if bob.base() > allowable_budget_error {
                 // Actual price might result in long overshooting the target.
                 let abs_error = if target_rate > new_rate {
                     target_rate - new_rate

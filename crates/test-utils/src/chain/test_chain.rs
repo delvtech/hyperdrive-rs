@@ -84,7 +84,7 @@ impl TestChain {
             addresses,
             mock_fixed_point_math,
             mock_hyperdrive_math,
-            mock_lp_math: mock_lp_math.into(),
+            mock_lp_math,
             mock_yield_space_math,
         })
     }
