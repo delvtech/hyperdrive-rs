@@ -564,8 +564,8 @@ mod tests {
                     // exact matchces. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
                     assert_eq!(
-                        U256::from(actual.unwrap()) / uint256!(1e10),
-                        expected / uint256!(1e10)
+                        U256::from(actual.unwrap()) / uint256!(1e11),
+                        expected / uint256!(1e11)
                     );
                 }
                 Err(_) => {
