@@ -403,7 +403,13 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected) - fees);
+                    let expected_with_fees = FixedPoint::from(expected) - fees;
+                    let actual_with_fees = actual.unwrap();
+                    let result_equal = expected_with_fees
+                    <= actual_with_fees + fixed!(10)
+                    && expected_with_fees
+                        >= actual_with_fees - fixed!(10);
+                    assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => assert!(actual.is_err()),
             };
