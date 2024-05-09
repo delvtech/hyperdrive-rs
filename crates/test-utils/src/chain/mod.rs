@@ -9,7 +9,7 @@ use ethers::{
     core::utils::Anvil,
     middleware::{
         gas_escalator::{Frequency, GeometricGasPrice},
-        GasEscalatorMiddleware, SignerMiddleware,
+        GasEscalatorMiddleware, NonceManagerMiddleware, SignerMiddleware,
     },
     providers::{
         Http, HttpClientError, HttpRateLimitRetryPolicy, Middleware, Provider, RetryClient,
@@ -46,8 +46,10 @@ impl RetryPolicy<HttpClientError> for ChainRetryPolicy {
     }
 }
 
-pub type ChainClient<S> =
-    SignerMiddleware<GasEscalatorMiddleware<Provider<Arc<RetryClient<Http>>>>, S>;
+pub type ChainClient<S> = SignerMiddleware<
+    NonceManagerMiddleware<GasEscalatorMiddleware<Provider<Arc<RetryClient<Http>>>>>,
+    S,
+>;
 
 /// An abstraction over Ethereum chains that provides convenience methods for
 /// constructing providers and clients with useful middleware. Additionally, it
@@ -126,6 +128,7 @@ impl Chain {
             GeometricGasPrice::new(1.125, 10u64, None::<u64>),
             Frequency::PerBlock,
         );
+        let client = NonceManagerMiddleware::new(client, signer.address());
         let client = SignerMiddleware::new_with_provider_chain(client, signer).await?;
 
         Ok(Arc::new(client))
