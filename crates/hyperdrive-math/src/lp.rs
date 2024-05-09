@@ -5,7 +5,7 @@ use eyre::{eyre, Result};
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, int256};
 
-use crate::{calculate_effective_share_reserves, short, State, YieldSpace};
+use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
     ///      Calculates the initial reserves. We solve for the initial reserves
@@ -604,10 +604,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        panic,
-        panic::{catch_unwind, AssertUnwindSafe},
-    };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use fixed_point_macros::uint256;
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
