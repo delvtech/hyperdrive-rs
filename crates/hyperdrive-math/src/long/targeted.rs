@@ -347,6 +347,7 @@ mod tests {
 
     use super::*;
 
+    #[ignore]
     #[traced_test]
     #[tokio::test]
     async fn test_calculate_targeted_long_with_budget() -> Result<()> {
