@@ -152,7 +152,7 @@ fn main() -> Result<()> {
             writeln!(
                 generated_file,
                 "{}",
-                format!(
+                format_args!(
                     r#"
 pub struct {name}Libs {{
     {libs}

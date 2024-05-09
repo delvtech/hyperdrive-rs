@@ -146,7 +146,7 @@ impl State {
             self.share_adjustment(),
             self.bond_reserves(),
             self.minimum_share_reserves(),
-            I256::try_from(0)?,
+            I256::from(0),
         )?;
         let (new_share_reserves, new_share_adjustment, new_bond_reserves) = self
             .calculate_update_liquidity(
@@ -295,7 +295,7 @@ impl State {
         let net_curve_trade = self
             .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
         let net_flat_trade = self
-            .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining);
+            .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)?;
 
         let present_value: I256 =
             I256::try_from(self.share_reserves()).unwrap() + net_curve_trade + net_flat_trade
@@ -419,23 +419,29 @@ impl State {
         &self,
         long_average_time_remaining: FixedPoint,
         short_average_time_remaining: FixedPoint,
-    ) -> I256 {
+    ) -> Result<I256> {
+        if self.vault_share_price() == fixed!(0) {
+            return Err(eyre!("Vault share price is zero."));
+        }
+        if short_average_time_remaining > fixed!(1e18) || long_average_time_remaining > fixed!(1e18)
+        {
+            return Err(eyre!("Average time remaining is greater than 1e18."));
+        }
         // NOTE: In order to underestimate the impact of closing all of the
         // flat trades, we round the impact of closing the shorts down and round
         // the impact of closing the longs up.
         //
         // Compute the net of the longs and shorts that will be traded flat and
         // apply this net to the reserves.
-        I256::try_from(self.shorts_outstanding().mul_div_down(
+        let net_flat_trade = I256::try_from(self.shorts_outstanding().mul_div_down(
             fixed!(1e18) - short_average_time_remaining,
             self.vault_share_price(),
-        ))
-        .unwrap()
-            - I256::try_from(self.longs_outstanding().mul_div_up(
-                fixed!(1e18) - long_average_time_remaining,
-                self.vault_share_price(),
-            ))
-            .unwrap()
+        ))? - I256::try_from(self.longs_outstanding().mul_div_up(
+            fixed!(1e18) - long_average_time_remaining,
+            self.vault_share_price(),
+        ))?;
+
+        Ok(net_flat_trade)
     }
 
     /// Calculates the number of share reserves that are not reserved by open
@@ -598,10 +604,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        panic,
-        panic::{catch_unwind, AssertUnwindSafe},
-    };
+    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use fixed_point_macros::uint256;
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
@@ -999,7 +1002,9 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
+
             let current_block_timestamp = rng.gen_range(fixed!(1)..=fixed!(1e4));
+
             let long_average_time_remaining = state.calculate_normalized_time_remaining(
                 state.long_average_maturity_time().into(),
                 current_block_timestamp.into(),
@@ -1008,12 +1013,10 @@ mod tests {
                 state.short_average_maturity_time().into(),
                 current_block_timestamp.into(),
             );
-            let actual = panic::catch_unwind(|| {
-                state.calculate_net_flat_trade(
-                    long_average_time_remaining,
-                    short_average_time_remaining,
-                )
-            });
+            let actual = state.calculate_net_flat_trade(
+                long_average_time_remaining,
+                short_average_time_remaining,
+            );
             match chain
                 .mock_lp_math()
                 .calculate_net_flat_trade(PresentValueParams {
