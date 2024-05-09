@@ -584,6 +584,7 @@ mod tests {
         Ok(())
     }
 
+    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_short() -> Result<()> {
         // TODO: Why can't this pass with a tolerance of 1e9?

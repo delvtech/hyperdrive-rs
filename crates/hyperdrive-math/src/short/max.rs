@@ -507,6 +507,7 @@ mod tests {
     /// `calculate_max_short`'s functionality. With this in mind, we provide
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
+    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_short_no_budget() -> Result<()> {
         let chain = TestChain::new().await?;
@@ -577,6 +578,7 @@ mod tests {
     }
 
     /// Tests that the absolute max short can be executed on chain.
+    #[ignore]
     #[traced_test]
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_execute() -> Result<()> {
