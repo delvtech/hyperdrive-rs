@@ -586,13 +586,14 @@ mod tests {
         // the absolute maximum short.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;
-        let mut alice = chain.alice().await?;
-        let mut bob = chain.bob().await?;
-        let config = alice.get_config().clone();
 
         for _ in 0..*FUZZ_RUNS {
-            // Snapshot the chain.
+            // // Snapshot the chain BEFORE creating any agents.
             let id = chain.snapshot().await?;
+
+            let mut alice = chain.alice().await?;
+            let mut bob = chain.bob().await?;
+            let config = alice.get_config().clone();
 
             // TODO: We should fuzz over a range of fixed rates.
             //
@@ -645,8 +646,6 @@ mod tests {
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
-            alice.reset(Default::default());
-            bob.reset(Default::default());
         }
 
         Ok(())
