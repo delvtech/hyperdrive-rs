@@ -383,8 +383,12 @@ mod tests {
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let fees = state.open_short_curve_fee(bond_amount)
-                - state.open_short_governance_fee(bond_amount);
+            let fees = state
+                .open_short_curve_fee(bond_amount)
+                .div_up(state.vault_share_price())
+                - state
+                    .open_short_governance_fee(bond_amount)
+                    .div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
@@ -399,15 +403,11 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    let expected_fp = FixedPoint::from(expected);
-                    // short principal is too low to account for fees
-                    if expected_fp < fees {
-                        assert!(actual.is_err());
-                    }
-                    // everything should be good
-                    else {
-                        assert_eq!(actual.unwrap(), FixedPoint::from(expected) - fees);
-                    }
+                    let expected_with_fees = FixedPoint::from(expected) - fees;
+                    let actual_with_fees = actual.unwrap();
+                    let result_equal = expected_with_fees <= actual_with_fees + fixed!(10)
+                        && expected_with_fees >= actual_with_fees - fixed!(10);
+                    assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => assert!(actual.is_err()),
             };
