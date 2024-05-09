@@ -7,7 +7,10 @@ use crate::State;
 impl State {
     /// Calculates the curve fee paid by the trader when they open a short.
     pub fn open_short_curve_fee(&self, bond_amount: FixedPoint) -> FixedPoint {
-        self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()) * bond_amount
+        // NOTE: Round up to overestimate the curve fee.
+        self.curve_fee()
+            .mul_up(fixed!(1e18) - self.calculate_spot_price())
+            .mul_up(bond_amount)
     }
 
     /// Calculates the governance fee paid by the trader when they open a short.
