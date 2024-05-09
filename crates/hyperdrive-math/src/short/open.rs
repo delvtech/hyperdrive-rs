@@ -123,8 +123,12 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let curve_fee = self.open_short_curve_fee(bond_amount);
-        let gov_curve_fee = self.open_short_governance_fee(bond_amount);
+        let curve_fee = self
+            .open_short_curve_fee(bond_amount)
+            .div_up(self.vault_share_price());
+        let gov_curve_fee = self
+            .open_short_governance_fee(bond_amount)
+            .div_up(self.vault_share_price());
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
