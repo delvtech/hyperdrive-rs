@@ -1,22 +1,17 @@
-.PHONY: build test lint \
-	style-check spell-check warnings-check \
-	prettier
+.PHONY: build test lint spell-check
 
 ### Build ###
-
 build: 
 	cargo build
 
-
 ### Test ###
 test:
-	cargo test --workspace --exclude hyperdrive-math && \
-	cargo test --package hyperdrive-math -- --test-threads=1
+	cargo test
 
 ### Lint ###
-
 lint:
 	cargo check && cargo clippy && cargo fmt --check
 
+### Spell-Check ###
 spell-check:
 	npx cspell crates/**/**/*.rs --gitignore
