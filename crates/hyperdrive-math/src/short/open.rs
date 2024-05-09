@@ -825,7 +825,7 @@ mod tests {
                     // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
                     // calc_open_short must be incorrect for the additional amount to have to be so large.
                     let result = state.calculate_open_short(
-                        (max_trade + fixed!(100_000_000e18)),
+                        max_trade + fixed!(100_000_000e18),
                         state.vault_share_price(),
                     );
                     match result {
