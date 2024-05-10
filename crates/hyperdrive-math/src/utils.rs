@@ -57,6 +57,61 @@ pub fn calculate_effective_share_reserves_safe(
     Ok(effective_share_reserves.into())
 }
 
+/// Calculates the bond reserves assuming that the pool has a given
+/// effective share reserves and fixed rate APR.
+///
+/// NOTE: This function should not be used for computing reserve levels when
+/// initializing a pool. Instead use `lp::calculate_initial_reserves`.
+///
+/// r = ((1 / p) - 1) / t = (1 - p) / (pt)
+/// p = ((u * z) / y) ** t
+///
+/// Arguments:
+///
+/// * effective_share_reserves : The pool's effective share reserves. The
+/// effective share reserves are a modified version of the share
+/// reserves used when pricing trades.
+/// * target_rate : The target pool's fixed APR.
+/// * initial_vault_share_price : The pool's initial vault share price.
+/// * position_duration : The amount of time until maturity in seconds.
+/// * time_stretch : The time stretch parameter.
+///
+/// Returns:
+///
+/// * bond_reserves : The bond reserves that make the pool have a specified APR.
+pub fn calculate_bonds_given_effective_shares_and_rate(
+    effective_share_reserves: FixedPoint,
+    target_rate: FixedPoint,
+    initial_vault_share_price: FixedPoint,
+    position_duration: FixedPoint,
+    time_stretch: FixedPoint,
+) -> FixedPoint {
+    // NOTE: Round down to underestimate the initial bond reserves.
+    //
+    // Normalize the time to maturity to fractions of a year since the provided
+    // rate is an APR.
+    let t = position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+
+    // NOTE: Round down to underestimate the initial bond reserves.
+    //
+    // inner = (1 + apr * t) ** (1 / t_s)
+    let mut inner = fixed!(1e18) + target_rate.mul_down(t);
+    if inner >= fixed!(1e18) {
+        // Rounding down the exponent results in a smaller result.
+        inner = inner.pow(fixed!(1e18) / time_stretch);
+    } else {
+        // Rounding up the exponent results in a smaller result.
+        inner = inner.pow(fixed!(1e18).div_up(time_stretch));
+    }
+
+    // NOTE: Round down to underestimate the initial bond reserves.
+    //
+    // mu * (z - zeta) * (1 + apr * t) ** (1 / tau)
+    initial_vault_share_price
+        .mul_down(effective_share_reserves)
+        .mul_down(inner)
+}
+
 /// Calculate the rate assuming a given price is constant for some annualized duration.
 ///
 /// We calculate the rate for a fixed length of time as:
@@ -82,11 +137,14 @@ pub fn calculate_rate_given_fixed_price(
 mod tests {
     use std::panic;
 
-    use eyre::Result;
     use rand::{thread_rng, Rng};
-    use test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
+    use test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
 
     use super::*;
+    use crate::State;
 
     #[tokio::test]
     async fn fuzz_calculate_time_stretch() -> Result<()> {
@@ -116,6 +174,67 @@ mod tests {
             }
         }
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_calculate_bonds_given_effective_shares_and_rate() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            // Gen the random state.
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
+                let sign = rng.gen::<bool>();
+                if sign {
+                    -I256::try_from(value).unwrap()
+                } else {
+                    I256::try_from(value).unwrap()
+                }
+            };
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+
+            // Get the min rate.
+            let max_long = match panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+            }) {
+                Ok(max_long) => max_long,
+                Err(_) => continue, // Don't finish this fuzz iteration.
+            };
+            let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
+
+            // Get the max rate.
+            let max_short = match panic::catch_unwind(|| {
+                state.calculate_max_short(
+                    U256::MAX,
+                    open_vault_share_price,
+                    checkpoint_exposure,
+                    None,
+                    None,
+                )
+            }) {
+                Ok(max_short) => max_short,
+                Err(_) => continue, // Don't finish this fuzz iteration.
+            };
+            let max_rate = state.calculate_spot_rate_after_short(max_short, None)?;
+
+            // Get a random target rate that is allowable.
+            let target_rate = rng.gen_range(min_rate..=max_rate);
+
+            // Calculate the new bond reserves.
+            let bond_reserves = calculate_bonds_given_effective_shares_and_rate(
+                state.effective_share_reserves(),
+                target_rate,
+                state.initial_vault_share_price(),
+                state.position_duration(),
+                state.time_stretch(),
+            );
+
+            // Make a new state with the updated reserves & check the spot rate.
+            let mut new_state: State = state.clone();
+            new_state.info.bond_reserves = bond_reserves.into();
+            assert_eq!(new_state.calculate_spot_rate(), target_rate)
+        }
         Ok(())
     }
 }
