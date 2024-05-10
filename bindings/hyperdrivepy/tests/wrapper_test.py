@@ -109,6 +109,34 @@ def test_calculate_spot_price():
     assert int(spot_price) > 0, "Expected spot price to > 0."
 
 
+def test_calculate_bonds_given_effective_shares_and_rate():
+    """test calculate_bonds_given_effective_shares_and_rate."""
+    effective_share_reserves = hyperdrivepy.calculate_effective_share_reserves(
+        str(POOL_INFO.shareReserves),
+        str(POOL_INFO.shareAdjustment),
+    )
+    rate = hyperdrivepy.calculate_spot_rate(POOL_CONFIG, POOL_INFO)
+    bonds = hyperdrivepy.calculate_bonds_given_effective_shares_and_rate(
+        effective_share_reserves,
+        rate,
+        str(POOL_CONFIG.initialVaultSharePrice),
+        str(POOL_CONFIG.positionDuration),
+        str(POOL_CONFIG.timeStretch),
+    )
+    assert bonds is not None, "Failed to calculate bonds."
+    assert isinstance(bonds, str), "Expected bonds to  be a string."
+    assert int(bonds) > 0, "Expected bonds to be > 0."
+
+
+def test_calculate_rate_given_fixed_price():
+    """test calculate_rate_given_fixed_price."""
+    price = hyperdrivepy.calculate_spot_price(POOL_CONFIG, POOL_INFO)
+    rate = hyperdrivepy.calculate_rate_given_fixed_price(price, str(POOL_CONFIG.positionDuration))
+    assert rate is not None, "Failed to calculate spot rate."
+    assert isinstance(rate, str), "Expected spot rate to be a string."
+    assert float(rate) > 0, "Expected spot rate to > 0."
+
+
 def test_calculate_time_stretch():
     """test calculate_time_stretch."""
     time_stretch = hyperdrivepy.calculate_time_stretch(
