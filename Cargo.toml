@@ -12,12 +12,12 @@ members = [
 
 [workspace.package]
 name="hyperdrive-rs"
-version="0.15.1"
+version="0.15.2"
 authors = [
     "Alex Towle <alex@delv.tech>",
     "Dylan Paiton <dylan@delv.tech>",
     "Jonny Rhea <jonny@delv.tech>",
-    "matthew Brown <matt@delv.tech>",
+    "Matthew Brown <matt@delv.tech>",
     "Mihai Cosma <mihai@delv.tech>",
     "Ryan Goree <ryan@delv.tech>",
     "Sheng Lundquist <sheng@delv.tech>",
