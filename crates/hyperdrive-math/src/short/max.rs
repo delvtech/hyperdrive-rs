@@ -273,15 +273,12 @@ impl State {
             let optimal_effective_share_reserves =
                 calculate_effective_share_reserves(optimal_share_reserves, self.share_adjustment());
             let optimal_bond_reserves = self.k_down()
-                - self
-                    .vault_share_price()
-                    .div_up(self.initial_vault_share_price())
-                    .mul_up(
-                        (self
-                            .initial_vault_share_price()
-                            .mul_up(optimal_effective_share_reserves))
+                - self.vault_share_price().mul_div_up(
+                    self.initial_vault_share_price()
+                        .mul_up(optimal_effective_share_reserves)
                         .pow(fixed!(1e18) - self.time_stretch()),
-                    );
+                    self.initial_vault_share_price(),
+                );
             let optimal_bond_reserves = if optimal_bond_reserves >= fixed!(1e18) {
                 // Rounding the exponent down results in a smaller outcome.
                 optimal_bond_reserves.pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))
