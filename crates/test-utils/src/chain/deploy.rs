@@ -4,13 +4,12 @@ use ethers::{
     core::utils::keccak256,
     prelude::EthLogDecode,
     signers::Signer,
-    types::{Address, U256},
+    types::{Address, I256, U256},
 };
 use eyre::Result;
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, uint256};
 use hyperdrive_addresses::Addresses;
-use hyperdrive_math::calculate_time_stretch;
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,
@@ -53,6 +52,38 @@ where
     let dec_string: String = Deserialize::deserialize(deserializer)?;
     let u256 = U256::from_dec_str(&dec_string).map_err(serde::de::Error::custom)?;
     Ok(u256)
+}
+
+pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+    let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+    // Calculate the benchmark time stretch. This time stretch is tuned for
+    // a position duration of 1 year.
+    let time_stretch = fixed!(5.24592e18)
+        / (fixed!(0.04665e18) * FixedPoint::from(U256::from(rate) * uint256!(100)));
+    let time_stretch = fixed!(1e18) / time_stretch;
+
+    // We know that the following simultaneous equations hold:
+    //
+    // (1 + apr) * A ** timeStretch = 1
+    //
+    // and
+    //
+    // (1 + apr * (positionDuration / 365 days)) * A ** targetTimeStretch = 1
+    //
+    // where A is the reserve ratio. We can solve these equations for the
+    // target time stretch as follows:
+    //
+    // targetTimeStretch = (
+    //     ln(1 + apr * (positionDuration / 365 days)) /
+    //     ln(1 + apr)
+    // ) * timeStretch
+    //
+    // NOTE: Round down so that the output is an underestimate.
+    (FixedPoint::from(FixedPoint::ln(
+        I256::try_from(fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year))
+            .unwrap(),
+    )) / FixedPoint::from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate).unwrap())))
+        * time_stretch
 }
 
 /// A configuration for a test chain that specifies the factory parameters,
