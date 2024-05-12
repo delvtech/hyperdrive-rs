@@ -45,7 +45,7 @@ pub struct Agent<M, R: Rng + SeedableRng> {
     vault: MockERC4626<M>,
     base: ERC20Mintable<M>,
     config: PoolConfig,
-    wallet: Wallet,
+    pub wallet: Wallet,
     // TODO: It would probably be better to store an Arc<R> here so that all of
     // the agents reference the same Rng.
     rng: R,
@@ -484,10 +484,6 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
 
     pub fn address(&self) -> Address {
         self.client.address()
-    }
-
-    pub fn wallet(&self) -> Wallet {
-        self.wallet.clone()
     }
 
     pub fn base(&self) -> FixedPoint {

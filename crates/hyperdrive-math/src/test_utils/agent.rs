@@ -122,11 +122,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .hyperdrive()
             .get_checkpoint_exposure(state.to_checkpoint(self.now().await?))
             .await?;
-        Ok(state.calculate_max_long(
-            self.wallet().base,
-            checkpoint_exposure,
-            maybe_max_iterations,
-        ))
+        Ok(state.calculate_max_long(self.wallet.base, checkpoint_exposure, maybe_max_iterations))
     }
 
     /// Gets the long that moves the fixed rate to a target value.
@@ -143,7 +139,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .await?;
         Ok(state
             .calculate_targeted_long_with_budget(
-                self.wallet().base,
+                self.wallet.base,
                 target_rate,
                 checkpoint_exposure,
                 maybe_max_iterations,
@@ -161,8 +157,8 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         &self,
         maybe_slippage_tolerance: Option<FixedPoint>,
     ) -> Result<FixedPoint> {
-        let budget = self.wallet().base
-            * (fixed!(1e18) - maybe_slippage_tolerance.unwrap_or(fixed!(0.01e18)));
+        let budget =
+            self.wallet.base * (fixed!(1e18) - maybe_slippage_tolerance.unwrap_or(fixed!(0.01e18)));
 
         let latest_checkpoint = self.latest_checkpoint().await?;
         let Checkpoint {
@@ -186,7 +182,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             // Calculate the linear interpolation.
             let base_reserves = FixedPoint::from(state.info.vault_share_price)
                 * (FixedPoint::from(state.info.share_reserves));
-            let weight = (min(self.wallet().base, base_reserves) / base_reserves)
+            let weight = (min(self.wallet.base, base_reserves) / base_reserves)
                 .pow(fixed!(1e18) - FixedPoint::from(self.get_config().time_stretch));
             spot_price * (fixed!(1e18) - weight) + min_price * weight
         };
@@ -208,16 +204,16 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // Ensure that the agent has a sufficient base balance to open the long.
-        if self.wallet().base < base_paid {
+        if self.wallet.base < base_paid {
             return Err(eyre::eyre!(
                 "insufficient base balance to open long: {:?} < {:?}",
-                self.wallet().base,
+                self.wallet.base,
                 base_paid
             ));
         }
 
         // Decrease the wallet's base balance.
-        self.wallet().base -= base_paid;
+        self.wallet.base -= base_paid;
 
         // Open the long and record the trade in the wallet.
         let log = {
@@ -256,7 +252,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             logs[0].clone()
         };
         *self
-            .wallet()
+            .wallet
             .longs
             .entry(log.maturity_time.into())
             .or_default() += log.bond_amount.into();
@@ -277,7 +273,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         //
         // If the wallet has a sufficient balance of longs, update the long
         // balance. Otherwise, return an error.
-        match self.wallet().longs.entry(maturity_time) {
+        match self.wallet.longs.entry(maturity_time) {
             Entry::Occupied(mut entry) => {
                 let long_balance = entry.get();
                 if *long_balance > bond_amount {
@@ -329,7 +325,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        self.wallet().base += log.base_amount.into();
+        self.wallet.base += log.base_amount.into();
 
         Ok(())
     }
@@ -380,13 +376,13 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             logs[0].clone()
         };
         *self
-            .wallet()
+            .wallet
             .shorts
             .entry(log.maturity_time.into())
             .or_default() += log.bond_amount.into();
 
         // Decrease the wallet's base balance.
-        self.wallet().base -= log.base_amount.into();
+        self.wallet.base -= log.base_amount.into();
 
         Ok((log.maturity_time.into(), log.base_amount.into()))
     }
@@ -400,7 +396,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     ) -> Result<FixedPoint> {
         // If the wallet has a sufficient balance of shorts, update the short
         // balance. Otherwise, return an error.
-        match self.wallet().shorts.entry(maturity_time) {
+        match self.wallet.shorts.entry(maturity_time) {
             Entry::Occupied(mut entry) => {
                 let short_balance = entry.get();
                 if *short_balance > bond_amount {
@@ -452,7 +448,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        self.wallet().base += log.base_amount.into();
+        self.wallet.base += log.base_amount.into();
 
         Ok(log.base_amount.into())
     }
