@@ -606,6 +606,7 @@ impl State {
 mod tests {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
+    use crate::test_utils::agent::HyperdriveMathAgent;
     use fixed_point_macros::uint256;
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
         DistributeExcessIdleParams, PresentValueParams,

@@ -133,6 +133,8 @@ mod tests {
         constants::FUZZ_RUNS,
     };
 
+    use crate::test_utils::agent::HyperdriveMathAgent;
+
     use super::*;
 
     /// Executes random trades throughout a Hyperdrive term.

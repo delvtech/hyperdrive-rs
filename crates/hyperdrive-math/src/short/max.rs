@@ -501,6 +501,8 @@ mod tests {
 
     use super::*;
 
+    use crate::test_utils::agent::HyperdriveMathAgent;
+
     /// This test differentially fuzzes the `calculate_max_short` function against
     /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
     /// a trader's budget into account, so it only provides a subset of

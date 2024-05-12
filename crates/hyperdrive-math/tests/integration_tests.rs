@@ -11,6 +11,8 @@ use test_utils::{
     constants::FUZZ_RUNS,
 };
 
+use hyperdrive_math::agent::HyperdriveMathAgent;
+
 /// Executes random trades throughout a Hyperdrive term.
 async fn preamble(
     rng: &mut ChaCha8Rng,

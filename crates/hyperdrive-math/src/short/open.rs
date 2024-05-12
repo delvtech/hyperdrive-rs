@@ -291,6 +291,8 @@ mod tests {
 
     use super::*;
 
+    use crate::test_utils::agent::HyperdriveMathAgent;
+
     /// Executes random trades throughout a Hyperdrive term.
     async fn preamble(
         rng: &mut ChaCha8Rng,
