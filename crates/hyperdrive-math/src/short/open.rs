@@ -290,7 +290,6 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     /// Executes random trades throughout a Hyperdrive term.

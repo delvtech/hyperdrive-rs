@@ -505,8 +505,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::calculate_effective_share_reserves;
-    use crate::test_utils::agent::HyperdriveMathAgent;
+    use crate::{calculate_effective_share_reserves, test_utils::agent::HyperdriveMathAgent};
 
     /// This test differentially fuzzes the `absolute_max_long` function against
     /// the Solidity analogue `calculateAbsoluteMaxLong`.

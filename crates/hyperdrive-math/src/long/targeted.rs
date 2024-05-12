@@ -339,7 +339,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use crate::test_utils::agent::HyperdriveMathAgent;
     use ethers::types::U256;
     use fixed_point_macros::uint256;
     use rand::{thread_rng, Rng};
@@ -347,6 +346,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
+    use crate::test_utils::agent::HyperdriveMathAgent;
 
     #[ignore]
     #[traced_test]

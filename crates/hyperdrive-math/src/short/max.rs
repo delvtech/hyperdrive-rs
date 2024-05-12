@@ -500,7 +500,6 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     /// This test differentially fuzzes the `calculate_max_short` function against
