@@ -1,6 +1,6 @@
 [package]
 name = "test-utils"
-version = {workspace=true}
+version = { workspace = true }
 edition = "2021"
 
 [[bin]]
@@ -31,5 +31,4 @@ tracing = "0.1"
 fixed-point = { path = "../fixed-point" }
 fixed-point-macros = { path = "../fixed-point-macros" }
 hyperdrive-addresses = { path = "../hyperdrive-addresses" }
-hyperdrive-math = { path = "../hyperdrive-math" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
