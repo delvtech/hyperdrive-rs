@@ -279,6 +279,7 @@ impl State {
             * (fixed!(1e18) - self.calculate_spot_price());
 
         // a(x) = mu * (z_{e,0} + x/c - g(x))
+        // FIXME: This looks like units are (shares + shares - base); double check?
         let inner_numerator = self.mu()
             * (self.ze() + base_amount / self.vault_share_price()
                 - self.open_long_governance_fee(base_amount));
@@ -332,7 +333,7 @@ impl State {
         let base_delta =
             (ending_share_reserves - self.effective_share_reserves()) * self.vault_share_price();
         let bond_delta =
-            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fees(base_delta);
+            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fee(base_delta);
         (base_delta, bond_delta)
     }
 }

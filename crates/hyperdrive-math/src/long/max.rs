@@ -255,7 +255,7 @@ impl State {
         //
         // absoluteMaxBondAmount = (y - y_t) - c(x)
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
-            - self.open_long_curve_fees(absolute_max_base_amount);
+            - self.open_long_curve_fee(absolute_max_base_amount);
 
         (absolute_max_base_amount, absolute_max_bond_amount)
     }

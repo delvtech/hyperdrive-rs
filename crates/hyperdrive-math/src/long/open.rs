@@ -30,20 +30,18 @@ impl State {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
-        let long_amount =
+        let bond_amount =
             self.calculate_bonds_out_given_shares_in_down(base_amount / self.vault_share_price());
 
         // Throw an error if opening the long would result in negative interest.
         let ending_spot_price =
-            self.calculate_spot_price_after_long(base_amount, long_amount.into())?;
+            self.calculate_spot_price_after_long(base_amount, bond_amount.into())?;
         let max_spot_price = self.calculate_max_spot_price();
         if ending_spot_price > max_spot_price {
-            return Err(eyre!(
-                "calculate_open_long: InsufficientLiquidity: Negative Interest",
-            ));
+            return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
 
-        Ok(long_amount - self.open_long_curve_fees(base_amount))
+        Ok(bond_amount - self.open_long_curve_fee(base_amount))
     }
 
     /// Calculate an updated pool state after opening a long.
