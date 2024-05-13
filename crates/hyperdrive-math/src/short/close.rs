@@ -138,9 +138,14 @@ impl State {
         }
 
         // Ensure ending spot price is less than one
-        let share_curve_delta_with_fees = share_curve_delta
-            + self.close_short_curve_fee(bond_amount, maturity_time, current_time)
-            - self.close_short_governance_fee(bond_amount, maturity_time, current_time);
+        let curve_fee = self.close_short_curve_fee(bond_amount, maturity_time, current_time);
+        let share_curve_delta_with_fees = share_curve_delta + curve_fee
+            - self.close_short_governance_fee(
+                bond_amount,
+                maturity_time,
+                current_time,
+                Some(curve_fee),
+            );
         let share_curve_delta_with_fees_spot_price = {
             let mut state: State = self.clone();
             state.info.bond_reserves -= bond_reserves_delta.into();

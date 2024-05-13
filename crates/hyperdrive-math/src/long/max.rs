@@ -383,7 +383,7 @@ impl State {
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Option<FixedPoint> {
-        let governance_fee = self.open_long_governance_fee(base_amount);
+        let governance_fee = self.open_long_governance_fee(base_amount, None);
         let share_reserves = self.share_reserves() + base_amount / self.vault_share_price()
             - governance_fee / self.vault_share_price();
         let exposure = self.long_exposure() + bond_amount;

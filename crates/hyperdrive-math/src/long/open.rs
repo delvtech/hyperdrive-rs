@@ -88,7 +88,7 @@ impl State {
         let mut state: State = self.clone();
         state.info.bond_reserves -= bond_amount.into();
         state.info.share_reserves += (base_amount / state.vault_share_price()
-            - self.open_long_governance_fee(base_amount) / state.vault_share_price())
+            - self.open_long_governance_fee(base_amount, None) / state.vault_share_price())
         .into();
         Ok(state.calculate_spot_price())
     }

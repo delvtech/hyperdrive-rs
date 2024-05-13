@@ -282,7 +282,7 @@ impl State {
         // FIXME: This looks like units are (shares + shares - base); double check?
         let inner_numerator = self.mu()
             * (self.ze() + base_amount / self.vault_share_price()
-                - self.open_long_governance_fee(base_amount));
+                - self.open_long_governance_fee(base_amount, None));
 
         // a'(x) = mu / c - g'(x)
         let inner_numerator_derivative = self.mu() / self.vault_share_price() - gov_fee_derivative;

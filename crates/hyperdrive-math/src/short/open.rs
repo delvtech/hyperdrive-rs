@@ -123,11 +123,10 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let curve_fee = self
-            .open_short_curve_fee(bond_amount)
-            .div_up(self.vault_share_price());
+        let curve_fee_base = self.open_short_curve_fee(bond_amount);
+        let curve_fee = curve_fee_base.div_up(self.vault_share_price());
         let gov_curve_fee = self
-            .open_short_governance_fee(bond_amount)
+            .open_short_governance_fee(bond_amount, Some(curve_fee_base))
             .div_up(self.vault_share_price());
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
@@ -384,11 +383,10 @@ mod tests {
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let fees = state
-                .open_short_curve_fee(bond_amount)
-                .div_up(state.vault_share_price())
+            let curve_fee_base = state.open_short_curve_fee(bond_amount);
+            let fees = curve_fee_base.div_up(state.vault_share_price())
                 - state
-                    .open_short_governance_fee(bond_amount)
+                    .open_short_governance_fee(bond_amount, Some(curve_fee_base))
                     .div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()

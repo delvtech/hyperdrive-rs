@@ -27,10 +27,16 @@ impl State {
     /// $$
     /// \Phi_{g,ol}(\Delta x) = \phi_g \cdot p \cdot \Phi_{c,ol}(\Delta x)
     /// $$
-    pub fn open_long_governance_fee(&self, base_amount: FixedPoint) -> FixedPoint {
-        self.governance_lp_fee()
-            * self.calculate_spot_price()
-            * self.open_long_curve_fee(base_amount)
+    pub fn open_long_governance_fee(
+        &self,
+        base_amount: FixedPoint,
+        maybe_curve_fee: Option<FixedPoint>,
+    ) -> FixedPoint {
+        let curve_fee = match maybe_curve_fee {
+            Some(maybe_curve_fee) => maybe_curve_fee,
+            None => self.open_long_curve_fee(base_amount),
+        };
+        self.governance_lp_fee() * self.calculate_spot_price() * curve_fee
     }
 
     /// Calculates the curve fee paid when closing longs for a given bond amount.

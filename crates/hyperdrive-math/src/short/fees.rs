@@ -29,9 +29,16 @@ impl State {
     /// $$
     /// \Phi_{g,os}(\Delta y) = \phi_g \cdot \Phi_{c,os}(\Delta y)
     /// $$
-    pub fn open_short_governance_fee(&self, bond_amount: FixedPoint) -> FixedPoint {
-        self.governance_lp_fee()
-            .mul_down(self.open_short_curve_fee(bond_amount))
+    pub fn open_short_governance_fee(
+        &self,
+        bond_amount: FixedPoint,
+        maybe_curve_fee: Option<FixedPoint>,
+    ) -> FixedPoint {
+        let curve_fee = match maybe_curve_fee {
+            Some(maybe_curve_fee) => maybe_curve_fee,
+            None => self.open_short_curve_fee(bond_amount),
+        };
+        self.governance_lp_fee() * curve_fee
     }
 
     /// Calculates the curve fee paid when opening shorts with a given bond amount.
@@ -67,16 +74,18 @@ impl State {
     /// $$
     ///
     /// NOTE: Round down to underestimate the governance curve fee
-    /// TODO: avoid duplicate calculation of close short curve fee
-    /// https://github.com/delvtech/hyperdrive/issues/943
     pub fn close_short_governance_fee(
         &self,
         bond_amount: FixedPoint,
         maturity_time: U256,
         current_time: U256,
+        maybe_curve_fee: Option<FixedPoint>,
     ) -> FixedPoint {
-        self.close_short_curve_fee(bond_amount, maturity_time, current_time)
-            .mul_down(self.governance_lp_fee())
+        let curve_fee = match maybe_curve_fee {
+            Some(maybe_curve_fee) => maybe_curve_fee,
+            None => self.close_short_curve_fee(bond_amount, maturity_time, current_time),
+        };
+        curve_fee.mul_down(self.governance_lp_fee())
     }
 
     /// Calculate the flat fee paid when closing shorts with a given bond amount.
