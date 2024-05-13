@@ -38,7 +38,8 @@ impl State {
             Some(maybe_curve_fee) => maybe_curve_fee,
             None => self.open_short_curve_fee(bond_amount),
         };
-        self.governance_lp_fee() * curve_fee
+        // NOTE: Round down to underestimate the governance fee.
+        curve_fee.mul_down(self.governance_lp_fee())
     }
 
     /// Calculates the curve fee paid when opening shorts with a given bond amount.
@@ -59,9 +60,11 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
+        // NOTE: Round up to overestimate the curve fee.
         self.curve_fee()
-            * (fixed!(1e18) - self.calculate_spot_price())
-            * bond_amount.mul_div_down(normalized_time_remaining, self.vault_share_price())
+            .mul_up(fixed!(1e18) - self.calculate_spot_price())
+            .mul_up(bond_amount)
+            .mul_div_up(normalized_time_remaining, self.vault_share_price())
     }
 
     /// Calculate the governance fee paid when closing shorts with a given bond amount.
@@ -85,6 +88,7 @@ impl State {
             Some(maybe_curve_fee) => maybe_curve_fee,
             None => self.close_short_curve_fee(bond_amount, maturity_time, current_time),
         };
+        // NOTE: Round down to underestimate the governance fee.
         curve_fee.mul_down(self.governance_lp_fee())
     }
 
@@ -106,9 +110,12 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
-        bond_amount.mul_div_down(
-            fixed!(1e18) - normalized_time_remaining,
-            self.vault_share_price(),
-        ) * self.flat_fee()
+        // NOTE: Round up to overestimate the flat fee.
+        bond_amount
+            .mul_div_up(
+                fixed!(1e18) - normalized_time_remaining,
+                self.vault_share_price(),
+            )
+            .mul_up(self.flat_fee())
     }
 }

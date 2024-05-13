@@ -14,9 +14,10 @@ impl State {
     /// \Phi_{c,ol}(\Delta x) = \phi_c \cdot \left( \tfrac{1}{p} - 1 \right) \cdot \Delta x
     /// $$
     pub fn open_long_curve_fee(&self, base_amount: FixedPoint) -> FixedPoint {
-        self.curve_fee()
-            * ((fixed!(1e18) / self.calculate_spot_price()) - fixed!(1e18))
-            * base_amount
+        // NOTE: Round up to overestimate the curve fee.
+        (fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
+            .mul_up(self.curve_fee())
+            .mul_up(base_amount)
     }
 
     /// Calculates the governance fee paid when opening longs with a given base amount.
@@ -36,7 +37,10 @@ impl State {
             Some(maybe_curve_fee) => maybe_curve_fee,
             None => self.open_long_curve_fee(base_amount),
         };
-        self.governance_lp_fee() * self.calculate_spot_price() * curve_fee
+        // NOTE: Round down to underestimate the governance curve fee.
+        self.calculate_spot_price()
+            .mul_down(curve_fee)
+            .mul_down(self.governance_lp_fee())
     }
 
     /// Calculates the curve fee paid when closing longs for a given bond amount.
@@ -57,9 +61,11 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
+        // NOTE: Round up to overestimate the curve fee.
         self.curve_fee()
-            * (fixed!(1e18) - self.calculate_spot_price())
-            * bond_amount.mul_div_down(normalized_time_remaining, self.vault_share_price())
+            .mul_up(fixed!(1e18) - self.calculate_spot_price())
+            .mul_up(bond_amount)
+            .mul_div_up(normalized_time_remaining, self.vault_share_price())
     }
 
     /// Calculates the flat fee paid when closing longs for a given bond amount.
@@ -80,9 +86,12 @@ impl State {
     ) -> FixedPoint {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
-        bond_amount.mul_div_down(
-            fixed!(1e18) - normalized_time_remaining,
-            self.vault_share_price(),
-        ) * self.flat_fee()
+        // NOTE: Round up to overestimate the flat fee.
+        bond_amount
+            .mul_div_up(
+                fixed!(1e18) - normalized_time_remaining,
+                self.vault_share_price(),
+            )
+            .mul_up(self.flat_fee())
     }
 }
