@@ -15,9 +15,6 @@ rand = "0.8.5"
 fixed-point = { path = "../fixed-point" }
 fixed-point-macros = { path = "../fixed-point-macros" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
-test-utils = { path = "../test-utils" }
-rand_chacha = "0.3.1"
-tracing = "0.1"
 
 [dev-dependencies]
 

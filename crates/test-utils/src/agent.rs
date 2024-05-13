@@ -11,7 +11,6 @@ use ethers::{
 use eyre::Result;
 use fixed_point::FixedPoint;
 use fixed_point_macros::uint256;
-use getset::Getters;
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable,
@@ -25,7 +24,7 @@ use tracing::instrument;
 
 use super::chain::ChainClient;
 
-#[derive(Clone, Default, Getters)]
+#[derive(Clone, Default)]
 pub struct Wallet {
     pub base: FixedPoint,
     pub lp_shares: FixedPoint,
@@ -182,8 +181,6 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     pub fn hyperdrive(&self) -> &IHyperdrive<ChainClient<LocalWallet>> {
         &self.hyperdrive
     }
-
-    /// Longs ///
 
     /// LPs ///
 

@@ -54,6 +54,7 @@ where
     Ok(u256)
 }
 
+// This is defined in hyperdrive-math, but re-defined here to avoid cyclic dependencies.
 pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     // Calculate the benchmark time stretch. This time stretch is tuned for
