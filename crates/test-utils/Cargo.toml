@@ -1,6 +1,6 @@
 [package]
 name = "test-utils"
-version = {workspace=true}
+version = { workspace = true }
 edition = "2021"
 
 [[bin]]
