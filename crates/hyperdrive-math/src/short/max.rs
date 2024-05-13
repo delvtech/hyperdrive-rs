@@ -508,7 +508,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = state.max_short_upper_bound();
+            let actual = panic::catch_unwind(|| state.max_short_upper_bound());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_short_upper_bound(
@@ -526,13 +526,13 @@ mod tests {
                         flat_fee: state.config.fees.flat,
                         governance_lp_fee: state.config.fees.governance_lp,
                     },
-                    state.info.share_reserves,
+                    state.effective_share_reserves().into(),
                 )
                 .call()
                 .await
             {
-                Ok(expected) => assert_eq!(actual, FixedPoint::from(expected)),
-                Err(_) => panic!("Solidity implementation failed"),
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
             }
         }
 
