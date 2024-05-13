@@ -1,8 +1,9 @@
 use std::cmp::Ordering;
 
 use ethers::types::I256;
+use eyre::Result;
 use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point_macros::{fixed, result};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -44,7 +45,7 @@ impl State {
     ///
     /// We start by finding the largest possible short (irrespective of budget),
     /// and then we iteratively approach a solution using Newton's method if the
-    /// budget isn't satisified.
+    /// budget isn't satisfied.
     ///
     /// The user can provide `maybe_conservative_price`, which is a lower bound
     /// on the realized price that the short will pay. This is used to help the
@@ -315,7 +316,7 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure);
+        let mut max_bond_amount = self.absolute_max_short_guess(checkpoint_exposure).unwrap();
         let mut maybe_solvency = self.solvency_after_short(max_bond_amount, checkpoint_exposure);
         if maybe_solvency.is_none() {
             panic!("Initial guess in `absolute_max_short` is insolvent.");
@@ -378,17 +379,25 @@ impl State {
     ///         p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
     ///     }
     /// $$
-    fn absolute_max_short_guess(
-        &self,
-        spot_price: FixedPoint,
-        checkpoint_exposure: I256,
-    ) -> FixedPoint {
-        let estimate_price = spot_price;
-        let checkpoint_exposure =
-            FixedPoint::from(checkpoint_exposure.max(I256::zero())) / self.vault_share_price();
-        (self.vault_share_price() * (self.calculate_solvency() + checkpoint_exposure))
-            / (estimate_price - self.curve_fee() * (fixed!(1e18) - spot_price)
-                + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price))
+    fn absolute_max_short_guess(&self, checkpoint_exposure: I256) -> Result<FixedPoint> {
+        let spot_price = self.calculate_spot_price();
+        let estimate_price = self.calculate_spot_price();
+        result!({
+            let guess = self.vault_share_price().mul_down(
+                self.share_reserves()
+                    + FixedPoint::from(checkpoint_exposure.max(I256::zero()))
+                        .div_down(self.vault_share_price())
+                    - self.long_exposure().div_down(self.vault_share_price())
+                    - self.minimum_share_reserves(),
+            );
+            guess.div_down(
+                estimate_price - self.curve_fee().mul_down(fixed!(1e18) - spot_price)
+                    + self
+                        .governance_lp_fee()
+                        .mul_down(self.curve_fee())
+                        .mul_down(fixed!(1e18) - spot_price),
+            )
+        })
     }
 
     /// Calculates the pool's solvency after opening a short.
@@ -539,6 +548,54 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test]
+    async fn fuzz_max_short_guess() -> Result<()> {
+        let chain = TestChain::new().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                if rng.gen() {
+                    -I256::try_from(value).unwrap()
+                } else {
+                    I256::try_from(value).unwrap()
+                }
+            };
+            let actual = state.absolute_max_short_guess(checkpoint_exposure);
+            match chain
+                .mock_hyperdrive_math()
+                .calculate_max_short_guess(
+                    MaxTradeParams {
+                        share_reserves: state.info.share_reserves,
+                        bond_reserves: state.info.bond_reserves,
+                        longs_outstanding: state.info.longs_outstanding,
+                        long_exposure: state.info.long_exposure,
+                        share_adjustment: state.info.share_adjustment,
+                        time_stretch: state.config.time_stretch,
+                        vault_share_price: state.info.vault_share_price,
+                        initial_vault_share_price: state.config.initial_vault_share_price,
+                        minimum_share_reserves: state.config.minimum_share_reserves,
+                        curve_fee: state.config.fees.curve,
+                        flat_fee: state.config.fees.flat,
+                        governance_lp_fee: state.config.fees.governance_lp,
+                    },
+                    state.calculate_spot_price().into(),
+                    checkpoint_exposure.into(),
+                )
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
     /// This test differentially fuzzes the `calculate_max_short` function against
     /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
     /// a trader's budget into account, so it only provides a subset of
@@ -600,7 +657,7 @@ mod tests {
                     // TODO: remove this tolerance when calculate_open_short
                     // rust implementation matches solidity.
                     // Currently, only about 1 - 4 / 1000 tests aren't
-                    // exact matchces. Related issue:
+                    // exact matches. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
                     assert_eq!(
                         U256::from(actual.unwrap()) / uint256!(1e11),
