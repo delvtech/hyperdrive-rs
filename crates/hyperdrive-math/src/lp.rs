@@ -617,6 +617,7 @@ mod tests {
     };
 
     use super::*;
+    use crate::test_utils::agent::HyperdriveMathAgent;
 
     #[tokio::test]
     async fn fuzz_test_calculate_initial_reserves() -> Result<()> {

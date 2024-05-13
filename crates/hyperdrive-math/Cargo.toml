@@ -1,13 +1,8 @@
 [package]
 
 name = "hyperdrive-math"
-version = {workspace=true}
+version = { workspace = true }
 edition = "2021"
-
-[[test]]
-
-name = "integration-tests"
-path = "tests/integration_tests.rs"
 
 [dependencies]
 

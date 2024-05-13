@@ -3280,7 +3280,6 @@ dependencies = [
  "fixed-point",
  "fixed-point-macros",
  "hyperdrive-addresses",
- "hyperdrive-math",
  "hyperdrive-wrappers",
  "lazy_static",
  "rand",

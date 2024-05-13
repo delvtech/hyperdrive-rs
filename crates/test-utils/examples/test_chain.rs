@@ -19,8 +19,8 @@ async fn main() -> Result<()> {
     alice.fund(contribution).await?;
     alice.initialize(rate, contribution, None).await?;
 
-    // Log the pool config and info.
-    println!("pool state = {:#?}", alice.get_state().await?);
+    // Log the pool config.
+    println!("pool config = {:#?}", alice.get_config());
 
     Ok(())
 }

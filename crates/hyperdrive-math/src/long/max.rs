@@ -505,7 +505,7 @@ mod tests {
     use tracing_test::traced_test;
 
     use super::*;
-    use crate::calculate_effective_share_reserves;
+    use crate::{calculate_effective_share_reserves, test_utils::agent::HyperdriveMathAgent};
 
     /// This test differentially fuzzes the `absolute_max_long` function against
     /// the Solidity analogue `calculateAbsoluteMaxLong`.
@@ -696,6 +696,7 @@ mod tests {
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
         let mut bob = chain.bob().await?;
+
         let config = bob.get_config().clone();
 
         for _ in 0..*FUZZ_RUNS {
