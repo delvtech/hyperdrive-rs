@@ -9,13 +9,14 @@ impl State {
     pub fn open_short_curve_fee(&self, bond_amount: FixedPoint) -> FixedPoint {
         // NOTE: Round up to overestimate the curve fee.
         self.curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price())
-            .mul_up(bond_amount)
+            .mul_down(fixed!(1e18) - self.calculate_spot_price())
+            .mul_down(bond_amount)
     }
 
     /// Calculates the governance fee paid by the trader when they open a short.
     pub fn open_short_governance_fee(&self, bond_amount: FixedPoint) -> FixedPoint {
-        self.governance_lp_fee() * self.open_short_curve_fee(bond_amount)
+        self.governance_lp_fee()
+            .mul_down(self.open_short_curve_fee(bond_amount))
     }
 
     /// Calculates the curve fee paid by shorts for a given bond amount.

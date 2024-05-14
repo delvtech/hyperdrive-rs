@@ -497,7 +497,6 @@ mod tests {
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
@@ -508,7 +507,6 @@ mod tests {
     /// `calculate_max_short`'s functionality. With this in mind, we provide
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
-    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_short_no_budget() -> Result<()> {
         let chain = TestChain::new().await?;
@@ -579,8 +577,6 @@ mod tests {
     }
 
     /// Tests that the absolute max short can be executed on chain.
-    #[ignore]
-    #[traced_test]
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_execute() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob. Alice
@@ -588,12 +584,9 @@ mod tests {
         // the pool. Bob is funded with plenty of capital to ensure we can execute
         // the absolute maximum short.
         let mut rng = thread_rng();
-        let chain = TestChain::new().await?;
 
         for _ in 0..*FUZZ_RUNS {
-            // // Snapshot the chain BEFORE creating any agents.
-            let id = chain.snapshot().await?;
-
+            let chain = TestChain::new().await?;
             let mut alice = chain.alice().await?;
             let mut bob = chain.bob().await?;
             let config = alice.get_config().clone();
@@ -646,15 +639,11 @@ mod tests {
             // for deposit << the global max short number of bonds.
             bob.fund(global_max_short + fixed!(10e18)).await?;
             bob.open_short(global_max_short, None, None).await?;
-
-            // Revert to the snapshot and reset the agent's wallets.
-            chain.revert(id).await?;
         }
 
         Ok(())
     }
 
-    #[traced_test]
     #[tokio::test]
     async fn fuzz_calculate_max_short() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob. Alice
