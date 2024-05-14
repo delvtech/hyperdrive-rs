@@ -341,7 +341,12 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        self.wallet.base += log.base_amount.into();
+        // We ensure trades here are executed as base
+        // Panic here since we pass as_base=True in the call.
+        if !log.as_base {
+            panic!("Trades are expected to be executed as base.")
+        }
+        self.wallet.base += log.amount.into();
         self.wallet.withdrawal_shares += log.withdrawal_share_amount.into();
 
         Ok(())
@@ -395,7 +400,12 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             logs.first().cloned()
         };
         if let Some(log) = log {
-            self.wallet.base += log.base_amount.into();
+            // We ensure trades here are executed as base
+            // Panic here since we pass as_base=True in the call.
+            if !log.as_base {
+                panic!("Trades are expected to be executed as base.")
+            }
+            self.wallet.base += log.amount.into();
             self.wallet.withdrawal_shares -= log.withdrawal_share_amount.into();
         }
 
