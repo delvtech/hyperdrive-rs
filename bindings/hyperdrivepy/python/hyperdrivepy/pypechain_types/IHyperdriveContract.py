@@ -48,7 +48,7 @@ from web3.exceptions import FallbackNotFound
 from web3.types import ABI, ABIFunction, BlockIdentifier, CallOverride, EventData, TxParams
 
 from .IHyperdriveTypes import Checkpoint, Fees, MarketState, Options, PoolConfig, PoolInfo, WithdrawPool
-from .utilities import dataclass_to_tuple, get_abi_input_types, rename_returned_types
+from .utilities import dataclass_to_tuple, get_abi_input_types, rename_returned_types, try_bytecode_hexbytes
 
 structs = {
     "Options": Options,
@@ -6495,8 +6495,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "destination", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "assetId", "type": "uint256", "indexed": True, "internalType": "uint256"},
                 {"name": "maturityTime", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "bondAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
             ],
@@ -6510,8 +6510,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "destination", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "assetId", "type": "uint256", "indexed": True, "internalType": "uint256"},
                 {"name": "maturityTime", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "basePayment", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "bondAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
@@ -6523,7 +6523,9 @@ ihyperdrive_abi: ABI = cast(
             "name": "CollectGovernanceFee",
             "inputs": [
                 {"name": "collector", "type": "address", "indexed": True, "internalType": "address"},
-                {"name": "fees", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
             ],
             "anonymous": False,
         },
@@ -6559,7 +6561,7 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "provider", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "lpAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "apr", "type": "uint256", "indexed": False, "internalType": "uint256"},
             ],
@@ -6572,8 +6574,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "trader", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "assetId", "type": "uint256", "indexed": True, "internalType": "uint256"},
                 {"name": "maturityTime", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "bondAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
             ],
@@ -6586,8 +6588,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "trader", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "assetId", "type": "uint256", "indexed": True, "internalType": "uint256"},
                 {"name": "maturityTime", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "baseProceeds", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "bondAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
@@ -6616,8 +6618,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "provider", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "destination", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "withdrawalShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
             ],
             "anonymous": False,
@@ -6629,8 +6631,8 @@ ihyperdrive_abi: ABI = cast(
                 {"name": "provider", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "destination", "type": "address", "indexed": True, "internalType": "address"},
                 {"name": "lpAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "baseAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
-                {"name": "vaultShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "amount", "type": "uint256", "indexed": False, "internalType": "uint256"},
+                {"name": "vaultSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "asBase", "type": "bool", "indexed": False, "internalType": "bool"},
                 {"name": "withdrawalShareAmount", "type": "uint256", "indexed": False, "internalType": "uint256"},
                 {"name": "lpSharePrice", "type": "uint256", "indexed": False, "internalType": "uint256"},
@@ -6712,7 +6714,7 @@ class IHyperdriveContract(Contract):
     """A web3.py Contract class for the IHyperdrive contract."""
 
     abi: ABI = ihyperdrive_abi
-    bytecode: bytes = HexBytes(ihyperdrive_bytecode)
+    bytecode: bytes | None = try_bytecode_hexbytes(ihyperdrive_bytecode, "ihyperdrive")
 
     def __init__(self, address: ChecksumAddress | None = None) -> None:
         try:
