@@ -325,6 +325,15 @@ fn clone_repo(url: &str, branch: &str, path: &Path) -> Result<()> {
 fn checkout_branch(git_ref: &str, repo_path: &Path) -> Result<()> {
     let mut status = Command::new("git")
         .current_dir(repo_path)
+        .args(["fetch"])
+        .status()?;
+
+    if !status.success() {
+        eyre::bail!("Failed to fetch in repository at {:?}", repo_path);
+    }
+
+    status = Command::new("git")
+        .current_dir(repo_path)
         .args(["checkout", git_ref])
         .status()?;
 
