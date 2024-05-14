@@ -584,7 +584,7 @@ mod tests {
         // the pool. Bob is funded with plenty of capital to ensure we can execute
         // the absolute maximum short.
         let mut rng = thread_rng();
-        
+
         for _ in 0..*FUZZ_RUNS {
             let chain = TestChain::new().await?;
             let mut alice = chain.alice().await?;
