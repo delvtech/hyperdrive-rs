@@ -433,10 +433,11 @@ impl State {
         } else {
             return None;
         };
+        let curve_fee_base = self.open_short_curve_fee(bond_amount);
         let share_reserves = self.share_reserves()
             - (principal
-                - (self.open_short_curve_fee(bond_amount)
-                    - self.open_short_governance_fee(bond_amount))
+                - (curve_fee_base
+                    - self.open_short_governance_fee(bond_amount, Some(curve_fee_base)))
                     / self.vault_share_price());
         let exposure = {
             let checkpoint_exposure: FixedPoint = checkpoint_exposure.max(I256::zero()).into();

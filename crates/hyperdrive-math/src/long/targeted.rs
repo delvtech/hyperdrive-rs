@@ -216,7 +216,7 @@ impl State {
         let price = self.calculate_spot_price_after_long(base_amount, Some(bond_amount))?;
         let price_derivative = self.price_after_long_derivative(base_amount, bond_amount)?;
         // The actual equation we want to represent is:
-        // r' = -p' / (t \cdot p^2)
+        // r' = -p' / (t p^2)
         // We can do a trick to return a positive-only version and
         // indicate that it should be negative in the fn name.
         // We use price * price instead of price.pow(fixed!(2e18)) to avoid error introduced by pow.
@@ -229,43 +229,50 @@ impl State {
     /// is equal to
     ///
     /// $$
-    /// p(\Delta z) = (\frac{\mu \cdot (z_{0} + \Delta z - (\zeta_{0} + \Delta \zeta))}{y - \Delta y})^{t_{s}}
+    /// p(\Delta z) = \left( \frac{\mu \cdot
+    ///     (z_{0} + \Delta z - (\zeta_{0} + \Delta \zeta))}
+    ///     {y - \Delta y} \right)^{t_{s}}
     /// $$
     ///
     /// where $t_{s}$ is the time stretch constant and $z_{e,0}$ is the initial
     /// effective share reserves, and $\zeta$ is the zeta adjustment.
     /// The zeta adjustment is constant when opening a long, i.e.
     /// $\Delta \zeta = 0$, so we drop the subscript. Equivalently, for some
-    /// amount of `delta_base`$= x$ provided to open a long, we can write:
+    /// amount of `delta_base`$= \Delta x$ provided to open a long, we can write:
     ///
     /// $$
-    /// p(x) = (\frac{\mu \cdot (z_{e,0} + \frac{x}{c} - g(x) - \zeta)}{y_0 - y(x)})^{t_{s}}
+    /// p(\Delta x) = \left(
+    ///     \frac{\mu (z_{0} + \frac{1}{c}
+    ///     \cdot \left( \Delta x - \Phi_{g,ol}(\Delta x) \right) - \zeta)}
+    ///     {y_0 - y(\Delta x)}
+    /// \right)^{t_{s}}
     /// $$
     ///
-    /// where $g(x)$ is the [open_long_governance_fee](long::fees::open_long_governance_fee),
-    /// $y(x)$ is the [long_amount](long::open::calculate_open_long),
-    ///
+    /// where $\Phi_{g,ol}(\Delta x)$ is the [open_long_governance_fee](long::fees::open_long_governance_fee),
+    /// $y(\Delta x)$ is the [bond_amount](long::open::calculate_open_long),
     ///
     /// To compute the derivative, we first define some auxiliary variables:
     ///
     /// $$
-    /// a(x) = \mu (z_{0} + \frac{x}{c} - g(x) - \zeta) \\
-    /// b(x) = y_0 - y(x) \\
-    /// v(x) = \frac{a(x)}{b(x)}
+    /// a(\Delta x) &= \mu (z_{0} + \frac{\Delta x}{c} - \frac{\Phi_{g,ol}(\Delta x)}{c} - \zeta) \\
+    ///     &= \mu \left( z_{e,0} + \frac{\Delta x}{c} - \frac{\Phi_{g,ol}(\Delta x)}{c} \right) \\
+    /// b(\Delta x) &= y_0 - y(\Delta x) \\
+    /// v(\Delta x) &= \frac{a(\Delta x)}{b(\Delta x)}
     /// $$
     ///
-    /// and thus $p(x) = v(x)^t_{s}$. Given these, we can write out intermediate derivatives:
+    /// and thus $p(\Delta x) = v(\Delta x)^{t_{s}}$.
+    /// Given these, we can write out intermediate derivatives:
     ///
     /// $$
-    /// a'(x) = \frac{\mu}{c} - g'(x) \\
-    /// b'(x) = -y'(x) \\
-    /// v'(x) = \frac{b(x) \cdot a'(x) - a(x) \cdot b'(x)}{b(x)^2}
+    /// a'(\Delta x) &= \frac{\mu}{c} (1 - \Phi_{g,ol}'(\Delta x)) \\
+    /// b'(\Delta x) &= -y'(\Delta x) \\
+    /// v'(\Delta x) &= \frac{b(\Delta x) \cdot a'(\Delta x) - a(\Delta x) \cdotb'(\Delta x)}{b(\Delta x)^2}
     /// $$
     ///
     /// And finally, the price after long derivative is:
     ///
     /// $$
-    /// p'(x) = v'(x) \cdot t_{s} \cdot v(x)^(t_{s} - 1)
+    /// p'(\Delta x) = v'(\Delta x) \cdot t_{s} \cdot v(\Delta x)^{(t_{s} - 1)}
     /// $$
     ///
     fn price_after_long_derivative(
@@ -273,23 +280,28 @@ impl State {
         base_amount: FixedPoint,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        // g'(x)
+        // g'(x) = \phi_g \phi_c (1 - p_0)
         let gov_fee_derivative = self.governance_lp_fee()
             * self.curve_fee()
             * (fixed!(1e18) - self.calculate_spot_price());
 
-        // a(x) = mu * (z_{e,0} + x/c - g(x))
+        // a(x) = mu * (z_{e,0} + 1/c (x - g(x))
         let inner_numerator = self.mu()
-            * (self.ze() + base_amount / self.vault_share_price()
-                - self.open_long_governance_fee(base_amount));
+            * (self.ze()
+                + (base_amount - self.open_long_governance_fee(base_amount, None))
+                    .div_down(self.vault_share_price()));
 
-        // a'(x) = mu / c - g'(x)
-        let inner_numerator_derivative = self.mu() / self.vault_share_price() - gov_fee_derivative;
+        // a'(x) = (mu / c) (1 - g'(x))
+        let inner_numerator_derivative = self
+            .mu()
+            .mul_div_down(fixed!(1e18) - gov_fee_derivative, self.vault_share_price());
+        //(self.mu() / self.vault_share_price()) * (fixed!(1e18) - gov_fee_derivative);
 
         // b(x) = y_0 - y(x)
         let inner_denominator = self.bond_reserves() - bond_amount;
 
         // b'(x) = -y'(x)
+        // -b'(x) = y'(x)
         let long_amount_derivative = match self.long_amount_derivative(base_amount) {
             Some(derivative) => derivative,
             None => return Err(eyre!("long_amount_derivative failure.")),
@@ -332,7 +344,7 @@ impl State {
         let base_delta =
             (ending_share_reserves - self.effective_share_reserves()) * self.vault_share_price();
         let bond_delta =
-            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fees(base_delta);
+            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fee(base_delta);
         (base_delta, bond_delta)
     }
 }
@@ -348,7 +360,6 @@ mod tests {
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
 
-    #[ignore]
     #[traced_test]
     #[tokio::test]
     async fn test_calculate_targeted_long_with_budget() -> Result<()> {
@@ -363,17 +374,14 @@ mod tests {
         let allowable_rate_error = fixed!(1e11);
         let num_newton_iters = 7;
 
-        // Initialize a test chain.
-        let chain = TestChain::new().await?;
-        let mut alice = chain.alice().await?;
-        let mut bob = chain.bob().await?;
-        let config = bob.get_config().clone();
-
         // Fuzz test
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
-            // Snapshot the chain.
-            let id = chain.snapshot().await?;
+            // Initialize a test chain and agents.
+            let chain = TestChain::new().await?;
+            let mut alice = chain.alice().await?;
+            let mut bob = chain.bob().await?;
+            let config = bob.get_config().clone();
 
             // Fund Alice and Bob.
             // Large budget for initializing the pool.
@@ -526,11 +534,6 @@ mod tests {
                     target_rate
                 );
             }
-
-            // Revert to the snapshot and reset the agent's wallets.
-            chain.revert(id).await?;
-            alice.reset(Default::default());
-            bob.reset(Default::default());
         }
 
         Ok(())

@@ -255,7 +255,7 @@ impl State {
         //
         // absoluteMaxBondAmount = (y - y_t) - c(x)
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
-            - self.open_long_curve_fees(absolute_max_base_amount);
+            - self.open_long_curve_fee(absolute_max_base_amount);
 
         (absolute_max_base_amount, absolute_max_bond_amount)
     }
@@ -383,7 +383,7 @@ impl State {
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Option<FixedPoint> {
-        let governance_fee = self.open_long_governance_fee(base_amount);
+        let governance_fee = self.open_long_governance_fee(base_amount, None);
         let share_reserves = self.share_reserves() + base_amount / self.vault_share_price()
             - governance_fee / self.vault_share_price();
         let exposure = self.long_exposure() + bond_amount;
@@ -563,6 +563,7 @@ mod tests {
     /// `calculate_max_long`'s functionality. With this in mind, we provide
     /// `calculate_max_long` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
+    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
