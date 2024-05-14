@@ -488,6 +488,7 @@ impl Chain {
                 (
                     FactoryConfig {
                         governance: address,
+                        deployer_coordinator_manager: config.admin,
                         hyperdrive_governance: config.admin,
                         default_pausers: vec![config.admin],
                         fee_collector: config.admin,
