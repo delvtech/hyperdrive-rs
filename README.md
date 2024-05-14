@@ -31,8 +31,7 @@ against smart contracts for implemented functions, which demonstrates parity
 between the two implementations. This is a work-in-progress and not all
 Hyperdrive features are present.
 
-Python bindings for this libarary can be accessed via
-[agent0](https://github.com/delvtech/agent0).
+Python bindings for this libarary can be accessed [here](bindings/hyperdrivepy/).
 
 # Resources
 

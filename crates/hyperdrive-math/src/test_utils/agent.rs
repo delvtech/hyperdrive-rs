@@ -325,7 +325,12 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        self.wallet.base += log.base_amount.into();
+        // We ensure trades here are executed as base
+        // Panic here since we pass as_base=True in the call.
+        if !log.as_base {
+            panic!("Trades are expected to be executed as base.")
+        }
+        self.wallet.base += log.amount.into();
 
         Ok(())
     }
@@ -382,9 +387,14 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .or_default() += log.bond_amount.into();
 
         // Decrease the wallet's base balance.
-        self.wallet.base -= log.base_amount.into();
+        // We ensure trades here are executed as base
+        // Panic here since we pass as_base=True in the call.
+        if !log.as_base {
+            panic!("Trades are expected to be executed as base.")
+        }
+        self.wallet.base -= log.amount.into();
 
-        Ok((log.maturity_time.into(), log.base_amount.into()))
+        Ok((log.maturity_time.into(), log.amount.into()))
     }
 
     #[instrument(skip(self))]
@@ -448,8 +458,13 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        self.wallet.base += log.base_amount.into();
+        // We ensure trades here are executed as base
+        // Panic here since we pass as_base=True in the call.
+        if !log.as_base {
+            panic!("Trades are expected to be executed as base.")
+        }
+        self.wallet.base += log.amount.into();
 
-        Ok(log.base_amount.into())
+        Ok(log.amount.into())
     }
 }
