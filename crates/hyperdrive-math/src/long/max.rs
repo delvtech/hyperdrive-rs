@@ -502,7 +502,6 @@ mod tests {
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::{calculate_effective_share_reserves, test_utils::agent::HyperdriveMathAgent};
@@ -563,15 +562,25 @@ mod tests {
     /// `calculate_max_long`'s functionality. With this in mind, we provide
     /// `calculate_max_long` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
-    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
+        let alice = chain.alice().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Gen a random state.
+            let mut state = rng.gen::<State>();
+
+            // Make sure maturity times are in the future.
+            let current_block_timestamp = alice.now().await?;
+            state.info.long_average_maturity_time += current_block_timestamp;
+            state.info.short_average_maturity_time += current_block_timestamp;
+
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
                 let sign = rng.gen::<bool>();
@@ -581,8 +590,13 @@ mod tests {
                     I256::try_from(value).unwrap()
                 }
             };
+            let max_iterations = 7usize;
             let actual = panic::catch_unwind(|| {
-                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+                state.calculate_max_long(
+                    U256::MAX,
+                    checkpoint_exposure,
+                    Some(max_iterations.into()),
+                )
             });
             match chain
                 .mock_hyperdrive_math()
@@ -602,7 +616,7 @@ mod tests {
                         governance_lp_fee: state.config.fees.governance_lp,
                     },
                     checkpoint_exposure,
-                    uint256!(7),
+                    max_iterations.into(),
                 )
                 .call()
                 .await
@@ -612,6 +626,9 @@ mod tests {
                 }
                 Err(_) => assert!(actual.is_err()),
             }
+
+            // Reset chain snapshot.
+            chain.revert(id).await?;
         }
 
         Ok(())
@@ -620,7 +637,6 @@ mod tests {
     /// This test empirically tests the derivative of `long_amount_derivative`
     /// by calling `calculate_open_long` at two points and comparing the empirical
     /// result with the output of `long_amount_derivative`.
-    #[traced_test]
     #[tokio::test]
     async fn test_max_long_derivative() -> Result<()> {
         let mut rng = thread_rng();
@@ -686,7 +702,6 @@ mod tests {
         Ok(())
     }
 
-    #[traced_test]
     #[tokio::test]
     async fn test_calculate_max_long() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob. Alice

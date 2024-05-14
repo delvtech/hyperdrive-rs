@@ -6,7 +6,7 @@ pub mod wrappers;
 pub mod linked_factory {
     use std::sync::Arc;
 
-    use ethers::{abi::Abi, prelude::*, types::Bytes, utils::hex};
+    use ethers::{abi::Abi, prelude::*, utils::hex};
     use ethers_solc::utils::library_hash_placeholder;
 
     /// Creates a contract factory with the given ABI and bytecode, linking the given libraries

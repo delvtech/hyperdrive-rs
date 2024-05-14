@@ -286,7 +286,6 @@ mod tests {
         chain::{ChainClient, TestChain},
         constants::{BOB, FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
@@ -504,7 +503,6 @@ mod tests {
     /// This test empirically tests `short_deposit_derivative` by calling
     /// `calculate_open_short` at two points and comparing the empirical result
     /// with the output of `short_deposit_derivative`.
-    #[traced_test]
     #[tokio::test]
     async fn fuzz_short_deposit_derivative() -> Result<()> {
         let mut rng = thread_rng();

@@ -332,7 +332,6 @@ impl YieldSpace for State {
 
 #[cfg(test)]
 mod tests {
-    use eyre::Result;
     use rand::thread_rng;
 
     use super::*;

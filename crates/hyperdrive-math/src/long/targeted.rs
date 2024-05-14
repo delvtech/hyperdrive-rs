@@ -355,12 +355,10 @@ mod tests {
     use fixed_point_macros::uint256;
     use rand::{thread_rng, Rng};
     use test_utils::{chain::TestChain, constants::FUZZ_RUNS};
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
 
-    #[traced_test]
     #[tokio::test]
     async fn test_calculate_targeted_long_with_budget() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob.
