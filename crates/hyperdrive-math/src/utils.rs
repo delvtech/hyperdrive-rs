@@ -198,7 +198,10 @@ mod tests {
             let max_long = match panic::catch_unwind(|| {
                 state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
             }) {
-                Ok(max_long) => max_long,
+                Ok(max_long) => match max_long {
+                    Ok(max_long) => max_long,
+                    Err(_) => continue,
+                },
                 Err(_) => continue, // Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;

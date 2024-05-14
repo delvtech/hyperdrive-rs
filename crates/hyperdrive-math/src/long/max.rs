@@ -1,4 +1,5 @@
 use ethers::types::I256;
+use eyre::{eyre, Result};
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, int256};
 
@@ -44,17 +45,16 @@ impl State {
         budget: F,
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let budget = budget.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
         // Check the spot price after opening a minimum long is less than the
         // max spot price
-        let spot_price_after_min_long = self
-            .calculate_spot_price_after_long(self.minimum_transaction_amount(), None)
-            .unwrap();
+        let spot_price_after_min_long =
+            self.calculate_spot_price_after_long(self.minimum_transaction_amount(), None)?;
         if spot_price_after_min_long > self.calculate_max_spot_price() {
-            return fixed!(0);
+            return Ok(fixed!(0));
         }
 
         // Calculate the maximum long that brings the spot price to 1. If the pool is
@@ -68,7 +68,7 @@ impl State {
             )
             .is_some()
         {
-            return absolute_max_base_amount.min(budget);
+            return Ok(absolute_max_base_amount.min(budget));
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
@@ -96,28 +96,29 @@ impl State {
         if max_base_amount < self.minimum_transaction_amount() {
             max_base_amount = self.minimum_transaction_amount();
         }
-        let mut maybe_solvency = self.solvency_after_long(
+        let mut solvency = match self.solvency_after_long(
             max_base_amount,
-            self.calculate_open_long(max_base_amount).unwrap(),
+            self.calculate_open_long(max_base_amount)?,
             checkpoint_exposure,
-        );
-        if maybe_solvency.is_none() {
-            panic!("Initial guess in `calculate_max_long` is insolvent.");
-        }
-        let mut solvency = maybe_solvency.unwrap();
+        ) {
+            Some(solvency) => solvency,
+            None => return Err(eyre!("Initial guess in `calculate_max_long` is insolvent.")),
+        };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // If the max base amount is equal to or exceeds the absolute max,
             // we've gone too far and the calculation deviated from reality at
             // some point.
             if max_base_amount >= absolute_max_base_amount {
-                panic!("Reached absolute max bond amount in `calculate_max_long`.");
+                return Err(eyre!(
+                    "Reached absolute max bond amount in `calculate_max_long`."
+                ));
             }
 
             // If the max base amount exceeds the budget, we know that the
             // entire budget can be consumed without running into solvency
             // constraints.
             if max_base_amount >= budget {
-                return budget;
+                return Ok(budget);
             }
 
             // TODO: It may be better to gracefully handle crossing over the
@@ -129,12 +130,12 @@ impl State {
             // candidate solution, we check to see if the pool is solvent after
             // a long is opened with the candidate amount. If the pool isn't
             // solvent, then we're done.
-            let maybe_derivative = self.solvency_after_long_derivative(max_base_amount);
-            if maybe_derivative.is_none() {
-                break;
-            }
-            let mut possible_max_base_amount =
-                max_base_amount + solvency / maybe_derivative.unwrap();
+            let derivative = match self.solvency_after_long_derivative(max_base_amount) {
+                Some(derivative) => derivative,
+                None => break,
+            };
+
+            let mut possible_max_base_amount = max_base_amount + solvency / derivative;
 
             // possible_max_base_amount might be less than minimum transaction amount.
             // we clamp here if so
@@ -142,34 +143,34 @@ impl State {
                 possible_max_base_amount = self.minimum_transaction_amount();
             }
 
-            maybe_solvency = self.solvency_after_long(
+            solvency = match self.solvency_after_long(
                 possible_max_base_amount,
-                self.calculate_open_long(possible_max_base_amount).unwrap(),
+                self.calculate_open_long(possible_max_base_amount)?,
                 checkpoint_exposure,
-            );
-            if let Some(s) = maybe_solvency {
-                solvency = s;
-                max_base_amount = possible_max_base_amount;
-            } else {
-                break;
-            }
+            ) {
+                Some(s) => s,
+                None => break,
+            };
+            max_base_amount = possible_max_base_amount;
         }
 
         // If the max base amount is less than the minimum transaction amount, we return 0 as the max long.
         if max_base_amount <= self.minimum_transaction_amount() {
-            return fixed!(0);
+            return Ok(fixed!(0));
         }
 
         // Ensure that the final result is less than the absolute max and clamp
         // to the budget.
         if max_base_amount >= absolute_max_base_amount {
-            panic!("Reached absolute max bond amount in `calculate_max_long`.");
+            return Err(eyre!(
+                "Reached absolute max bond amount in `calculate_max_long`."
+            ));
         }
         if max_base_amount >= budget {
-            return budget;
+            return Ok(budget);
         }
 
-        max_base_amount
+        Ok(max_base_amount)
     }
 
     /// Calculates the largest long that can be opened without buying bonds at a
@@ -494,7 +495,6 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use eyre::Result;
     use fixed_point_macros::uint256;
     use hyperdrive_wrappers::wrappers::mock_hyperdrive_math::MaxTradeParams;
     use rand::{thread_rng, Rng};
@@ -549,7 +549,7 @@ mod tests {
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
@@ -581,6 +581,7 @@ mod tests {
             state.info.long_average_maturity_time += current_block_timestamp;
             state.info.short_average_maturity_time += current_block_timestamp;
 
+            // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
                 let sign = rng.gen::<bool>();
@@ -590,7 +591,10 @@ mod tests {
                     I256::try_from(value).unwrap()
                 }
             };
-            let max_iterations = 7usize;
+
+            // Check Solidity against Rust.
+            let max_iterations = 8usize;
+            // Need to catch panics because of FixedPoint.
             let actual = panic::catch_unwind(|| {
                 state.calculate_max_long(
                     U256::MAX,
@@ -622,7 +626,10 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, ..)) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected_base_amount));
+                    assert_eq!(
+                        actual.unwrap().unwrap(),
+                        FixedPoint::from(expected_base_amount)
+                    );
                 }
                 Err(_) => assert!(actual.is_err()),
             }
@@ -634,7 +641,7 @@ mod tests {
         Ok(())
     }
 
-    /// This test empirically tests the derivative of `long_amount_derivative`
+    /// This test empirically tests the derivative returned by `long_amount_derivative`
     /// by calling `calculate_open_long` at two points and comparing the empirical
     /// result with the output of `long_amount_derivative`.
     #[tokio::test]
