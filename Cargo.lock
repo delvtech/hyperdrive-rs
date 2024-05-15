@@ -1096,7 +1096,6 @@ dependencies = [
  "ethers",
  "eyre",
  "fixed-point-macros",
- "hyperdrive-wrappers",
  "rand",
  "test-utils",
  "tokio",
