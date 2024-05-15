@@ -1536,7 +1536,6 @@ dependencies = [
  "ethers",
  "ethers-solc",
  "eyre",
- "fixed-point",
  "heck",
  "lazy_static",
  "rand",
