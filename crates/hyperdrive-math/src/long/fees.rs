@@ -15,8 +15,8 @@ impl State {
     /// $$
     pub fn open_long_curve_fee(&self, base_amount: FixedPoint) -> FixedPoint {
         // NOTE: Round up to overestimate the curve fee.
-        (fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
-            .mul_up(self.curve_fee())
+        self.curve_fee()
+            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
             .mul_up(base_amount)
     }
 
@@ -38,9 +38,9 @@ impl State {
             None => self.open_long_curve_fee(base_amount),
         };
         // NOTE: Round down to underestimate the governance curve fee.
-        self.calculate_spot_price()
-            .mul_down(curve_fee)
+        curve_fee
             .mul_down(self.governance_lp_fee())
+            .mul_down(self.calculate_spot_price())
     }
 
     /// Calculates the curve fee paid when closing longs for a given bond amount.
