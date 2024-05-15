@@ -57,9 +57,9 @@ impl State {
             return Ok(fixed!(0));
         }
 
-        // Calculate the maximum long that brings the spot price to 1. If the pool is
-        // solvent after opening this long, then we're done.
-        let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long();
+        // Calculate the maximum long that brings the spot price to 1.
+        // If the pool is solvent after opening this long, then we're done.
+        let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long()?;
         if self
             .solvency_after_long(
                 absolute_max_base_amount,
@@ -166,17 +166,14 @@ impl State {
                 "Reached absolute max bond amount in `calculate_max_long`."
             ));
         }
-        if max_base_amount >= budget {
-            return Ok(budget);
-        }
 
-        Ok(max_base_amount)
+        Ok(max_base_amount.min(budget))
     }
 
     /// Calculates the largest long that can be opened without buying bonds at a
     /// negative interest rate. This calculation does not take Hyperdrive's
     /// solvency constraints into account and shouldn't be used directly.
-    fn absolute_max_long(&self) -> (FixedPoint, FixedPoint) {
+    fn absolute_max_long(&self) -> Result<(FixedPoint, FixedPoint)> {
         // We are targeting the pool's max spot price of:
         //
         // p_max = (1 - flatFee) / (1 + curveFee * (1 / p_0 - 1) * (1 - flatFee))
@@ -207,19 +204,21 @@ impl State {
         //               ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** ((1 - t_s) / t_s))
         //           )
         //       ) ** (1 / (1 - t_s))
-        let inner = (self.k_down()
-            / (self
-                .vault_share_price()
-                .div_up(self.initial_vault_share_price())
-                + ((fixed!(1e18)
-                    + self
-                        .curve_fee()
-                        .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
-                        .mul_up(fixed!(1e18) - self.flat_fee()))
-                .div_up(fixed!(1e18) - self.flat_fee()))
-                .pow((fixed!(1e18) - self.time_stretch()) / (self.time_stretch()))))
-        .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()));
-        let target_share_reserves = inner / self.initial_vault_share_price();
+        let inner = self
+            .k_down()
+            .div_down(
+                self.vault_share_price()
+                    .div_up(self.initial_vault_share_price())
+                    + ((fixed!(1e18)
+                        + self
+                            .curve_fee()
+                            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
+                            .mul_up(fixed!(1e18) - self.flat_fee()))
+                    .div_up(fixed!(1e18) - self.flat_fee()))
+                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch())),
+            )
+            .pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()));
+        let target_share_reserves = inner.div_down(self.initial_vault_share_price());
 
         // Now that we have the target share reserves, we can calculate the
         // target bond reserves using the formula:
@@ -229,36 +228,33 @@ impl State {
         // `inner` as defined above is `mu * z_t` so we calculate y_t as
         //
         // y_t = inner * ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** (1 / t_s)
-        let target_bond_reserves = inner
-            * ((fixed!(1e18)
-                + self.curve_fee()
-                    * (fixed!(1e18) / (self.calculate_spot_price()) - fixed!(1e18))
-                    * (fixed!(1e18) - self.flat_fee()))
-                / (fixed!(1e18) - self.flat_fee()))
-            .pow(fixed!(1e18).div_up(self.time_stretch()));
+        let fee_adjustment = self.curve_fee()
+            * (fixed!(1e18) / self.calculate_spot_price() - fixed!(1e18))
+            * (fixed!(1e18) - self.flat_fee());
+        let target_bond_reserves = ((fixed!(1e18) + fee_adjustment)
+            / (fixed!(1e18) - self.flat_fee()))
+        .pow(fixed!(1e18).div_up(self.time_stretch()))
+            * inner;
 
-        // The absolute max base amount is given by:
-        //
-
-        // Here, the target share reserves may be smaller than the effective share reserves.
-        // Instead of throwing a panic error in fixed point, we catch this here and throw a
-        // descriptive panic.
-        // TODO this likely should throw an err.
+        // Catch if the target share reserves are smaller than the effective share reserves.
         let effective_share_reserves = self.effective_share_reserves();
         if target_share_reserves < effective_share_reserves {
-            panic!("target share reserves less than effective share reserves");
+            return Err(eyre!(
+                "target share reserves less than effective share reserves"
+            ));
         }
 
+        // The absolute max base amount is given by:
+        // absolute_max_base_amount = (z_t - z_e) * c
         let absolute_max_base_amount =
             (target_share_reserves - effective_share_reserves) * self.vault_share_price();
 
         // The absolute max bond amount is given by:
-        //
-        // absoluteMaxBondAmount = (y - y_t) - c(x)
+        // absolute_max_bond_amount = (y - y_t) - Phi_c(absolute_max_base_amount)
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
             - self.open_long_curve_fee(absolute_max_base_amount);
 
-        (absolute_max_base_amount, absolute_max_bond_amount)
+        Ok((absolute_max_base_amount, absolute_max_bond_amount))
     }
 
     /// Calculates an initial guess of the max long that can be opened. This is a
@@ -545,7 +541,7 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap();
+                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
@@ -631,7 +627,7 @@ mod tests {
                         FixedPoint::from(expected_base_amount)
                     );
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
 
             // Reset chain snapshot.
