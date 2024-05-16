@@ -147,6 +147,23 @@ impl HyperdriveState {
         Ok(result)
     }
 
+    pub fn calculate_pool_deltas_after_open_long(&self, base_amount: &str) -> PyResult<String> {
+        let base_amount_fp = FixedPoint::from(U256::from_dec_str(base_amount).map_err(|_| {
+            PyErr::new::<PyValueError, _>("Failed to convert base_amount string to U256")
+        })?);
+        let result_fp = self
+            .state
+            .calculate_pool_deltas_after_open_long(base_amount_fp)
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!(
+                    "calculate_pool_deltas_after_open_long returned the error: {:?}",
+                    err
+                ))
+            })?;
+        let result = U256::from(result_fp).to_string();
+        Ok(result)
+    }
+
     pub fn calculate_close_long(
         &self,
         bond_amount: &str,

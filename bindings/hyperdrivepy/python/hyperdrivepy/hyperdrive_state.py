@@ -96,7 +96,7 @@ def calculate_solvency(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
 ) -> str:
-    """Get the pool's solvency.
+    """Calculate the pool's solvency.
 
     Arguments
     ---------
@@ -215,6 +215,32 @@ def calculate_open_long(
         The amount of bonds purchased.
     """
     return _get_interface(pool_config, pool_info).calculate_open_long(base_amount)
+
+
+def calculate_pool_deltas_after_open_long(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    base_amount: str,
+) -> str:
+    """Calculate the bond deltas to be applied to the pool after opening a long.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    base_amount: str (FixedPoint)
+        The amount of base used to open a long.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The amount of bonds to remove from the pool reserves.
+    """
+    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_open_long(base_amount)
 
 
 def calculate_close_long(
