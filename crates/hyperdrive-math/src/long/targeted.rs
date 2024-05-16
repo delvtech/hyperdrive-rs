@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::{State, YieldSpace};
 
@@ -352,7 +351,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use ethers::types::U256;
-    use fixed_point_macros::uint256;
+    use fixed_point::uint256;
     use rand::{thread_rng, Rng};
     use test_utils::{chain::TestChain, constants::FUZZ_RUNS};
 

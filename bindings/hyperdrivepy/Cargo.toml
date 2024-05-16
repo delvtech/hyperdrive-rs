@@ -1,12 +1,8 @@
 [package]
 name = "hyperdrivepy"
 edition = "2021"
-version = {workspace=true}
-authors = [
-    "Dylan Paiton",
-    "Matt Brown",
-    "Sheng Lundquist",
-]
+version = { workspace = true }
+authors = ["Dylan Paiton", "Matt Brown", "Sheng Lundquist"]
 description = "Python wrappers for the Hyperdrive AMM"
 
 [lib]
@@ -22,7 +18,6 @@ rand = "0.8.5"
 tokio = { version = "1", features = ["full"] }
 
 fixed-point = { path = "../../crates/fixed-point" }
-fixed-point-macros = { path = "../../crates/fixed-point-macros" }
 hyperdrive-math = { path = "../../crates/hyperdrive-math" }
 hyperdrive-wrappers = { path = "../../crates/hyperdrive-wrappers" }
 

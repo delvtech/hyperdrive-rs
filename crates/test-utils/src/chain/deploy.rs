@@ -7,8 +7,7 @@ use ethers::{
     types::{Address, I256, U256},
 };
 use eyre::Result;
-use fixed_point::FixedPoint;
-use fixed_point_macros::{fixed, uint256};
+use fixed_point::{fixed, uint256, FixedPoint};
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,

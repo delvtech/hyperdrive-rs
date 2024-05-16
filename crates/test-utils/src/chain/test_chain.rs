@@ -5,7 +5,7 @@
 use ethers::signers::{LocalWallet, Signer};
 use ethers::types::{Address, U256};
 use eyre::Result;
-use fixed_point_macros::uint256;
+use fixed_point::uint256;
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     lp_math::LPMath,

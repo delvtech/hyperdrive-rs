@@ -1,7 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::{fixed, uint256};
+use fixed_point::{fixed, uint256, FixedPoint};
 
 pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));

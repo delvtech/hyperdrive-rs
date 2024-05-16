@@ -6,7 +6,7 @@ use ethers::{
     types::{Address, Bytes},
 };
 use eyre::Result;
-use fixed_point_macros::uint256;
+use fixed_point::uint256;
 use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable,

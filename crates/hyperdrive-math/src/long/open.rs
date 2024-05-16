@@ -121,7 +121,7 @@ impl State {
 #[cfg(test)]
 mod tests {
     use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point_macros::{fixed, uint256};
+    use fixed_point::{fixed, uint256};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;

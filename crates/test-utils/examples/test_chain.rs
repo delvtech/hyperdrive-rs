@@ -1,6 +1,5 @@
 use eyre::Result;
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::fixed;
 use test_utils::chain::TestChain;
 
 #[tokio::main]

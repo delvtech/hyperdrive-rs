@@ -29,6 +29,5 @@ tracing = "0.1"
 
 # Workspace dependencies.
 fixed-point = { path = "../fixed-point" }
-fixed-point-macros = { path = "../fixed-point-macros" }
 hyperdrive-addresses = { path = "../hyperdrive-addresses" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }

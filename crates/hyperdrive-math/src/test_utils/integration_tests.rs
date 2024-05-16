@@ -3,8 +3,7 @@ mod tests {
 
     use ethers::{signers::LocalWallet, types::U256};
     use eyre::Result;
-    use fixed_point::FixedPoint;
-    use fixed_point_macros::{fixed, uint256};
+    use fixed_point::{fixed, uint256, FixedPoint};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;

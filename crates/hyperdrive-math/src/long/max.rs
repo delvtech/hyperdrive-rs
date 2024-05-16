@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::{fixed, int256};
+use fixed_point::{fixed, int256, FixedPoint};
 
 use crate::{State, YieldSpace};
 
@@ -491,7 +490,8 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use fixed_point_macros::uint256;
+    use eyre::Result;
+    use fixed_point::uint256;
     use hyperdrive_wrappers::wrappers::mock_hyperdrive_math::MaxTradeParams;
     use rand::{thread_rng, Rng};
     use test_utils::{

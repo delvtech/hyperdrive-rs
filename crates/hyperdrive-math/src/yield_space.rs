@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::calculate_effective_share_reserves;
 

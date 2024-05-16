@@ -1095,19 +1095,10 @@ version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
+ "lazy_static",
  "rand",
  "test-utils",
  "tokio",
-]
-
-[[package]]
-name = "fixed-point-macros"
-version = "0.15.5"
-dependencies = [
- "ethers",
- "fixed-point",
- "quote",
- "syn 2.0.48",
 ]
 
 [[package]]
@@ -1517,7 +1508,6 @@ dependencies = [
  "ethers",
  "eyre",
  "fixed-point",
- "fixed-point-macros",
  "hyperdrive-wrappers",
  "rand",
  "rand_chacha",
@@ -1550,7 +1540,6 @@ dependencies = [
  "ethers",
  "eyre",
  "fixed-point",
- "fixed-point-macros",
  "hyperdrive-math",
  "hyperdrive-wrappers",
  "pyo3",
@@ -3282,7 +3271,6 @@ dependencies = [
  "ethers",
  "eyre",
  "fixed-point",
- "fixed-point-macros",
  "hyperdrive-addresses",
  "hyperdrive-wrappers",
  "lazy_static",

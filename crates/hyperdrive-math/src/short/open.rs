@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
@@ -274,7 +273,7 @@ mod tests {
     use std::panic;
 
     use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point_macros::{fixed, int256, uint256};
+    use fixed_point::{fixed, int256, uint256};
     use hyperdrive_wrappers::wrappers::{
         ihyperdrive::{Checkpoint, Options},
         mock_erc4626::MockERC4626,

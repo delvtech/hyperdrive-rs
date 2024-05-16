@@ -1,6 +1,5 @@
 use ethers::types::U256;
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::{State, YieldSpace};
 

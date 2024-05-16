@@ -13,7 +13,6 @@ rand = "0.8.5"
 
 # Workspace dependencies
 fixed-point = { path = "../fixed-point" }
-fixed-point-macros = { path = "../fixed-point-macros" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
 
 [dev-dependencies]
