@@ -1,6 +1,6 @@
 mod long;
+mod lp;
 mod short;
-// mod lp;
 
 use ethers::core::types::{I256, U256};
 use fixed_point::FixedPoint;
@@ -20,6 +20,14 @@ impl HyperdriveState {
         Ok(HyperdriveState::new(state))
     }
 
+    pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {
+        let time_int = U256::from_dec_str(time)
+            .map_err(|_| PyErr::new::<PyValueError, _>("Failed to convert time string to U256"))?;
+        let result_int = self.state.to_checkpoint(time_int);
+        let result = result_int.to_string();
+        Ok(result)
+    }
+
     pub fn calculate_solvency(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_solvency();
         let result = U256::from(result_fp).to_string();
@@ -36,28 +44,6 @@ impl HyperdriveState {
         let result_fp = self.state.calculate_spot_rate();
         let result = U256::from(result_fp).to_string();
         Ok(result)
-    }
-
-    pub fn calculate_pool_deltas_after_add_liquidity(
-        &self,
-        contribution: &str,
-    ) -> PyResult<(String, String, String)> {
-        let contribution_fp = FixedPoint::from(U256::from_dec_str(contribution).map_err(|_| {
-            PyErr::new::<PyValueError, _>("Failed to convert contribution string to U256")
-        })?);
-        let (result_fp1, result_fp2, result_fp3) = self
-            .state
-            .calculate_pool_deltas_after_add_liquidity(contribution_fp)
-            .map_err(|err| {
-                PyErr::new::<PyValueError, _>(format!(
-                    "calculate_pool_deltas_after_add_liquidity returned the error: {:?}",
-                    err
-                ))
-            })?;
-        let result1 = U256::from(result_fp1).to_string();
-        let result2 = result_fp2.to_string();
-        let result3 = U256::from(result_fp3).to_string();
-        Ok((result1, result2, result3))
     }
 
     pub fn calculate_max_spot_price(&self) -> PyResult<String> {
@@ -131,14 +117,6 @@ impl HyperdriveState {
             .state
             .calculate_shares_out_given_bonds_in_down(amount_in_fp);
         let result = U256::from(result_fp).to_string();
-        Ok(result)
-    }
-
-    pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {
-        let time_int = U256::from_dec_str(time)
-            .map_err(|_| PyErr::new::<PyValueError, _>("Failed to convert time string to U256"))?;
-        let result_int = self.state.to_checkpoint(time_int);
-        let result = result_int.to_string();
         Ok(result)
     }
 }
