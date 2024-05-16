@@ -1,4 +1,5 @@
 use ethers::types::I256;
+use eyre::{eyre, Result};
 use fixed_point::FixedPoint;
 use fixed_point_macros::{fixed, int256};
 
@@ -44,22 +45,21 @@ impl State {
         budget: F,
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let budget = budget.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
         // Check the spot price after opening a minimum long is less than the
         // max spot price
-        let spot_price_after_min_long = self
-            .calculate_spot_price_after_long(self.minimum_transaction_amount(), None)
-            .unwrap();
+        let spot_price_after_min_long =
+            self.calculate_spot_price_after_long(self.minimum_transaction_amount(), None)?;
         if spot_price_after_min_long > self.calculate_max_spot_price() {
-            return fixed!(0);
+            return Ok(fixed!(0));
         }
 
-        // Calculate the maximum long that brings the spot price to 1. If the pool is
-        // solvent after opening this long, then we're done.
-        let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long();
+        // Calculate the maximum long that brings the spot price to 1.
+        // If the pool is solvent after opening this long, then we're done.
+        let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long()?;
         if self
             .solvency_after_long(
                 absolute_max_base_amount,
@@ -68,7 +68,7 @@ impl State {
             )
             .is_some()
         {
-            return absolute_max_base_amount.min(budget);
+            return Ok(absolute_max_base_amount.min(budget));
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
@@ -96,28 +96,29 @@ impl State {
         if max_base_amount < self.minimum_transaction_amount() {
             max_base_amount = self.minimum_transaction_amount();
         }
-        let mut maybe_solvency = self.solvency_after_long(
+        let mut solvency = match self.solvency_after_long(
             max_base_amount,
-            self.calculate_open_long(max_base_amount).unwrap(),
+            self.calculate_open_long(max_base_amount)?,
             checkpoint_exposure,
-        );
-        if maybe_solvency.is_none() {
-            panic!("Initial guess in `calculate_max_long` is insolvent.");
-        }
-        let mut solvency = maybe_solvency.unwrap();
+        ) {
+            Some(solvency) => solvency,
+            None => return Err(eyre!("Initial guess in `calculate_max_long` is insolvent.")),
+        };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // If the max base amount is equal to or exceeds the absolute max,
             // we've gone too far and the calculation deviated from reality at
             // some point.
             if max_base_amount >= absolute_max_base_amount {
-                panic!("Reached absolute max bond amount in `calculate_max_long`.");
+                return Err(eyre!(
+                    "Reached absolute max bond amount in `calculate_max_long`."
+                ));
             }
 
             // If the max base amount exceeds the budget, we know that the
             // entire budget can be consumed without running into solvency
             // constraints.
             if max_base_amount >= budget {
-                return budget;
+                return Ok(budget);
             }
 
             // TODO: It may be better to gracefully handle crossing over the
@@ -129,12 +130,12 @@ impl State {
             // candidate solution, we check to see if the pool is solvent after
             // a long is opened with the candidate amount. If the pool isn't
             // solvent, then we're done.
-            let maybe_derivative = self.solvency_after_long_derivative(max_base_amount);
-            if maybe_derivative.is_none() {
-                break;
-            }
-            let mut possible_max_base_amount =
-                max_base_amount + solvency / maybe_derivative.unwrap();
+            let derivative = match self.solvency_after_long_derivative(max_base_amount) {
+                Some(derivative) => derivative,
+                None => break,
+            };
+
+            let mut possible_max_base_amount = max_base_amount + solvency / derivative;
 
             // possible_max_base_amount might be less than minimum transaction amount.
             // we clamp here if so
@@ -142,40 +143,37 @@ impl State {
                 possible_max_base_amount = self.minimum_transaction_amount();
             }
 
-            maybe_solvency = self.solvency_after_long(
+            solvency = match self.solvency_after_long(
                 possible_max_base_amount,
-                self.calculate_open_long(possible_max_base_amount).unwrap(),
+                self.calculate_open_long(possible_max_base_amount)?,
                 checkpoint_exposure,
-            );
-            if let Some(s) = maybe_solvency {
-                solvency = s;
-                max_base_amount = possible_max_base_amount;
-            } else {
-                break;
-            }
+            ) {
+                Some(s) => s,
+                None => break,
+            };
+            max_base_amount = possible_max_base_amount;
         }
 
         // If the max base amount is less than the minimum transaction amount, we return 0 as the max long.
         if max_base_amount <= self.minimum_transaction_amount() {
-            return fixed!(0);
+            return Ok(fixed!(0));
         }
 
         // Ensure that the final result is less than the absolute max and clamp
         // to the budget.
         if max_base_amount >= absolute_max_base_amount {
-            panic!("Reached absolute max bond amount in `calculate_max_long`.");
-        }
-        if max_base_amount >= budget {
-            return budget;
+            return Err(eyre!(
+                "Reached absolute max bond amount in `calculate_max_long`."
+            ));
         }
 
-        max_base_amount
+        Ok(max_base_amount.min(budget))
     }
 
     /// Calculates the largest long that can be opened without buying bonds at a
     /// negative interest rate. This calculation does not take Hyperdrive's
     /// solvency constraints into account and shouldn't be used directly.
-    fn absolute_max_long(&self) -> (FixedPoint, FixedPoint) {
+    fn absolute_max_long(&self) -> Result<(FixedPoint, FixedPoint)> {
         // We are targeting the pool's max spot price of:
         //
         // p_max = (1 - flatFee) / (1 + curveFee * (1 / p_0 - 1) * (1 - flatFee))
@@ -206,19 +204,21 @@ impl State {
         //               ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** ((1 - t_s) / t_s))
         //           )
         //       ) ** (1 / (1 - t_s))
-        let inner = (self.k_down()
-            / (self
-                .vault_share_price()
-                .div_up(self.initial_vault_share_price())
-                + ((fixed!(1e18)
-                    + self
-                        .curve_fee()
-                        .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
-                        .mul_up(fixed!(1e18) - self.flat_fee()))
-                .div_up(fixed!(1e18) - self.flat_fee()))
-                .pow((fixed!(1e18) - self.time_stretch()) / (self.time_stretch()))))
-        .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()));
-        let target_share_reserves = inner / self.initial_vault_share_price();
+        let inner = self
+            .k_down()
+            .div_down(
+                self.vault_share_price()
+                    .div_up(self.initial_vault_share_price())
+                    + ((fixed!(1e18)
+                        + self
+                            .curve_fee()
+                            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
+                            .mul_up(fixed!(1e18) - self.flat_fee()))
+                    .div_up(fixed!(1e18) - self.flat_fee()))
+                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch())),
+            )
+            .pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()));
+        let target_share_reserves = inner.div_down(self.initial_vault_share_price());
 
         // Now that we have the target share reserves, we can calculate the
         // target bond reserves using the formula:
@@ -228,36 +228,33 @@ impl State {
         // `inner` as defined above is `mu * z_t` so we calculate y_t as
         //
         // y_t = inner * ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** (1 / t_s)
-        let target_bond_reserves = inner
-            * ((fixed!(1e18)
-                + self.curve_fee()
-                    * (fixed!(1e18) / (self.calculate_spot_price()) - fixed!(1e18))
-                    * (fixed!(1e18) - self.flat_fee()))
-                / (fixed!(1e18) - self.flat_fee()))
-            .pow(fixed!(1e18).div_up(self.time_stretch()));
+        let fee_adjustment = self.curve_fee()
+            * (fixed!(1e18) / self.calculate_spot_price() - fixed!(1e18))
+            * (fixed!(1e18) - self.flat_fee());
+        let target_bond_reserves = ((fixed!(1e18) + fee_adjustment)
+            / (fixed!(1e18) - self.flat_fee()))
+        .pow(fixed!(1e18).div_up(self.time_stretch()))
+            * inner;
 
-        // The absolute max base amount is given by:
-        //
-
-        // Here, the target share reserves may be smaller than the effective share reserves.
-        // Instead of throwing a panic error in fixed point, we catch this here and throw a
-        // descriptive panic.
-        // TODO this likely should throw an err.
+        // Catch if the target share reserves are smaller than the effective share reserves.
         let effective_share_reserves = self.effective_share_reserves();
         if target_share_reserves < effective_share_reserves {
-            panic!("target share reserves less than effective share reserves");
+            return Err(eyre!(
+                "target share reserves less than effective share reserves"
+            ));
         }
 
+        // The absolute max base amount is given by:
+        // absolute_max_base_amount = (z_t - z_e) * c
         let absolute_max_base_amount =
             (target_share_reserves - effective_share_reserves) * self.vault_share_price();
 
         // The absolute max bond amount is given by:
-        //
-        // absoluteMaxBondAmount = (y - y_t) - c(x)
+        // absolute_max_bond_amount = (y - y_t) - Phi_c(absolute_max_base_amount)
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
             - self.open_long_curve_fee(absolute_max_base_amount);
 
-        (absolute_max_base_amount, absolute_max_bond_amount)
+        Ok((absolute_max_base_amount, absolute_max_bond_amount))
     }
 
     /// Calculates an initial guess of the max long that can be opened. This is a
@@ -494,7 +491,6 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use eyre::Result;
     use fixed_point_macros::uint256;
     use hyperdrive_wrappers::wrappers::mock_hyperdrive_math::MaxTradeParams;
     use rand::{thread_rng, Rng};
@@ -502,7 +498,6 @@ mod tests {
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::{calculate_effective_share_reserves, test_utils::agent::HyperdriveMathAgent};
@@ -546,11 +541,11 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap();
+                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
@@ -563,15 +558,21 @@ mod tests {
     /// `calculate_max_long`'s functionality. With this in mind, we provide
     /// `calculate_max_long` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
-    #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
+        let alice = chain.alice().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Gen a random state.
+            let mut state = rng.gen::<State>();
+
+            // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
                 let sign = rng.gen::<bool>();
@@ -581,8 +582,16 @@ mod tests {
                     I256::try_from(value).unwrap()
                 }
             };
+
+            // Check Solidity against Rust.
+            let max_iterations = 8usize;
+            // Need to catch panics because of FixedPoint.
             let actual = panic::catch_unwind(|| {
-                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+                state.calculate_max_long(
+                    U256::MAX,
+                    checkpoint_exposure,
+                    Some(max_iterations.into()),
+                )
             });
             match chain
                 .mock_hyperdrive_math()
@@ -602,25 +611,30 @@ mod tests {
                         governance_lp_fee: state.config.fees.governance_lp,
                     },
                     checkpoint_exposure,
-                    uint256!(7),
+                    max_iterations.into(),
                 )
                 .call()
                 .await
             {
                 Ok((expected_base_amount, ..)) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected_base_amount));
+                    assert_eq!(
+                        actual.unwrap().unwrap(),
+                        FixedPoint::from(expected_base_amount)
+                    );
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
+
+            // Reset chain snapshot.
+            chain.revert(id).await?;
         }
 
         Ok(())
     }
 
-    /// This test empirically tests the derivative of `long_amount_derivative`
+    /// This test empirically tests the derivative returned by `long_amount_derivative`
     /// by calling `calculate_open_long` at two points and comparing the empirical
     /// result with the output of `long_amount_derivative`.
-    #[traced_test]
     #[tokio::test]
     async fn test_max_long_derivative() -> Result<()> {
         let mut rng = thread_rng();
@@ -686,7 +700,6 @@ mod tests {
         Ok(())
     }
 
-    #[traced_test]
     #[tokio::test]
     async fn test_calculate_max_long() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob. Alice

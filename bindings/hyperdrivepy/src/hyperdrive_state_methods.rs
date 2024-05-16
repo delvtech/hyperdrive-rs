@@ -309,9 +309,12 @@ impl HyperdriveState {
         let checkpoint_exposure_i = I256::from_dec_str(checkpoint_exposure).map_err(|_| {
             PyErr::new::<PyValueError, _>("Failed to convert checkpoint_exposure string to I256")
         })?;
-        let result_fp =
-            self.state
-                .calculate_max_long(budget_fp, checkpoint_exposure_i, maybe_max_iterations);
+        let result_fp = self
+            .state
+            .calculate_max_long(budget_fp, checkpoint_exposure_i, maybe_max_iterations)
+            .map_err(|e| {
+                PyErr::new::<PyValueError, _>(format!("Failed to calculate max long: {}", e))
+            })?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

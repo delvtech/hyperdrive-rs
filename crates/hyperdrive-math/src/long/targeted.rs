@@ -355,12 +355,10 @@ mod tests {
     use fixed_point_macros::uint256;
     use rand::{thread_rng, Rng};
     use test_utils::{chain::TestChain, constants::FUZZ_RUNS};
-    use tracing_test::traced_test;
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
 
-    #[traced_test]
     #[tokio::test]
     async fn test_calculate_targeted_long_with_budget() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob.
@@ -402,7 +400,7 @@ mod tests {
                 let max_long =
                     bob.get_state()
                         .await?
-                        .calculate_max_long(U256::MAX, I256::from(0), None);
+                        .calculate_max_long(U256::MAX, I256::from(0), None)?;
                 let long_amount =
                     (max_long / fixed!(100e18)).max(config.minimum_transaction_amount.into());
                 bob.fund(long_amount + budget).await?;
