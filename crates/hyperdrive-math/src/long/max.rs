@@ -572,11 +572,6 @@ mod tests {
             // Gen a random state.
             let mut state = rng.gen::<State>();
 
-            // Make sure maturity times are in the future.
-            let current_block_timestamp = alice.now().await?;
-            state.info.long_average_maturity_time += current_block_timestamp;
-            state.info.short_average_maturity_time += current_block_timestamp;
-
             // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
