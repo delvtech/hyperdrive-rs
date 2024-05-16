@@ -1095,7 +1095,6 @@ version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
- "fixed-point-macros",
  "rand",
  "test-utils",
  "tokio",

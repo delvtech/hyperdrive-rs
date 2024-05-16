@@ -5,7 +5,6 @@ use std::{
 
 use ethers::types::{Sign, I256, U256};
 use eyre::{eyre, Error, Result};
-use fixed_point_macros::{fixed, int256, uint256};
 use rand::{
     distributions::{
         uniform::{SampleBorrow, SampleUniform, UniformSampler},
@@ -13,6 +12,9 @@ use rand::{
     },
     Rng,
 };
+mod macros;
+
+pub use macros::*;
 
 /// A fixed point wrapper around the `U256` type from ethers-rs.
 ///
@@ -249,7 +251,7 @@ impl FixedPoint {
             .wrapping_add(28719021644029726153956944680412240_u128.into());
         p = p
             .wrapping_mul(x)
-            .wrapping_add(int256!(4385272521454847904659076985693276_u128).wrapping_shl(96));
+            .wrapping_add(int256!(4385272521454847904659076985693276).wrapping_shl(96));
 
         // We leave p in 2**192 basis so we don't need to scale it back up for the division.
         let mut q: I256 = x.wrapping_sub(2855989394907223263936484059900_u128.into());
