@@ -725,7 +725,7 @@ def calculate_add_liquidity(
         The amount of LP shares provided by the pool for the given contribution.
     """
     return _get_interface(pool_config, pool_info).calculate_add_liquidity(
-        contribution, min_lp_share_price, min_apr, max_apr, as_base
+        contribution, min_lp_share_price, min_apr, max_apr, as_base.lower()
     )
 
 
@@ -753,4 +753,6 @@ def calculate_pool_deltas_after_add_liquidity(
     Tuple(str, str, str) (FixedPoint, FixedPoint, FixedPoint)
         The deltas for share reserves, share adjustment, and bond reserves, respectively.
     """
-    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_add_liquidity(contribution, as_base)
+    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_add_liquidity(
+        contribution, as_base.lower()
+    )

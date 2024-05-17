@@ -140,7 +140,7 @@ impl State {
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
         contribution: FixedPoint,
-        as_base: Bool,
+        as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
         let share_contribution = match as_base {
             true => contribution / self.vault_share_price(),

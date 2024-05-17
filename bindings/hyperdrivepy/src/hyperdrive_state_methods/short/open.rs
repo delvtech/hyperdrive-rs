@@ -1,4 +1,4 @@
-use ethers::core::types::{I256, U256};
+use ethers::core::types::U256;
 use fixed_point::FixedPoint;
 use pyo3::{exceptions::PyValueError, prelude::*};
 

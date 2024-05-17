@@ -3,9 +3,8 @@ mod lp;
 mod short;
 mod yield_space;
 
-use ethers::core::types::{I256, U256};
-use fixed_point::FixedPoint;
-use hyperdrive_math::{State, YieldSpace};
+use ethers::core::types::U256;
+use hyperdrive_math::State;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 use crate::HyperdriveState;

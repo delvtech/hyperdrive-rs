@@ -561,7 +561,6 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
-        let alice = chain.alice().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -570,7 +569,7 @@ mod tests {
             let id = chain.snapshot().await?;
 
             // Gen a random state.
-            let mut state = rng.gen::<State>();
+            let state = rng.gen::<State>();
 
             // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
