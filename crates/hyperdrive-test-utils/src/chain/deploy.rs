@@ -284,7 +284,6 @@ pub trait TestnetDeploy {
 // TODO: Ultimately, we'll want to spruce this up to. Keeping these functions
 // as-is is a temporary measure.
 impl TestnetDeploy for Chain {
-    /// Deploys a fresh instance of Hyperdrive.
     async fn test_deploy<S: Signer + 'static>(&self, signer: S) -> Result<Addresses> {
         // Create a client using the signer.
         let client = self.client(signer).await?;
@@ -405,8 +404,6 @@ impl TestnetDeploy for Chain {
         })
     }
 
-    /// Deploys the full Hyperdrive system equipped with a Hyperdrive Factory,
-    /// an ERC4626Hyperdrive instance, and a StETHHyperdrive instance.
     async fn full_deploy<S: Signer + 'static>(
         &self,
         signer: S,
