@@ -72,8 +72,6 @@ fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=hyperdrive.version");
     println!("cargo:rerun-if-changed=hyperdrive/contracts/");
 
-    return Ok(());
-
     // load dotenv
     dotenv().ok();
 
@@ -101,14 +99,14 @@ fn main() -> Result<()> {
     }
 
     // Compile the contracts.
-    // Command::new("forge")
-    //     .current_dir(&hyperdrive_dir)
-    //     .arg("install")
-    //     .output()?;
+    Command::new("forge")
+        .current_dir(&hyperdrive_dir)
+        .arg("install")
+        .output()?;
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
         .args(["build"])
-        // .args(["build", "--force"])
+        .args(["build", "--force"])
         .output()?;
 
     // If there is an existing `wrappers` module, remove it. Then prepare to
