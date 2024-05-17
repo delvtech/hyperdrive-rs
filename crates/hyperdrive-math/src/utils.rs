@@ -136,11 +136,11 @@ pub fn calculate_rate_given_fixed_price(
 mod tests {
     use std::panic;
 
-    use rand::{thread_rng, Rng};
-    use test_utils::{
+    use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
+    use rand::{thread_rng, Rng};
 
     use super::*;
     use crate::State;

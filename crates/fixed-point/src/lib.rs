@@ -480,10 +480,14 @@ impl UniformSampler for UniformFixedPoint {
 mod tests {
     use std::panic;
 
+    use ethers::signers::Signer;
+    use eyre::Result;
+    use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
     use rand::thread_rng;
-    use test_utils::chain::TestChain;
+    use test_utils::{chain::Chain, constants::DEPLOYER};
 
     use super::*;
+    use crate::uint256;
 
     #[test]
     fn test_fixed_point_fmt() {
@@ -518,7 +522,15 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_mul_div_down() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        println!(
+            "Deployed mock contract at {}",
+            mock_fixed_point_math.address()
+        );
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -527,8 +539,7 @@ mod tests {
             let b: FixedPoint = rng.gen();
             let c: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a.mul_div_down(b, c));
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .mul_div_down(a.into(), b.into(), c.into())
                 .call()
                 .await
@@ -549,7 +560,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_mul_div_up() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -558,8 +572,7 @@ mod tests {
             let b: FixedPoint = rng.gen();
             let c: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a.mul_div_up(b, c));
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .mul_div_up(a.into(), b.into(), c.into())
                 .call()
                 .await
@@ -574,7 +587,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_mul_down() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -582,8 +598,7 @@ mod tests {
             let a: FixedPoint = rng.gen();
             let b: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a * b);
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .mul_down(a.into(), b.into())
                 .call()
                 .await
@@ -598,7 +613,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_mul_up() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -606,8 +624,7 @@ mod tests {
             let a: FixedPoint = rng.gen();
             let b: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a.mul_up(b));
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .mul_up(a.into(), b.into())
                 .call()
                 .await
@@ -628,7 +645,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_div_down() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -636,8 +656,7 @@ mod tests {
             let a: FixedPoint = rng.gen();
             let b: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a / b);
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .div_down(a.into(), b.into())
                 .call()
                 .await
@@ -658,7 +677,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_div_up() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -666,8 +688,7 @@ mod tests {
             let a: FixedPoint = rng.gen();
             let b: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| a.div_up(b));
-            match chain
-                .mock_fixed_point_math()
+            match mock_fixed_point_math
                 .div_up(a.into(), b.into())
                 .call()
                 .await
@@ -682,7 +703,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_pow_narrow() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -690,12 +714,7 @@ mod tests {
             let x: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
             let y: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
             let actual = panic::catch_unwind(|| x.pow(y));
-            match chain
-                .mock_fixed_point_math()
-                .pow(x.into(), y.into())
-                .call()
-                .await
-            {
+            match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => {
                     assert_eq!(actual.unwrap(), FixedPoint::from(expected));
                 }
@@ -708,7 +727,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_pow() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -716,12 +738,7 @@ mod tests {
             let x: FixedPoint = rng.gen();
             let y: FixedPoint = rng.gen();
             let actual = panic::catch_unwind(|| x.pow(y));
-            match chain
-                .mock_fixed_point_math()
-                .pow(x.into(), y.into())
-                .call()
-                .await
-            {
+            match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -732,14 +749,17 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_exp_narrow() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..1000 {
             let x: I256 = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e18))).unwrap();
             let actual = panic::catch_unwind(|| FixedPoint::ln(x));
-            match chain.mock_fixed_point_math().ln(x).call().await {
+            match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -750,7 +770,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_exp() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -758,7 +781,7 @@ mod tests {
             let x: I256 =
                 I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
             let actual = panic::catch_unwind(|| FixedPoint::exp(x));
-            match chain.mock_fixed_point_math().exp(x).call().await {
+            match mock_fixed_point_math.exp(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -769,14 +792,17 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_ln_narrow() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..1000 {
             let x: I256 = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e18))).unwrap();
             let actual = panic::catch_unwind(|| FixedPoint::ln(x));
-            match chain.mock_fixed_point_math().ln(x).call().await {
+            match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -787,7 +813,10 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_ln() -> Result<()> {
-        let chain = TestChain::new().await?;
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -795,7 +824,7 @@ mod tests {
             let x: I256 =
                 I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
             let actual = panic::catch_unwind(|| FixedPoint::ln(x));
-            match chain.mock_fixed_point_math().ln(x).call().await {
+            match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }

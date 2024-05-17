@@ -5,7 +5,8 @@ use std::{
 
 use ethers::signers::LocalWallet;
 use eyre::Result;
-use test_utils::chain::{Chain, TestChainConfig};
+use hyperdrive_test_utils::chain::{TestChainConfig, TestnetDeploy};
+use test_utils::chain::Chain;
 
 #[tokio::main]
 async fn main() -> Result<()> {

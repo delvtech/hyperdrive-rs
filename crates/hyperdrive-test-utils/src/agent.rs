@@ -10,7 +10,6 @@ use ethers::{
 };
 use eyre::Result;
 use fixed_point::{uint256, FixedPoint};
-use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable,
     ihyperdrive::{Checkpoint, IHyperdrive, IHyperdriveEvents, Options, PoolConfig},
@@ -18,10 +17,11 @@ use hyperdrive_wrappers::wrappers::{
 };
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
+use test_utils::chain::ChainClient;
 use tokio::time::sleep;
 use tracing::instrument;
 
-use super::chain::ChainClient;
+use crate::addresses::Addresses;
 
 #[derive(Clone, Default)]
 pub struct Wallet {

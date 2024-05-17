@@ -3,8 +3,9 @@
 use std::time::Duration;
 
 use eyre::{eyre, Result};
-use hyperdrive_addresses::Addresses;
 use tokio::time::sleep;
+
+use crate::addresses::Addresses;
 
 const RETRIES: usize = 5;
 const RETRY_TIME: Duration = Duration::from_millis(500);

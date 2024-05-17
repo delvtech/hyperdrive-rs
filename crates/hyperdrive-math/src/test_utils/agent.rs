@@ -3,12 +3,12 @@ use std::{cmp::min, collections::btree_map::Entry};
 use ethers::{prelude::EthLogDecode, signers::LocalWallet, types::U256};
 use eyre::Result;
 use fixed_point::{fixed, uint256, FixedPoint};
-use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, IHyperdriveEvents, Options};
-use rand_chacha::ChaCha8Rng;
-use test_utils::{
+use hyperdrive_test_utils::{
     agent::{Agent, ContractCall, TxOptions},
     chain::ChainClient,
 };
+use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, IHyperdriveEvents, Options};
+use rand_chacha::ChaCha8Rng;
 use tracing::instrument;
 
 use crate::State;

@@ -611,14 +611,14 @@ mod tests {
     use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use fixed_point::uint256;
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
         DistributeExcessIdleParams, PresentValueParams,
     };
     use rand::{thread_rng, Rng};
-    use test_utils::{
-        chain::TestChain,
-        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
-    };
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;

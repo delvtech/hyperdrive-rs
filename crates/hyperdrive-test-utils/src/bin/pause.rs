@@ -3,8 +3,9 @@ use std::env;
 use dotenvy::dotenv;
 use ethers::signers::LocalWallet;
 use eyre::Result;
+use hyperdrive_test_utils::infra::query_addresses;
 use hyperdrive_wrappers::wrappers::ihyperdrive::IHyperdrive;
-use test_utils::{chain::Chain, infra::query_addresses};
+use test_utils::chain::Chain;
 
 #[tokio::main]
 async fn main() -> Result<()> {

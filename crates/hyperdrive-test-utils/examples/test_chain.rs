@@ -1,6 +1,6 @@
 use eyre::Result;
 use fixed_point::fixed;
-use test_utils::chain::TestChain;
+use hyperdrive_test_utils::chain::TestChain;
 
 #[tokio::main]
 async fn main() -> Result<()> {

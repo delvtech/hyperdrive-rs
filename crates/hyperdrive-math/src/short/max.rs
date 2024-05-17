@@ -489,14 +489,14 @@ mod tests {
     use ethers::types::U256;
     use eyre::Result;
     use fixed_point::uint256;
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::{
         ihyperdrive::Checkpoint, mock_hyperdrive_math::MaxTradeParams,
     };
     use rand::{thread_rng, Rng};
-    use test_utils::{
-        chain::TestChain,
-        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
-    };
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;

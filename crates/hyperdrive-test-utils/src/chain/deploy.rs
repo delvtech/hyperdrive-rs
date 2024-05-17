@@ -1,3 +1,5 @@
+use std::future::Future;
+
 /// This module contains implementations on the `Chain` struct that make it easy
 /// to deploy Hyperdrive pools, factories, and deployer coordinators.
 use ethers::{
@@ -8,7 +10,6 @@ use ethers::{
 };
 use eyre::Result;
 use fixed_point::{fixed, uint256, FixedPoint};
-use hyperdrive_addresses::Addresses;
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,
@@ -40,9 +41,9 @@ use hyperdrive_wrappers::wrappers::{
     steth_target3_deployer::{StETHTarget3Deployer, StETHTarget3DeployerLibs},
 };
 use serde::{Deserialize, Deserializer, Serialize};
+use test_utils::{chain::Chain, constants::ETH};
 
-use super::Chain;
-use crate::constants::ETH;
+use crate::addresses::Addresses;
 
 fn deserialize_u256<'de, D>(deserializer: D) -> Result<U256, D::Error>
 where
@@ -264,11 +265,27 @@ impl Default for TestChainConfig {
     }
 }
 
+pub trait TestnetDeploy {
+    /// Deploys a fresh instance of Hyperdrive.
+    fn test_deploy<S: Signer + 'static>(
+        &self,
+        signer: S,
+    ) -> impl Future<Output = Result<Addresses>>;
+
+    /// Deploys the full Hyperdrive system equipped with a Hyperdrive Factory,
+    /// an ERC4626Hyperdrive instance, and a StETHHyperdrive instance.
+    fn full_deploy<S: Signer + 'static>(
+        &self,
+        signer: S,
+        config: TestChainConfig,
+    ) -> impl Future<Output = Result<Addresses>>;
+}
+
 // TODO: Ultimately, we'll want to spruce this up to. Keeping these functions
 // as-is is a temporary measure.
-impl Chain {
+impl TestnetDeploy for Chain {
     /// Deploys a fresh instance of Hyperdrive.
-    pub async fn test_deploy<S: Signer + 'static>(&self, signer: S) -> Result<Addresses> {
+    async fn test_deploy<S: Signer + 'static>(&self, signer: S) -> Result<Addresses> {
         // Create a client using the signer.
         let client = self.client(signer).await?;
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
@@ -390,7 +407,7 @@ impl Chain {
 
     /// Deploys the full Hyperdrive system equipped with a Hyperdrive Factory,
     /// an ERC4626Hyperdrive instance, and a StETHHyperdrive instance.
-    pub async fn full_deploy<S: Signer + 'static>(
+    async fn full_deploy<S: Signer + 'static>(
         &self,
         signer: S,
         config: TestChainConfig,
@@ -917,14 +934,15 @@ impl Chain {
 #[cfg(test)]
 mod tests {
     use hyperdrive_wrappers::wrappers::ihyperdrive::IHyperdrive;
+    use test_utils::{chain::Chain, constants::ALICE};
 
     use super::*;
-    use crate::constants::ALICE;
+    use crate::chain::TestChain;
 
     #[tokio::test]
     async fn test_deploy_devnet() -> Result<()> {
         // Connect to a local anvil chain.
-        let chain = Chain::connect(None, Some(1)).await?;
+        let chain = TestChain::new().await?;
         chain.deal(ALICE.address(), uint256!(100_000e18)).await?;
         let client = chain.client(ALICE.clone()).await?;
 
@@ -1041,6 +1059,8 @@ mod tests {
         let chain = Chain::connect(None, Some(1)).await?;
         chain.deal(ALICE.address(), uint256!(100_000e18)).await?;
         let client = chain.client(ALICE.clone()).await?;
+
+        println!("HERE");
 
         // Deploy the factory and pools.
         let addresses = chain

@@ -4,14 +4,14 @@ mod tests {
     use ethers::{signers::LocalWallet, types::U256};
     use eyre::Result;
     use fixed_point::{fixed, uint256, FixedPoint};
-    use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
-    use rand::{thread_rng, Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
-    use test_utils::{
+    use hyperdrive_test_utils::{
         agent::Agent,
         chain::{ChainClient, TestChain},
         constants::FUZZ_RUNS,
     };
+    use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
+    use rand::{thread_rng, Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
 
     use crate::test_utils::agent::HyperdriveMathAgent;
 
