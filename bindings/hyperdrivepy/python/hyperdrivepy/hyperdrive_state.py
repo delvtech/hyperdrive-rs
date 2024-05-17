@@ -96,7 +96,7 @@ def calculate_solvency(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
 ) -> str:
-    """Get the pool's solvency.
+    """Calculate the pool's solvency.
 
     Arguments
     ---------
@@ -215,6 +215,32 @@ def calculate_open_long(
         The amount of bonds purchased.
     """
     return _get_interface(pool_config, pool_info).calculate_open_long(base_amount)
+
+
+def calculate_pool_deltas_after_open_long(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    base_amount: str,
+) -> str:
+    """Calculate the bond deltas to be applied to the pool after opening a long.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    base_amount: str (FixedPoint)
+        The amount of base used to open a long.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The amount of bonds to remove from the pool reserves.
+    """
+    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_open_long(base_amount)
 
 
 def calculate_close_long(
@@ -657,3 +683,76 @@ def calculate_idle_share_reserves_in_base(
         The idle share reserves in base of the pool.
     """
     return _get_interface(pool_config, pool_info).calculate_idle_share_reserves_in_base()
+
+
+def calculate_add_liquidity(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    contribution: str,
+    min_lp_share_price: str,
+    min_apr: str,
+    max_apr: str,
+    as_base: str,
+) -> str:
+    """Calculates the lp_shares for a given contribution when adding liquidity.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    contribution: str (FixedPoint)
+        The amount of liquidity, in base or shares, to add to the pool.
+    min_lp_share_price: str (FixedPoint)
+        The minimum allowable LP share price.
+        The call will return an error if this condition is not met.
+    min_apr: str (FixedPoint)
+        The minimum apr after contribution is added.
+        The call will return an error if this condition is not met.
+    max_apr: str (FixedPoint)
+        The maximum apr after contribution is added.
+        The call will return an error if this condition is not met.
+    as_base: str (bool)
+        The unit of currency for the contribution.
+        If true, then the contribution is in base. Otherwise, it is shares.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The amount of LP shares provided by the pool for the given contribution.
+    """
+    return _get_interface(pool_config, pool_info).calculate_add_liquidity(
+        contribution, min_lp_share_price, min_apr, max_apr, as_base.lower()
+    )
+
+
+def calculate_pool_deltas_after_add_liquidity(
+    pool_config: types.PoolConfigType, pool_info: types.PoolInfoType, contribution: str, as_base: str
+) -> str:
+    """Calculate the deltas to be applied to the pool after adding liquidity.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    contribution: str (FixedPoint)
+        The amount of liquidity, in base or shares, to add to the pool.
+    as_base: str (bool)
+        The unit of currency for the contribution.
+        If true, then the contribution is in base. Otherwise, it is shares.
+
+    Returns
+    -------
+    Tuple(str, str, str) (FixedPoint, FixedPoint, FixedPoint)
+        The deltas for share reserves, share adjustment, and bond reserves, respectively.
+    """
+    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_add_liquidity(
+        contribution, as_base.lower()
+    )

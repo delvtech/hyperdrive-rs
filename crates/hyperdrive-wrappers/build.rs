@@ -351,7 +351,7 @@ fn checkout_branch(git_ref: &str, repo_path: &Path) -> Result<()> {
 
     status = Command::new("git")
         .current_dir(repo_path)
-        .args(["pull", "origin", &git_ref])
+        .args(["pull", "origin", git_ref])
         .status()?;
 
     if !status.success() {

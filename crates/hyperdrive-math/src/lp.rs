@@ -140,7 +140,12 @@ impl State {
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
         contribution: FixedPoint,
+        as_base: bool,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        let share_contribution = match as_base {
+            true => contribution / self.vault_share_price(),
+            false => contribution,
+        };
         let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
             self.share_reserves(),
             self.share_adjustment(),
@@ -154,7 +159,7 @@ impl State {
                 self.share_adjustment(),
                 self.bond_reserves(),
                 self.minimum_share_reserves(),
-                I256::try_from(contribution)?,
+                I256::try_from(share_contribution)?,
             )?;
         Ok((
             new_share_reserves - share_reserves,

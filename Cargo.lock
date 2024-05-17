@@ -1091,7 +1091,7 @@ dependencies = [
 
 [[package]]
 name = "fixed-point"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
@@ -1104,7 +1104,7 @@ dependencies = [
 
 [[package]]
 name = "fixed-point-macros"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "ethers",
  "fixed-point",
@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-addresses"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "ethers",
  "serde",
@@ -1514,7 +1514,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-math"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-wrappers"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "dotenv",
  "ethers",
@@ -1548,7 +1548,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrivepy"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
@@ -1671,6 +1671,12 @@ checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if",
 ]
+
+[[package]]
+name = "inventory"
+version = "0.3.15"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f958d3d68f4167080a18141e10381e7634563984a537f2a49a30fd8e53ac5767"
 
 [[package]]
 name = "ipnet"
@@ -2408,6 +2414,7 @@ checksum = "e681a6cfdc4adcc93b4d3cf993749a4552018ee0a9b65fc0ccfad74352c72a38"
 dependencies = [
  "cfg-if",
  "indoc",
+ "inventory",
  "libc",
  "memoffset",
  "parking_lot",
@@ -3270,7 +3277,7 @@ dependencies = [
 
 [[package]]
 name = "test-utils"
-version = "0.15.4"
+version = "0.15.5"
 dependencies = [
  "async-trait",
  "dotenvy",
