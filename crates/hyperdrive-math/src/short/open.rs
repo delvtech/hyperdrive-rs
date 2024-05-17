@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
@@ -274,18 +273,18 @@ mod tests {
     use std::panic;
 
     use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point_macros::{fixed, int256, uint256};
+    use fixed_point::{fixed, int256, uint256};
+    use hyperdrive_test_utils::{
+        agent::Agent,
+        chain::{ChainClient, TestChain},
+        constants::{BOB, FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::{
         ihyperdrive::{Checkpoint, Options},
         mock_erc4626::MockERC4626,
     };
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
-    use test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
-        constants::{BOB, FAST_FUZZ_RUNS, FUZZ_RUNS},
-    };
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
@@ -727,7 +726,7 @@ mod tests {
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
             let vault = MockERC4626::new(
                 bob.get_config().vault_shares_token,
-                chain.chain().client(BOB.clone()).await?,
+                chain.client(BOB.clone()).await?,
             );
             vault.set_rate(variable_rate.into()).send().await?;
 

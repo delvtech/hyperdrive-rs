@@ -6,8 +6,7 @@ use ethers::{
     types::{Address, Bytes},
 };
 use eyre::Result;
-use fixed_point_macros::uint256;
-use hyperdrive_addresses::Addresses;
+use fixed_point::uint256;
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable,
     erc4626_hyperdrive::ERC4626Hyperdrive,
@@ -21,9 +20,10 @@ use hyperdrive_wrappers::wrappers::{
     mock_erc4626::MockERC4626,
 };
 
-use super::Chain;
+use super::test_chain::TestChain;
+use crate::addresses::Addresses;
 
-impl Chain {
+impl TestChain {
     /// Etches the latest compiled bytecode onto a target instance of Hyperdrive.
     pub async fn etch<S: Signer + 'static>(&self, signer: S, addresses: &Addresses) -> Result<()> {
         // Set up the client.

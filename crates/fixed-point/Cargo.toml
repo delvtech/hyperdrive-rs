@@ -1,6 +1,6 @@
 [package]
 name = "fixed-point"
-version = {workspace=true}
+version = { workspace = true }
 edition = "2021"
 
 [dependencies]
@@ -10,12 +10,9 @@ ethers = "2.0.8"
 eyre = "0.6.8"
 rand = "0.8.5"
 
-# Workspace dependencies
-fixed-point-macros = { path = "../fixed-point-macros" }
-
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 
 # Workspace dependencies
-hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
 test-utils = { path = "../test-utils" }
+hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }

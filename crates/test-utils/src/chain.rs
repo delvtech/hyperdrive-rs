@@ -1,10 +1,5 @@
-mod deploy;
-mod etch;
-mod test_chain;
-
 use std::{sync::Arc, time::Duration};
 
-pub use deploy::TestChainConfig;
 use ethers::{
     core::utils::Anvil,
     middleware::{
@@ -20,7 +15,6 @@ use ethers::{
     utils::AnvilInstance,
 };
 use eyre::Result;
-pub use test_chain::TestChain;
 
 /// A retry policy that will retry on rate limit errors, timeout errors, and
 /// "intrinsic gas too high".
@@ -100,9 +94,7 @@ impl Chain {
             })
         }
     }
-}
 
-impl Chain {
     /// A provider that can access the chain.
     pub fn provider(&self) -> Provider<Http> {
         self.provider.clone()
@@ -182,7 +174,7 @@ impl Chain {
     }
 
     /// Checks to see if the underlying chain is an anvil chain.
-    fn is_anvil(&self) -> bool {
+    pub fn is_anvil(&self) -> bool {
         self.client_version.contains("anvil")
     }
 }

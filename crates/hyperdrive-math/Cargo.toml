@@ -13,7 +13,6 @@ rand = "0.8.5"
 
 # Workspace dependencies
 fixed-point = { path = "../fixed-point" }
-fixed-point-macros = { path = "../fixed-point-macros" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
 
 [dev-dependencies]
@@ -25,4 +24,4 @@ tracing = "0.1"
 tracing-test = "0.1"
 
 # Workspace dependencies
-test-utils = { path = "../test-utils" }
+hyperdrive-test-utils = { path = "../hyperdrive-test-utils" }

@@ -121,15 +121,15 @@ impl State {
 #[cfg(test)]
 mod tests {
     use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point_macros::{fixed, uint256};
-    use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
-    use rand::{thread_rng, Rng, SeedableRng};
-    use rand_chacha::ChaCha8Rng;
-    use test_utils::{
+    use fixed_point::{fixed, uint256};
+    use hyperdrive_test_utils::{
         agent::Agent,
         chain::{ChainClient, TestChain},
         constants::FUZZ_RUNS,
     };
+    use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
+    use rand::{thread_rng, Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;

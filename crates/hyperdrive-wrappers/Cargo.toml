@@ -16,10 +16,6 @@ rand = "0.8.5"
 serde = { version = "1.0", features = ["derive"] }
 lazy_static = "1.4.0"
 
-
-# Workspace dependencies
-fixed-point = { path = "../fixed-point" }
-
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 

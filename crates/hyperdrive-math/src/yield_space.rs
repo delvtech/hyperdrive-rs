@@ -1,7 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
-use fixed_point_macros::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::calculate_effective_share_reserves;
 
@@ -344,8 +343,8 @@ pub trait YieldSpace {
 mod tests {
     use std::panic;
 
+    use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
-    use test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
 
     use super::*;
     use crate::State;

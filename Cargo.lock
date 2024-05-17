@@ -1095,21 +1095,10 @@ version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
- "fixed-point-macros",
  "hyperdrive-wrappers",
  "rand",
  "test-utils",
  "tokio",
-]
-
-[[package]]
-name = "fixed-point-macros"
-version = "0.15.5"
-dependencies = [
- "ethers",
- "fixed-point",
- "quote",
- "syn 2.0.48",
 ]
 
 [[package]]
@@ -1505,28 +1494,41 @@ dependencies = [
 ]
 
 [[package]]
-name = "hyperdrive-addresses"
-version = "0.15.5"
-dependencies = [
- "ethers",
- "serde",
-]
-
-[[package]]
 name = "hyperdrive-math"
 version = "0.15.5"
 dependencies = [
  "ethers",
  "eyre",
  "fixed-point",
- "fixed-point-macros",
+ "hyperdrive-test-utils",
  "hyperdrive-wrappers",
  "rand",
  "rand_chacha",
- "test-utils",
  "tokio",
  "tracing",
  "tracing-test",
+]
+
+[[package]]
+name = "hyperdrive-test-utils"
+version = "0.15.5"
+dependencies = [
+ "async-trait",
+ "dotenvy",
+ "envy",
+ "ethers",
+ "eyre",
+ "fixed-point",
+ "hyperdrive-wrappers",
+ "lazy_static",
+ "rand",
+ "rand_chacha",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "test-utils",
+ "tokio",
+ "tracing",
 ]
 
 [[package]]
@@ -1537,7 +1539,6 @@ dependencies = [
  "ethers",
  "ethers-solc",
  "eyre",
- "fixed-point",
  "heck",
  "lazy_static",
  "rand",
@@ -1553,7 +1554,6 @@ dependencies = [
  "ethers",
  "eyre",
  "fixed-point",
- "fixed-point-macros",
  "hyperdrive-math",
  "hyperdrive-wrappers",
  "pyo3",
@@ -2041,9 +2041,9 @@ dependencies = [
 
 [[package]]
 name = "openssl"
-version = "0.10.63"
+version = "0.10.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "15c9d69dd87a29568d4d017cfe8ec518706046a05184e5aea92d0af890b803c8"
+checksum = "95a0481286a310808298130d22dd1fef0fa571e05a8f44ec801801e84b216b1f"
 dependencies = [
  "bitflags 2.4.2",
  "cfg-if",
@@ -2073,9 +2073,9 @@ checksum = "ff011a302c396a5197692431fc1948019154afc178baf7d8e37367442a4601cf"
 
 [[package]]
 name = "openssl-sys"
-version = "0.9.99"
+version = "0.9.102"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "22e1bf214306098e4832460f797824c05d25aacdf896f64a985fb0fd992454ae"
+checksum = "c597637d56fbc83893a35eb0dd04b2b8e7a50c91e64e9493e398b5df4fb45fa2"
 dependencies = [
  "cc",
  "libc",
@@ -2896,9 +2896,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework"
-version = "2.9.2"
+version = "2.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05b64fb303737d99b81884b2c63433e9ae28abebe5eb5045dcdd175dc2ecf4de"
+checksum = "770452e37cad93e0a50d5abc3990d2bc351c36d0328f86cefec2f2fb206eaef6"
 dependencies = [
  "bitflags 1.3.2",
  "core-foundation",
@@ -2909,9 +2909,9 @@ dependencies = [
 
 [[package]]
 name = "security-framework-sys"
-version = "2.9.1"
+version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e932934257d3b408ed8f30db49d85ea163bfe74961f017f405b025af298f0c7a"
+checksum = "317936bbbd05227752583946b9e66d7ce3b489f84e11a94a510b4437fef407d7"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -3279,23 +3279,9 @@ dependencies = [
 name = "test-utils"
 version = "0.15.5"
 dependencies = [
- "async-trait",
- "dotenvy",
- "envy",
  "ethers",
  "eyre",
- "fixed-point",
- "fixed-point-macros",
- "hyperdrive-addresses",
- "hyperdrive-wrappers",
  "lazy_static",
- "rand",
- "rand_chacha",
- "reqwest",
- "serde",
- "serde_json",
- "tokio",
- "tracing",
 ]
 
 [[package]]
