@@ -105,7 +105,6 @@ fn main() -> Result<()> {
         .output()?;
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
-        .args(["build"])
         .args(["build", "--force"])
         .output()?;
 
