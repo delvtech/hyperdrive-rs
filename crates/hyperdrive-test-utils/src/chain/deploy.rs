@@ -1060,8 +1060,6 @@ mod tests {
         chain.deal(ALICE.address(), uint256!(100_000e18)).await?;
         let client = chain.client(ALICE.clone()).await?;
 
-        println!("HERE");
-
         // Deploy the factory and pools.
         let addresses = chain
             .full_deploy(ALICE.clone(), test_chain_config.clone())
