@@ -4,7 +4,7 @@ use ethers::{
     core::utils::Anvil,
     middleware::{
         gas_escalator::{Frequency, GeometricGasPrice},
-        GasEscalatorMiddleware, NonceManagerMiddleware, SignerMiddleware,
+        GasEscalatorMiddleware, SignerMiddleware,
     },
     providers::{
         Http, HttpClientError, HttpRateLimitRetryPolicy, Middleware, Provider, RetryClient,
@@ -15,6 +15,9 @@ use ethers::{
     utils::AnvilInstance,
 };
 use eyre::Result;
+
+mod nonce_manager;
+use nonce_manager::NonceManagerMiddleware;
 
 /// A retry policy that will retry on rate limit errors, timeout errors, and
 /// "intrinsic gas too high".
@@ -40,9 +43,8 @@ impl RetryPolicy<HttpClientError> for ChainRetryPolicy {
     }
 }
 
-pub type ChainClient<S> = SignerMiddleware<
-    NonceManagerMiddleware<GasEscalatorMiddleware<Provider<Arc<RetryClient<Http>>>>>,
-    S,
+pub type ChainClient<S> = NonceManagerMiddleware<
+    SignerMiddleware<GasEscalatorMiddleware<Provider<Arc<RetryClient<Http>>>>, S>,
 >;
 
 /// An abstraction over Ethereum chains that provides convenience methods for
@@ -115,13 +117,14 @@ impl Chain {
         let provider = Provider::new(Arc::new(provider)).interval(Duration::from_millis(1));
 
         // Build a client with signer and gas escalator middleware.
+        let address = signer.address();
         let client = GasEscalatorMiddleware::new(
             provider,
             GeometricGasPrice::new(1.125, 10u64, None::<u64>),
             Frequency::PerBlock,
         );
-        let client = NonceManagerMiddleware::new(client, signer.address());
         let client = SignerMiddleware::new_with_provider_chain(client, signer).await?;
+        let client = NonceManagerMiddleware::new(client, address);
 
         Ok(Arc::new(client))
     }
