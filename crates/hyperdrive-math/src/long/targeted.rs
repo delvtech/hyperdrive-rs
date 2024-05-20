@@ -371,14 +371,17 @@ mod tests {
         let allowable_rate_error = fixed!(1e11);
         let num_newton_iters = 7;
 
+        // Initialize a test chain and agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let config = bob.get_config().clone();
+
         // Fuzz test
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
-            // Initialize a test chain and agents.
-            let chain = TestChain::new().await?;
-            let mut alice = chain.alice().await?;
-            let mut bob = chain.bob().await?;
-            let config = bob.get_config().clone();
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
 
             // Fund Alice and Bob.
             // Large budget for initializing the pool.
@@ -531,6 +534,11 @@ mod tests {
                     target_rate
                 );
             }
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
         }
 
         Ok(())
