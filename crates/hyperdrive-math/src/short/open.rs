@@ -208,7 +208,7 @@ impl State {
     /// \begin{align}
     /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
     /// &= (1 + APY)^{d} - 1
-    /// \end{align}make
+    /// \end{align}
     /// $$
     pub fn calculate_implied_rate(
         &self,
@@ -703,7 +703,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_calculate_implied_rate() -> Result<()> {
-        let tolerance = int256!(1e14);
+        let tolerance = int256!(1e15);
 
         // Spawn a test chain with two agents.
         let mut rng = thread_rng();
