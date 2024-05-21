@@ -17,7 +17,7 @@ impl HyperdriveState {
         let rust_pool_config = PyPoolConfig::extract(pool_config)?.pool_config;
         let rust_pool_info = PyPoolInfo::extract(pool_info)?.pool_info;
         let state = State::new(rust_pool_config, rust_pool_info);
-        Ok(HyperdriveState::new(state))
+        Ok(HyperdriveState::new(state)?)
     }
 
     pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {
