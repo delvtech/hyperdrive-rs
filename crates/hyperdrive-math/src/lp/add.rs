@@ -304,8 +304,8 @@ mod tests {
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
-            alice.reset(Default::default());
-            bob.reset(Default::default());
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
         }
 
         Ok(())
@@ -386,8 +386,8 @@ mod tests {
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
-            alice.reset(Default::default());
-            bob.reset(Default::default());
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
         }
 
         Ok(())

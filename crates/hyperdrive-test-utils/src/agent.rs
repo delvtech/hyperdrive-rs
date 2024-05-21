@@ -481,9 +481,14 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     ///
     /// This is useful for testing because it makes it easy to use the agent
     /// across multiple snapshots.
-    pub fn reset(&mut self, wallet: Wallet) {
+    pub async fn reset(&mut self, wallet: Wallet) -> Result<()> {
+        // Reset the nonce mananger.
+        self.client.reset_nonce(None).await?;
+
         // Reset the wallet.
         self.wallet = wallet;
+
+        Ok(())
     }
 
     /// Getters ///

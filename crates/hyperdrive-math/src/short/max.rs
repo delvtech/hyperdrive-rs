@@ -585,11 +585,15 @@ mod tests {
         // the absolute maximum short.
         let mut rng = thread_rng();
 
+        // Initialize the chain and the agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let config = alice.get_config().clone();
+
         for _ in 0..*FUZZ_RUNS {
-            let chain = TestChain::new().await?;
-            let mut alice = chain.alice().await?;
-            let mut bob = chain.bob().await?;
-            let config = alice.get_config().clone();
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
 
             // TODO: We should fuzz over a range of fixed rates.
             //
@@ -639,6 +643,11 @@ mod tests {
             // for deposit << the global max short number of bonds.
             bob.fund(global_max_short + fixed!(10e18)).await?;
             bob.open_short(global_max_short, None, None).await?;
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
         }
 
         Ok(())
@@ -731,8 +740,8 @@ mod tests {
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
-            alice.reset(Default::default());
-            bob.reset(Default::default());
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
         }
 
         Ok(())
