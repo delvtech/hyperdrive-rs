@@ -7,6 +7,10 @@ use ethers::{
 };
 use thiserror::Error;
 
+/// The default number of times the nonce manager will retry sending a
+/// transaction after a "nonce too low" or "nonce too high" error.
+const NONCE_MANAGER_RETRIES: usize = 5;
+
 #[derive(Debug)]
 /// Middleware used for calculating nonces locally, useful for signing multiple
 /// consecutive transactions without waiting for them to hit the mempool
@@ -16,6 +20,7 @@ pub struct NonceManagerMiddleware<M> {
     initialized: AtomicBool,
     nonce: AtomicU64,
     address: Address,
+    retries: usize,
 }
 
 impl<M> NonceManagerMiddleware<M>
@@ -24,13 +29,14 @@ where
 {
     /// Instantiates the nonce manager with a 0 nonce. The `address` should be the
     /// address which you'll be sending transactions from
-    pub fn new(inner: M, address: Address) -> Self {
+    pub fn new(inner: M, address: Address, maybe_retries: Option<usize>) -> Self {
         Self {
             inner,
             init_guard: Default::default(),
             initialized: Default::default(),
             nonce: Default::default(),
             address,
+            retries: maybe_retries.unwrap_or(NONCE_MANAGER_RETRIES),
         }
     }
 
@@ -45,6 +51,8 @@ where
         nonce.into()
     }
 
+    /// Retrieves the transaction count for initialization on first call to
+    /// manager. Returns the current nonce.
     pub async fn initialize_nonce(
         &self,
         block: Option<BlockId>,
@@ -189,8 +197,7 @@ where
 
         // Attempt to submit the transaction. If there are nonce management
         // errors, these will be handled up to the maximum number of retries.
-        let retries = 5;
-        for _ in 0..retries {
+        for _ in 0..self.retries {
             // Send the transaction and handle the result.
             match self.inner.send_transaction(tx.clone(), block).await {
                 Ok(tx_hash) => return Ok(tx_hash),
@@ -198,9 +205,8 @@ where
                     // If the error isn't a nonce too low error or a nonce too
                     // high error, we can't proceed.
                     let err_str = err.to_string().to_lowercase();
-                    if !err_str.contains("nonce too low") &&
-                        !err_str.contains("nonce too high") {
-                        return Err(MiddlewareError::from_err(err))
+                    if !err_str.contains("nonce too low") && !err_str.contains("nonce too high") {
+                        return Err(MiddlewareError::from_err(err));
                     }
                 }
             }
@@ -209,7 +215,10 @@ where
             // count equals the value stored in the nonce manager, we update the
             // nonce manager to avoid being stuck. Otherwise, we update the
             // nonce manager with the current transaction count.
-            let mut nonce = self.get_transaction_count(self.address, block).await?.as_u64();
+            let mut nonce = self
+                .get_transaction_count(self.address, block)
+                .await?
+                .as_u64();
             if nonce == self.nonce.load(Ordering::SeqCst) {
                 nonce += 1;
             }

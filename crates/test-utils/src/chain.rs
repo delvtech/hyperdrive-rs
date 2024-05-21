@@ -124,7 +124,7 @@ impl Chain {
             Frequency::PerBlock,
         );
         let client = SignerMiddleware::new_with_provider_chain(client, signer).await?;
-        let client = NonceManagerMiddleware::new(client, address);
+        let client = NonceManagerMiddleware::new(client, address, None);
 
         Ok(Arc::new(client))
     }
