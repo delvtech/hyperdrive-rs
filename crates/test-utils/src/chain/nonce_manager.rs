@@ -118,6 +118,10 @@ pub enum NonceManagerError<M: Middleware> {
     /// is called before initialization.
     #[error("ResetError")]
     ResetError,
+    /// Thrown when the nonce manager exceeds the maximum number of retries
+    /// while submitting transactions.
+    #[error("RetryError")]
+    RetryError,
     /// Thrown when the internal middleware errors
     #[error("{0}")]
     MiddlewareError(M::Error),
@@ -133,6 +137,7 @@ impl<M: Middleware> MiddlewareError for NonceManagerError<M> {
     fn as_inner(&self) -> Option<&Self::Inner> {
         match self {
             NonceManagerError::ResetError => None,
+            NonceManagerError::RetryError => None,
             NonceManagerError::MiddlewareError(e) => Some(e),
         }
     }
@@ -182,24 +187,37 @@ where
             tx.set_nonce(self.get_transaction_count_with_manager(block).await?);
         }
 
-        match self.inner.send_transaction(tx.clone(), block).await {
-            Ok(tx_hash) => Ok(tx_hash),
-            Err(err) => {
-                let nonce = self.get_transaction_count(self.address, block).await?;
-                if nonce != self.nonce.load(Ordering::SeqCst).into() {
-                    // try re-submitting the transaction with the correct nonce if there
-                    // was a nonce mismatch
-                    self.nonce.store(nonce.as_u64(), Ordering::SeqCst);
-                    tx.set_nonce(nonce);
-                    self.inner
-                        .send_transaction(tx, block)
-                        .await
-                        .map_err(MiddlewareError::from_err)
-                } else {
-                    // propagate the error otherwise
-                    Err(MiddlewareError::from_err(err))
+        // Attempt to submit the transaction. If there are nonce management,
+        // these will be handled up to the maximum number of retries.
+        let retries = 5;
+        for _ in 0..retries {
+            // Send the transaction and handle the result.
+            match self.inner.send_transaction(tx.clone(), block).await {
+                Ok(tx_hash) => return Ok(tx_hash),
+                Err(err) => {
+                    // If the error isn't a nonce too low error or a nonce too
+                    // high error, we can't proceed.
+                    let err_str = err.to_string().to_lowercase();
+                    if !err_str.contains("nonce too low") &&
+                        !err_str.contains("nonce too high") {
+                        return Err(MiddlewareError::from_err(err))
+                    }
                 }
             }
+
+            // Get the current transaction count. If the current transaction
+            // count equals the value stored in the nonce manager, we update the
+            // nonce manager to avoid being stuck. Otherwise, we update the
+            // nonce manager with the current transaction count.
+            let mut nonce = self.get_transaction_count(self.address, block).await?.as_u64();
+            if nonce == self.nonce.load(Ordering::SeqCst) {
+                nonce += 1;
+            }
+            self.nonce.store(nonce, Ordering::SeqCst);
+            tx.set_nonce(nonce);
         }
+
+        // Return a retry error since we exceeded the maximum amount of retries.
+        Err(NonceManagerError::RetryError)
     }
 }
