@@ -187,8 +187,8 @@ where
             tx.set_nonce(self.get_transaction_count_with_manager(block).await?);
         }
 
-        // Attempt to submit the transaction. If there are nonce management,
-        // these will be handled up to the maximum number of retries.
+        // Attempt to submit the transaction. If there are nonce management
+        // errors, these will be handled up to the maximum number of retries.
         let retries = 5;
         for _ in 0..retries {
             // Send the transaction and handle the result.
