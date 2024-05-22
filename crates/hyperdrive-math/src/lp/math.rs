@@ -72,28 +72,31 @@ impl State {
         minimum_share_reserves: FixedPoint,
         share_reserves_delta: I256,
     ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        // If the share reserves delta is zero, we can return early since no
+        // action is needed.
         if share_reserves_delta == I256::zero() {
             return Ok((share_reserves, share_adjustment, bond_reserves));
         }
 
-        // Get the updated share reserves.
-        let new_share_reserves = if share_reserves_delta > I256::zero() {
-            I256::try_from(share_reserves)? + share_reserves_delta
-        } else {
-            I256::try_from(share_reserves)? - share_reserves_delta
-        };
-
-        // Ensure the minimum share reserve level.
-        if new_share_reserves < I256::try_from(minimum_share_reserves)? {
+        // Update the share reserves by applying the share reserves delta. We
+        // ensure that our minimum share reserves invariant is still maintained.
+        let new_share_reserves = I256::try_from(share_reserves)? + share_reserves_delta;
+        if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
             return Err(eyre!(
                 "Update would result in share reserves below minimum."
             ));
         }
-
-        // Convert to Fixedpoint to allow the math below.
         let new_share_reserves = FixedPoint::try_from(new_share_reserves)?;
 
-        // Get the updated share adjustment.
+        // Update the share adjustment by holding the ratio of share reserves
+        // to share adjustment proportional. In general, our pricing model cannot
+        // support negative values for the z coordinate, so this is important as
+        // it ensures that if z - zeta starts as a positive value, it ends as a
+        // positive value. With this in mind, we update the share adjustment as:
+        //
+        // zeta_old / z_old = zeta_new / z_new
+        //                  =>
+        // zeta_new = zeta_old * (z_new / z_old)
         let new_share_adjustment = if share_adjustment >= I256::zero() {
             let share_adjustment_fp = FixedPoint::try_from(share_adjustment)?;
             I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
@@ -102,9 +105,22 @@ impl State {
             -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
         };
 
-        // Get the updated bond reserves.
+        // NOTE: Rounding down to avoid introducing dust into the computation.
+        //
+        // The liquidity update should hold the spot price invariant. The spot
+        // price of base in terms of bonds is given by:
+        //
+        // p = (mu * (z - zeta) / y) ** tau
+        //
+        // This formula implies that holding the ratio of share reserves to bond
+        // reserves constant will hold the spot price constant. This allows us
+        // to calculate the updated bond reserves as:
+        //
+        // (z_old - zeta_old) / y_old = (z_new - zeta_new) / y_new
+        //                          =>
+        // y_new = (z_new - zeta_new) * (y_old / (z_old - zeta_old))
         let old_effective_share_reserves =
-            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())?;
+            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment());
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment)?;
         let new_bond_reserves =
