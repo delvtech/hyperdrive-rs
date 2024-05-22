@@ -758,14 +758,19 @@ mod tests {
 
             // Bob closes his short.
             let base_proceeds = bob.close_short(maturity_time, bond_amount, None).await?;
-            let position_duration = bob.get_state().await?.annualized_position_duration();
+            let annualized_position_duration =
+                bob.get_state().await?.annualized_position_duration();
 
             // Ensure that the implied rate matches the realized rate from
             // holding the short to maturity.
             let realized_rate = if base_proceeds > base_paid {
-                I256::try_from((base_proceeds - base_paid) / (base_paid * position_duration))?
+                I256::try_from(
+                    (base_proceeds - base_paid) / (base_paid * annualized_position_duration),
+                )?
             } else {
-                -I256::try_from((base_paid - base_proceeds) / (base_paid * position_duration))?
+                -I256::try_from(
+                    (base_paid - base_proceeds) / (base_paid * annualized_position_duration),
+                )?
             };
             let error = (implied_rate - realized_rate).abs();
             let scaled_tolerance = if implied_rate > int256!(1e18) {
