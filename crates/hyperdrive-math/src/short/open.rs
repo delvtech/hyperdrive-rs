@@ -221,9 +221,13 @@ impl State {
             (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration()) - fixed!(1e18);
         let base_proceeds = bond_amount * tpy;
         if base_proceeds > base_paid {
-            Ok(I256::try_from((base_proceeds - base_paid) / (base_paid * self.annualized_position_duration()))?)
+            Ok(I256::try_from(
+                (base_proceeds - base_paid) / (base_paid * self.annualized_position_duration()),
+            )?)
         } else {
-            Ok(-I256::try_from((base_paid - base_proceeds) / (base_paid * self.annualized_position_duration()))?)
+            Ok(-I256::try_from(
+                (base_paid - base_proceeds) / (base_paid * self.annualized_position_duration()),
+            )?)
         }
     }
 
