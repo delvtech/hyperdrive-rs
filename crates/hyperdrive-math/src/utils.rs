@@ -132,6 +132,38 @@ pub fn calculate_rate_given_fixed_price(
     (fixed!(1e18) - price) / (price * fixed_price_duration_in_years)
 }
 
+/// Calculate the holding period return (HPR) given a non-compounding, annualized rate (APR).
+///
+/// Since the rate is non-compounding, we calculate the hpr as:
+///
+/// $$
+/// hpr = apr * t
+/// $$
+///
+/// where $t$ is the holding period, in units of years. For example, if the
+/// holding period is 6 months, then $t=0.5$.
+pub fn calculate_hpr_given_apr(apr: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+    let holding_period_in_years =
+        position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+    apr * holding_period_in_years
+}
+
+/// Calculate the holding period return (HPR) given a compounding, annualized rate (APY).
+///
+/// Since the rate is compounding, we calculate the hpr as:
+///
+/// $$
+/// hpr = (1 + apy) ^ (t) - 1
+/// $$
+///
+/// where $t$ is the holding period, in units of years. For example, if the
+/// holding period is 6 months, then $t=0.5$.
+pub fn calculate_hpr_given_apy(apy: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+    let holding_period_in_years =
+        position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+    (fixed!(1e18) + apy).pow(holding_period_in_years) - fixed!(1e18)
+}
+
 #[cfg(test)]
 mod tests {
     use std::panic;

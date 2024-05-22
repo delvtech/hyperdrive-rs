@@ -221,9 +221,13 @@ impl State {
             (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration()) - fixed!(1e18);
         let base_proceeds = bond_amount * tpy;
         if base_proceeds > base_paid {
-            Ok(I256::try_from((base_proceeds - base_paid) / base_paid)?)
+            Ok(I256::try_from(
+                (base_proceeds - base_paid) / (base_paid * self.annualized_position_duration()),
+            )?)
         } else {
-            Ok(-I256::try_from((base_paid - base_proceeds) / base_paid)?)
+            Ok(-I256::try_from(
+                (base_paid - base_proceeds) / (base_paid * self.annualized_position_duration()),
+            )?)
         }
     }
 
@@ -754,20 +758,32 @@ mod tests {
 
             // Bob closes his short.
             let base_proceeds = bob.close_short(maturity_time, bond_amount, None).await?;
+            let annualized_position_duration =
+                bob.get_state().await?.annualized_position_duration();
 
             // Ensure that the implied rate matches the realized rate from
             // holding the short to maturity.
             let realized_rate = if base_proceeds > base_paid {
-                I256::try_from((base_proceeds - base_paid) / base_paid)?
+                I256::try_from(
+                    (base_proceeds - base_paid) / (base_paid * annualized_position_duration),
+                )?
             } else {
-                -I256::try_from((base_paid - base_proceeds) / base_paid)?
+                -I256::try_from(
+                    (base_paid - base_proceeds) / (base_paid * annualized_position_duration),
+                )?
             };
             let error = (implied_rate - realized_rate).abs();
-            assert!(
-                error < tolerance,
-                "error {:?} exceeds tolerance of {}",
-                error,
+            let scaled_tolerance = if implied_rate > int256!(1e18) {
+                I256::from(tolerance * implied_rate)
+            } else {
                 tolerance
+            };
+            assert!(
+                error < scaled_tolerance,
+                "error {:?} exceeds tolerance of {} (scaled to {})",
+                error,
+                tolerance,
+                scaled_tolerance
             );
 
             // Revert to the snapshot and reset the agent's wallets.
