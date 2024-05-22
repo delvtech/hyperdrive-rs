@@ -4,20 +4,16 @@ mod short;
 mod yield_space;
 
 use ethers::core::types::U256;
-use hyperdrive_math::State;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
+pub use crate::utils::*;
 use crate::HyperdriveState;
-pub use crate::{utils::*, PyPoolConfig, PyPoolInfo};
 
 #[pymethods]
 impl HyperdriveState {
     #[new]
     pub fn __init__(pool_config: &PyAny, pool_info: &PyAny) -> PyResult<Self> {
-        let rust_pool_config = PyPoolConfig::extract(pool_config)?.pool_config;
-        let rust_pool_info = PyPoolInfo::extract(pool_info)?.pool_info;
-        let state = State::new(rust_pool_config, rust_pool_info);
-        Ok(HyperdriveState::new(state)?)
+        Ok(HyperdriveState::new_from_pool(pool_config, pool_info)?)
     }
 
     pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {

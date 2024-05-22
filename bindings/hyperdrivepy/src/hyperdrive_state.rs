@@ -1,6 +1,5 @@
-use eyre::eyre;
 use hyperdrive_math::State;
-use pyo3::prelude::*;
+use pyo3::{exceptions::PyAssertionError, prelude::*};
 
 use crate::{PyPoolConfig, PyPoolInfo};
 
@@ -10,8 +9,8 @@ pub struct HyperdriveState {
 }
 
 impl HyperdriveState {
-    pub(crate) fn new(state: State) -> PyResult<Self> {
-        Ok(HyperdriveState { state })
+    pub(crate) fn new(state: State) -> Self {
+        HyperdriveState { state }
     }
 
     pub(crate) fn new_from_pool(pool_config: &PyAny, pool_info: &PyAny) -> PyResult<Self> {
@@ -34,7 +33,7 @@ impl HyperdriveState {
             }
         };
         let state = State::new(rust_pool_config, rust_pool_info);
-        Ok(HyperdriveState::new(state)?)
+        Ok(HyperdriveState::new(state))
     }
 }
 
@@ -44,8 +43,10 @@ impl From<State> for HyperdriveState {
     }
 }
 
-impl From<(&PyAny, &PyAny)> for HyperdriveState {
-    fn from(args: (&PyAny, &PyAny)) -> Self {
+impl TryFrom<(&PyAny, &PyAny)> for HyperdriveState {
+    type Error = PyErr;
+
+    fn try_from(args: (&PyAny, &PyAny)) -> PyResult<Self> {
         HyperdriveState::new_from_pool(args.0, args.1)
     }
 }
