@@ -75,6 +75,10 @@ fn main() -> Result<()> {
     // load dotenv
     dotenv().ok();
 
+    if env::var("SKIP_BUILD").is_ok() {
+        return Ok(());
+    }
+
     let local_development = match env::var("LOCAL_DEVELOPMENT") {
         Ok(local_development) => local_development == "true",
         _ => false,
