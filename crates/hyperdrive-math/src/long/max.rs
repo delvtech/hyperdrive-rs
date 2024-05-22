@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixed_point::{fixed, int256, FixedPoint};
 
@@ -32,6 +32,45 @@ impl State {
         self.share_reserves()
             - self.long_exposure() / self.vault_share_price()
             - self.minimum_share_reserves()
+    }
+
+    pub fn calculate_max_close_long<F: Into<FixedPoint>, U: Into<U256>>(
+        &self,
+        bond_amount: F,
+        maturity_time: U,
+        current_time: U,
+    ) -> Result<FixedPoint> {
+        let bond_amount = bond_amount.into();
+        let maturity_time = maturity_time.into();
+        let current_time = current_time.into();
+
+        // 1. If the bond_amount is less than the self.minimum_transaction_amount(), return 0.
+        if bond_amount < self.minimum_transaction_amount() {
+            return Err(eyre!(
+                "Bond amount is less than minimum transaction amount."
+            ));
+        }
+
+        /*
+            shareReserves > _shareReservesDelta
+            shareReserves - _shareReservesDelta >= minimumShareReserves
+            shareReservesDelta > shareAdjustmentDelta
+            (shareReserves - shareAdjustment) - (shareReservesDelta - shareAdjustmentDelta) >= minimumShareReserves
+            Solvency must be greater than or equal to zero
+        */
+
+        // 2. If the maturity_time is less than or equal to the current_time, then return bond_amount because the bonds have already matured.
+        if maturity_time <= current_time {
+            return Ok(bond_amount);
+        }
+
+        // 3. Check to see if the pool is solvent/has a valid spot price after closing the full bond_amount. If so, then return the bond_amount.
+
+        Ok(())
+
+        // TODO: Refine this step once we evaluate the constraints.
+        // 4, Solve for the absolute maximum bond amount by solving the first four constraints simultaneously. If this is larger than the bond_amount, proceed to the next step. If the absolute maximum bond amount can be closed without violating solvency, then return the absolute_max_bond_amount.
+        // 5. Solve for the maximum bond amount that can be closed while keeping the pool solvent with Newton's method or the Secant method.
     }
 
     /// Calculates the max long that can be opened given a budget.
