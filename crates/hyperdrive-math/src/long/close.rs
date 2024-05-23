@@ -57,8 +57,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use eyre::Result;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
@@ -110,13 +108,11 @@ mod tests {
     async fn test_close_long_min_txn_amount() -> Result<()> {
         let mut rng = thread_rng();
         let state = rng.gen::<State>();
-        let result = std::panic::catch_unwind(|| {
-            state.calculate_close_long(
-                state.config.minimum_transaction_amount - 10,
-                0.into(),
-                0.into(),
-            )?
-        });
+        let result = state.calculate_close_long(
+            state.config.minimum_transaction_amount - 10,
+            0.into(),
+            0.into(),
+        );
         assert!(result.is_err());
         Ok(())
     }

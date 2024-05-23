@@ -490,8 +490,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use ethers::types::U256;
     use eyre::Result;
     use fixed_point::uint256;
@@ -515,7 +513,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = panic::catch_unwind(|| state.absolute_max_long());
+            let actual = state.absolute_max_long();
             match chain
                 .mock_hyperdrive_math()
                 .calculate_absolute_max_long(
@@ -587,14 +585,11 @@ mod tests {
 
             // Check Solidity against Rust.
             let max_iterations = 8usize;
-            // Need to catch panics because of FixedPoint.
-            let actual = panic::catch_unwind(|| {
-                state.calculate_max_long(
-                    U256::MAX,
-                    checkpoint_exposure,
-                    Some(max_iterations.into()),
-                )
-            });
+            let actual = state.calculate_max_long(
+                U256::MAX,
+                checkpoint_exposure,
+                Some(max_iterations.into()),
+            );
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_long(
@@ -650,28 +645,18 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = std::panic::catch_unwind(|| {
-                state.calculate_open_long(amount - empirical_derivative_epsilon)
-            });
+            let p1_result = state.calculate_open_long(amount - empirical_derivative_epsilon);
             let p1;
             let p2;
             match p1_result {
-                Ok(p) => match p {
-                    Ok(p) => p1 = p,
-                    Err(_) => continue,
-                },
+                Ok(p) => p1 = p,
                 // If the amount results in the pool being insolvent, skip this iteration
                 Err(_) => continue,
             }
 
-            let p2_result = std::panic::catch_unwind(|| {
-                state.calculate_open_long(amount + empirical_derivative_epsilon)
-            });
+            let p2_result = state.calculate_open_long(amount + empirical_derivative_epsilon);
             match p2_result {
-                Ok(p) => match p {
-                    Ok(p) => p2 = p,
-                    Err(_) => continue,
-                },
+                Ok(p) => p2 = p,
                 // If the amount results in the pool being insolvent, skip this iteration
                 Err(_) => continue,
             }
