@@ -1,4 +1,5 @@
 use ethers::types::U256;
+use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
 use crate::{State, YieldSpace};
@@ -10,18 +11,19 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
 
         if bond_amount < self.config.minimum_transaction_amount.into() {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("MinimumTransactionAmount: Input amount too low");
+            return Err(eyre!("MinimumTransactionAmount: Input amount too low"));
         }
 
         // Subtract the fees from the trade
-        self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)
-            - self.close_long_curve_fee(bond_amount, maturity_time, current_time)
-            - self.close_long_flat_fee(bond_amount, maturity_time, current_time)
+        Ok(
+            self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)
+                - self.close_long_curve_fee(bond_amount, maturity_time, current_time)?
+                - self.close_long_flat_fee(bond_amount, maturity_time, current_time),
+        )
     }
 
     /// Calculate the amount of shares returned when selling bonds without considering fees.
@@ -71,7 +73,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves());
+            let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
             let maturity_time = state.checkpoint_duration();
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
             let normalized_time_remaining = state
@@ -86,7 +88,7 @@ mod tests {
             match chain
                 .mock_hyperdrive_math()
                 .calculate_close_long(
-                    state.effective_share_reserves().into(),
+                    state.effective_share_reserves()?.into(),
                     state.bond_reserves().into(),
                     in_.into(),
                     normalized_time_remaining.into(),
@@ -115,7 +117,7 @@ mod tests {
                 state.config.minimum_transaction_amount - 10,
                 0.into(),
                 0.into(),
-            )
+            )?
         });
         assert!(result.is_err());
         Ok(())

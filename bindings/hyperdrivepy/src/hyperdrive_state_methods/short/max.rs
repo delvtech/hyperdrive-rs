@@ -38,13 +38,16 @@ impl HyperdriveState {
         } else {
             None
         };
-        let result_fp = self.state.calculate_max_short(
-            budget_fp,
-            open_vault_share_price_fp,
-            checkpoint_exposure_i,
-            maybe_conservative_price_fp,
-            maybe_max_iterations,
-        );
+        let result_fp = self
+            .state
+            .calculate_max_short(
+                budget_fp,
+                open_vault_share_price_fp,
+                checkpoint_exposure_i,
+                maybe_conservative_price_fp,
+                maybe_max_iterations,
+            )
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

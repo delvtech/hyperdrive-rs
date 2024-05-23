@@ -35,13 +35,16 @@ impl HyperdriveState {
         let current_time = U256::from_dec_str(current_time).map_err(|_| {
             PyErr::new::<PyValueError, _>("Failed to convert current_time string to U256")
         })?;
-        let result_fp = self.state.calculate_close_short(
-            bond_amount_fp,
-            open_vault_share_price_fp,
-            close_vault_share_price_fp,
-            maturity_time,
-            current_time,
-        );
+        let result_fp = self
+            .state
+            .calculate_close_short(
+                bond_amount_fp,
+                open_vault_share_price_fp,
+                close_vault_share_price_fp,
+                maturity_time,
+                current_time,
+            )
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

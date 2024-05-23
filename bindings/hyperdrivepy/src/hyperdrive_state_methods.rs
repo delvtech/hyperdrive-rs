@@ -31,19 +31,28 @@ impl HyperdriveState {
     }
 
     pub fn calculate_spot_price(&self) -> PyResult<String> {
-        let result_fp = self.state.calculate_spot_price();
+        let result_fp = self
+            .state
+            .calculate_spot_price()
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
 
     pub fn calculate_spot_rate(&self) -> PyResult<String> {
-        let result_fp = self.state.calculate_spot_rate();
+        let result_fp = self
+            .state
+            .calculate_spot_rate()
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
 
     pub fn calculate_max_spot_price(&self) -> PyResult<String> {
-        let result_fp = self.state.calculate_max_spot_price();
+        let result_fp = self
+            .state
+            .calculate_max_spot_price()
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

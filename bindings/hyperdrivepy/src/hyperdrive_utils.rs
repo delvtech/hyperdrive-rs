@@ -44,7 +44,8 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
         initial_vault_share_price_fp,
         position_duration_fp,
         time_stretch_fp,
-    );
+    )
+    .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
     let result = U256::from(result_fp).to_string();
     Ok(result)
 }
@@ -60,7 +61,8 @@ pub fn calculate_effective_share_reserves(
     let share_adjustment_i = I256::from_dec_str(share_adjustment).map_err(|_| {
         PyErr::new::<PyValueError, _>("Failed to convert share_adjustment string to I256")
     })?;
-    let result_fp = rs_calculate_effective_share_reserves(share_reserves_fp, share_adjustment_i);
+    let result_fp = rs_calculate_effective_share_reserves(share_reserves_fp, share_adjustment_i)
+        .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
     let result = U256::from(result_fp).to_string();
     Ok(result)
 }
@@ -90,7 +92,8 @@ pub fn calculate_time_stretch(rate: &str, position_duration: &str) -> PyResult<S
         U256::from_dec_str(position_duration)
             .map_err(|_| PyErr::new::<PyValueError, _>("Failed to convert rate string to U256"))?,
     );
-    let result_fp = rs_calculate_time_stretch(rate_fp, position_duration_fp);
+    let result_fp = rs_calculate_time_stretch(rate_fp, position_duration_fp)
+        .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
     let result = U256::from(result_fp).to_string();
     Ok(result)
 }

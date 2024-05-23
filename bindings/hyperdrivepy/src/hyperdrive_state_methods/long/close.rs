@@ -22,9 +22,10 @@ impl HyperdriveState {
             PyErr::new::<PyValueError, _>("Failed to convert current_time string to U256")
         })?;
 
-        let result_fp =
-            self.state
-                .calculate_close_long(bond_amount_fp, maturity_time, current_time);
+        let result_fp = self
+            .state
+            .calculate_close_long(bond_amount_fp, maturity_time, current_time)
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

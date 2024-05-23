@@ -16,7 +16,7 @@ impl State {
         as_base: bool,
     ) -> Result<FixedPoint> {
         // Enforce the slippage guard.
-        let apr = self.calculate_spot_rate();
+        let apr = self.calculate_spot_rate()?;
         if apr < min_apr || apr > max_apr {
             return Err(eyre!("InvalidApr: Apr is outside the slippage guard."));
         }

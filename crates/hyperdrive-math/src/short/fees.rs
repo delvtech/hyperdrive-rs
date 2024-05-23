@@ -1,4 +1,5 @@
 use ethers::types::U256;
+use eyre::Result;
 use fixed_point::{fixed, FixedPoint};
 
 use crate::State;
@@ -13,11 +14,12 @@ impl State {
     /// \Phi_{c,os}(\Delta y) = \phi_c \cdot (1 - p) \cdot \Delta y
     /// $$
     ///
-    pub fn open_short_curve_fee(&self, bond_amount: FixedPoint) -> FixedPoint {
+    pub fn open_short_curve_fee(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
         // NOTE: Round up to overestimate the curve fee.
-        self.curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price())
-            .mul_up(bond_amount)
+        Ok(self
+            .curve_fee()
+            .mul_up(fixed!(1e18) - self.calculate_spot_price()?)
+            .mul_up(bond_amount))
     }
 
     /// Calculates the governance fee paid when opening shorts with a given bond amount.
@@ -32,13 +34,13 @@ impl State {
         &self,
         bond_amount: FixedPoint,
         maybe_curve_fee: Option<FixedPoint>,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let curve_fee = match maybe_curve_fee {
             Some(maybe_curve_fee) => maybe_curve_fee,
-            None => self.open_short_curve_fee(bond_amount),
+            None => self.open_short_curve_fee(bond_amount)?,
         };
         // NOTE: Round down to underestimate the governance fee.
-        curve_fee.mul_down(self.governance_lp_fee())
+        Ok(curve_fee.mul_down(self.governance_lp_fee()))
     }
 
     /// Calculates the curve fee paid when opening shorts with a given bond amount.
@@ -56,14 +58,15 @@ impl State {
         bond_amount: FixedPoint,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
         // NOTE: Round up to overestimate the curve fee.
-        self.curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price())
+        Ok(self
+            .curve_fee()
+            .mul_up(fixed!(1e18) - self.calculate_spot_price()?)
             .mul_up(bond_amount)
-            .mul_div_up(normalized_time_remaining, self.vault_share_price())
+            .mul_div_up(normalized_time_remaining, self.vault_share_price()))
     }
 
     /// Calculate the governance fee paid when closing shorts with a given bond amount.
@@ -82,13 +85,13 @@ impl State {
         maturity_time: U256,
         current_time: U256,
         maybe_curve_fee: Option<FixedPoint>,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let curve_fee = match maybe_curve_fee {
             Some(maybe_curve_fee) => maybe_curve_fee,
-            None => self.close_short_curve_fee(bond_amount, maturity_time, current_time),
+            None => self.close_short_curve_fee(bond_amount, maturity_time, current_time)?,
         };
         // NOTE: Round down to underestimate the governance fee.
-        curve_fee.mul_down(self.governance_lp_fee())
+        Ok(curve_fee.mul_down(self.governance_lp_fee()))
     }
 
     /// Calculate the flat fee paid when closing shorts with a given bond amount.
