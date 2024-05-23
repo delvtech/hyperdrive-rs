@@ -20,7 +20,7 @@ impl State {
 
         // Subtract the fees from the trade
         Ok(
-            self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)
+            self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)?
                 - self.close_long_curve_fee(bond_amount, maturity_time, current_time)?
                 - self.close_long_flat_fee(bond_amount, maturity_time, current_time),
         )
@@ -32,7 +32,7 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -46,12 +46,12 @@ impl State {
         // Calculate the curve part of the trade
         let curve = if normalized_time_remaining > fixed!(0) {
             let curve_bonds_in = bond_amount * normalized_time_remaining;
-            self.calculate_shares_out_given_bonds_in_down(curve_bonds_in)
+            self.calculate_shares_out_given_bonds_in_down(curve_bonds_in)?
         } else {
             fixed!(0)
         };
 
-        flat + curve
+        Ok(flat + curve)
     }
 }
 
@@ -78,13 +78,11 @@ mod tests {
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
             let normalized_time_remaining = state
                 .calculate_normalized_time_remaining(maturity_time.into(), current_time.into());
-            let actual = panic::catch_unwind(|| {
-                state.calculate_close_long_flat_plus_curve(
-                    in_,
-                    maturity_time.into(),
-                    current_time.into(),
-                )
-            });
+            let actual = state.calculate_close_long_flat_plus_curve(
+                in_,
+                maturity_time.into(),
+                current_time.into(),
+            );
             match chain
                 .mock_hyperdrive_math()
                 .calculate_close_long(

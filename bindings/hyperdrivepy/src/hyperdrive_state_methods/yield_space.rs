@@ -54,7 +54,8 @@ impl HyperdriveState {
         })?);
         let result_fp = self
             .state
-            .calculate_shares_out_given_bonds_in_down(amount_in_fp);
+            .calculate_shares_out_given_bonds_in_down(amount_in_fp)
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

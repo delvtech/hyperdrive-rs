@@ -151,14 +151,12 @@ pub trait YieldSpace {
     /// providing a specified amount of bonds. This function reverts if an
     /// integer overflow or underflow occurs. We underestimate the amount of
     /// shares out.
-    fn calculate_shares_out_given_bonds_in_down(&self, dy: FixedPoint) -> FixedPoint {
+    fn calculate_shares_out_given_bonds_in_down(&self, dy: FixedPoint) -> Result<FixedPoint> {
         self.calculate_shares_out_given_bonds_in_down_safe(dy)
-            .unwrap()
     }
 
     /// Calculates the amount of shares a user will receive from the pool by
-    /// providing a specified amount of bonds. This function returns a Result
-    /// instead of panicking. We underestimate the amount of shares out.
+    /// providing a specified amount of bonds. We underestimate the amount of shares out.
     fn calculate_shares_out_given_bonds_in_down_safe(&self, dy: FixedPoint) -> Result<FixedPoint> {
         // NOTE: We round k up to make the rhs of the equation larger.
         //
@@ -341,8 +339,6 @@ pub trait YieldSpace {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -358,8 +354,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen::<FixedPoint>();
-            let actual =
-                panic::catch_unwind(|| state.calculate_bonds_out_given_shares_in_down(in_));
+            let actual = state.calculate_bonds_out_given_shares_in_down(in_);
             match chain
                 .mock_yield_space_math()
                 .calculate_bonds_out_given_shares_in_down(
@@ -423,8 +418,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let out = rng.gen::<FixedPoint>();
-            let actual =
-                panic::catch_unwind(|| state.calculate_shares_in_given_bonds_out_down(out));
+            let actual = state.calculate_shares_in_given_bonds_out_down(out);
             match chain
                 .mock_yield_space_math()
                 .calculate_shares_in_given_bonds_out_down(
@@ -457,8 +451,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen::<FixedPoint>();
-            let actual =
-                panic::catch_unwind(|| state.calculate_shares_out_given_bonds_in_down(in_));
+            let actual = state.calculate_shares_out_given_bonds_in_down(in_);
             match chain
                 .mock_yield_space_math()
                 .calculate_shares_out_given_bonds_in_down(
@@ -491,8 +484,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen::<FixedPoint>();
-            let actual =
-                panic::catch_unwind(|| state.calculate_shares_out_given_bonds_in_down_safe(in_));
+            let actual = state.calculate_shares_out_given_bonds_in_down_safe(in_);
             match chain
                 .mock_yield_space_math()
                 .calculate_shares_out_given_bonds_in_down_safe(
@@ -526,7 +518,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = panic::catch_unwind(|| state.calculate_max_buy_shares_in_safe());
+            let actual = state.calculate_max_buy_shares_in_safe();
             match chain
                 .mock_yield_space_math()
                 .calculate_max_buy_shares_in_safe(
@@ -559,7 +551,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = panic::catch_unwind(|| state.calculate_max_buy_bonds_out_safe());
+            let actual = state.calculate_max_buy_bonds_out_safe();
             match chain
                 .mock_yield_space_math()
                 .calculate_max_buy_bonds_out_safe(
@@ -593,7 +585,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let z_min = rng.gen::<FixedPoint>();
-            let actual = panic::catch_unwind(|| state.calculate_max_sell_bonds_in_safe(z_min));
+            let actual = state.calculate_max_sell_bonds_in_safe(z_min);
             match chain
                 .mock_yield_space_math()
                 .calculate_max_sell_bonds_in_safe(

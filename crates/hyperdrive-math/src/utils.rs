@@ -172,8 +172,6 @@ pub fn calculate_hpr_given_apy(
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
@@ -207,7 +205,7 @@ mod tests {
                 Ok(expected_t) => {
                     assert_eq!(actual_t, FixedPoint::from(expected_t));
                 }
-                Err(_) => panic!("Test failed."),
+                Err(err) => return Err(eyre!(format!("Test failed: {}", err))),
             }
         }
 
@@ -232,9 +230,7 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
 
             // Get the min rate.
-            let max_long = match panic::catch_unwind(|| {
-                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
-            }) {
+            let max_long = match state.calculate_max_long(U256::MAX, checkpoint_exposure, None) {
                 Ok(max_long) => match max_long {
                     Ok(max_long) => max_long,
                     Err(_) => continue,
@@ -244,15 +240,13 @@ mod tests {
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
 
             // Get the max rate.
-            let max_short = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    None,
-                )
-            }) {
+            let max_short = match state.calculate_max_short(
+                U256::MAX,
+                open_vault_share_price,
+                checkpoint_exposure,
+                None,
+                None,
+            ) {
                 Ok(max_short) => max_short,
                 Err(_) => continue, // Don't finish this fuzz iteration.
             };

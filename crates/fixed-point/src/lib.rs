@@ -787,7 +787,7 @@ mod tests {
         for _ in 0..10_000 {
             let x: I256 =
                 I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
-            let actual = panic::catch_unwind(|| FixedPoint::exp(x));
+            let actual = FixedPoint::exp(x);
             match mock_fixed_point_math.exp(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
