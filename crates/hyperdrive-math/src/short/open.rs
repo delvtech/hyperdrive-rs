@@ -277,8 +277,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use ethers::{signers::LocalWallet, types::U256};
     use fixed_point::{fixed, int256, uint256};
     use hyperdrive_test_utils::{
@@ -371,15 +369,13 @@ mod tests {
                 }
             };
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    None,
-                )
-            }) {
+            let max_bond_amount = match state.calculate_max_short(
+                U256::MAX,
+                open_vault_share_price,
+                checkpoint_exposure,
+                None,
+                None,
+            ) {
                 Ok(max_bond_amount) => max_bond_amount,
                 Err(_) => continue,
             };
@@ -388,11 +384,10 @@ mod tests {
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let curve_fee_base = state.open_short_curve_fee(bond_amount);
+            let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
+            let gov_fee = state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
             let fees = curve_fee_base.div_up(state.vault_share_price())
-                - state
-                    .open_short_governance_fee(bond_amount, Some(curve_fee_base))
-                    .div_up(state.vault_share_price());
+                - gov_fee.div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
@@ -413,7 +408,9 @@ mod tests {
                         && expected_with_fees >= actual_with_fees - fixed!(10);
                     assert!(result_equal, "Should be equal.");
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => {
+                    assert!(actual.is_err())
+                }
             };
         }
         Ok(())
@@ -466,16 +463,13 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = state.calculate_short_principal(amount - empirical_derivative_epsilon);
-
-            let p1 = match p1_result {
+            let p1 = match state.calculate_short_principal(amount - empirical_derivative_epsilon) {
                 // If the amount results in the pool being insolvent, skip this iteration
                 Ok(p) => p,
                 Err(_) => continue,
             };
 
-            let p2_result = state.calculate_short_principal(amount + empirical_derivative_epsilon);
-            let p2 = match p2_result {
+            let p2 = match state.calculate_short_principal(amount + empirical_derivative_epsilon) {
                 // If the amount results in the pool being insolvent, skip this iteration
                 Ok(p) => p,
                 Err(_) => continue,
@@ -484,7 +478,7 @@ mod tests {
             assert!(p2 > p1);
 
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let short_principal_derivative = state.calculate_short_principal_derivative(amount);
+            let short_principal_derivative = state.calculate_short_principal_derivative(amount)?;
 
             let derivative_diff;
             if short_principal_derivative >= empirical_derivative {
@@ -522,37 +516,23 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = panic::catch_unwind(|| {
-                state.calculate_open_short(
-                    amount - empirical_derivative_epsilon,
-                    state.vault_share_price(),
-                )
-            });
-            let p1;
-            let p2;
-            match p1_result {
+            let p1 = match state.calculate_open_short(
+                amount - empirical_derivative_epsilon,
+                state.vault_share_price(),
+            ) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p_panics) => match p_panics {
-                    Ok(p) => p1 = p,
-                    Err(_) => continue,
-                },
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
 
-            let p2_result = panic::catch_unwind(|| {
-                state.calculate_open_short(
-                    amount + empirical_derivative_epsilon,
-                    state.vault_share_price(),
-                )
-            });
-            match p2_result {
+            let p2 = match state.calculate_open_short(
+                amount + empirical_derivative_epsilon,
+                state.vault_share_price(),
+            ) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p_panics) => match p_panics {
-                    Ok(p) => p2 = p,
-                    Err(_) => continue,
-                },
+                Ok(p) => p,
                 Err(_) => continue,
-            }
+            };
 
             // Sanity check
             assert!(p2 > p1);
@@ -565,7 +545,7 @@ mod tests {
                 amount,
                 state.calculate_spot_price()?,
                 state.vault_share_price(),
-            );
+            )?;
 
             let derivative_diff;
             if short_deposit_derivative >= empirical_derivative {
@@ -669,15 +649,13 @@ mod tests {
                 }
             };
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    None,
-                )
-            }) {
+            let max_bond_amount = match state.calculate_max_short(
+                U256::MAX,
+                open_vault_share_price,
+                checkpoint_exposure,
+                None,
+                None,
+            ) {
                 Ok(max_bond_amount) => max_bond_amount,
                 Err(_) => continue,
             };
@@ -827,17 +805,14 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            let max_trade = panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    Some(max_iterations),
-                )
-            });
+            let max_trade = state.calculate_max_short(
+                U256::MAX,
+                open_vault_share_price,
+                checkpoint_exposure,
+                None,
+                Some(max_iterations),
+            );
             // Since we're fuzzing it's possible that the max can fail.
-            // This failure can be an error or a panic.
             // We're only going to use it in this test if it succeeded.
             match max_trade {
                 Ok(max_trade) => {
@@ -849,12 +824,14 @@ mod tests {
                     );
                     match result {
                         Ok(_) => {
-                            panic!("calculate_open_short should have failed but succeeded.")
+                            return Err(eyre!(
+                                "calculate_open_short should have failed but succeeded."
+                            ));
                         }
                         Err(_) => continue, // Max was fine; open resulted in an Error.
                     }
                 }
-                Err(_) => continue, // Max thew a panic (likely due to FixedPoint under/over flow.
+                Err(_) => continue, // Max thew an error (likely due to FixedPoint under/over flow.
             }
         }
 

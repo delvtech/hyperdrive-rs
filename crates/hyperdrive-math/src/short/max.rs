@@ -492,10 +492,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
-
     use ethers::types::U256;
-    use eyre::Result;
     use fixed_point::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
@@ -533,15 +530,13 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            let actual = panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    Some(max_iterations),
-                )
-            });
+            let actual = state.calculate_max_short(
+                U256::MAX,
+                open_vault_share_price,
+                checkpoint_exposure,
+                None,
+                Some(max_iterations),
+            );
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_short(
@@ -645,7 +640,7 @@ mod tests {
                 checkpoint_exposure,
                 None,
                 None,
-            );
+            )?;
             // It's known that global max short is in units of bonds,
             // but we fund bob with this amount regardless, since the amount required
             // for deposit << the global max short number of bonds.
@@ -719,7 +714,7 @@ mod tests {
                 checkpoint_exposure,
                 None,
                 None,
-            );
+            )?;
 
             // Bob opens a max short position. We allow for a very small amount
             // of slippage to account for interest accrual between the time the

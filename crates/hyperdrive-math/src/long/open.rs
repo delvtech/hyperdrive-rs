@@ -295,7 +295,7 @@ mod tests {
             // Verify that the predicted spot rate is equal to the ending spot
             // rate. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the long.
-            let actual_spot_rate = bob.get_state().await?.calculate_spot_rate();
+            let actual_spot_rate = bob.get_state().await?.calculate_spot_rate()?;
             let delta = if actual_spot_rate > expected_spot_rate {
                 actual_spot_rate - expected_spot_rate
             } else {

@@ -200,7 +200,7 @@ impl FixedPoint {
         // Using properties of logarithms we calculate x^y:
         // -> ln(x^y) = y * ln(x)
         // -> e^(y * ln(x)) = x^y
-        let y_int256 = I256::try_from(y).unwrap();
+        let y_int256 = I256::try_from(y)?;
 
         // Compute y*ln(x)
         // Any overflow for x will be caught in _ln() in the initial bounds check
@@ -488,7 +488,6 @@ mod tests {
     use std::panic;
 
     use ethers::signers::Signer;
-    use eyre::Result;
     use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
     use rand::thread_rng;
     use test_utils::{chain::Chain, constants::DEPLOYER};
@@ -720,7 +719,7 @@ mod tests {
         for _ in 0..10_000 {
             let x: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
             let y: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
-            let actual = x.pow(y)?;
+            let actual = x.pow(y);
             match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => {
                     assert_eq!(actual.unwrap(), FixedPoint::from(expected));
@@ -744,7 +743,7 @@ mod tests {
         for _ in 0..10_000 {
             let x: FixedPoint = rng.gen();
             let y: FixedPoint = rng.gen();
-            let actual = x.pow(y)?;
+            let actual = x.pow(y);
             match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
                 Err(_) => assert!(actual.is_err()),
@@ -786,7 +785,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 =
-                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
+                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::try_from(I256::MAX)?)).unwrap();
             let actual = FixedPoint::exp(x);
             match mock_fixed_point_math.exp(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
@@ -829,7 +828,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 =
-                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
+                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::try_from(I256::MAX)?)).unwrap();
             let actual = FixedPoint::ln(x);
             match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),

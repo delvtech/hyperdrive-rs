@@ -499,7 +499,6 @@ mod tests {
                 .await
             {
                 Ok((expected_out, expected_status)) => {
-                    let actual = actual.unwrap();
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }
@@ -532,7 +531,6 @@ mod tests {
                 .await
             {
                 Ok((expected_out, expected_status)) => {
-                    let actual = actual.unwrap();
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }
@@ -565,7 +563,6 @@ mod tests {
                 .await
             {
                 Ok((expected_out, expected_status)) => {
-                    let actual = actual.unwrap();
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }
@@ -601,7 +598,6 @@ mod tests {
                 .await
             {
                 Ok((expected_out, expected_status)) => {
-                    let actual = actual.unwrap();
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }

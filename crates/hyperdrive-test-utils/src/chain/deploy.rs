@@ -934,7 +934,7 @@ impl TestnetDeploy for Chain {
 #[cfg(test)]
 mod tests {
     use hyperdrive_wrappers::wrappers::ihyperdrive::IHyperdrive;
-    use test_utils::{chain::Chain, constants::ALICE};
+    use test_utils::constants::ALICE;
 
     use super::*;
     use crate::chain::TestChain;

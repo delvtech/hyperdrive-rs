@@ -182,7 +182,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             // spot price the pool can quote. We choose the weights so that this
             // is an underestimate of the worst case realized price.
             let spot_price = state.calculate_spot_price()?;
-            let min_price = state.calculate_min_price();
+            let min_price = state.calculate_min_price()?;
 
             // Calculate the linear interpolation.
             let base_reserves = FixedPoint::from(state.info.vault_share_price)
@@ -192,13 +192,13 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             spot_price * (fixed!(1e18) - weight) + min_price * weight
         };
 
-        Ok(state.calculate_max_short(
+        state.calculate_max_short(
             budget,
             open_vault_share_price,
             checkpoint_exposure,
             Some(conservative_price),
             None,
-        ))
+        )
     }
 
     #[instrument(skip(self))]

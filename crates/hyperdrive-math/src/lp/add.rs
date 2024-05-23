@@ -141,7 +141,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic::{catch_unwind, AssertUnwindSafe};
 
     use fixed_point::{fixed, int256, uint256};
     use hyperdrive_test_utils::{
@@ -167,69 +166,61 @@ mod tests {
             let max_apr = rng.gen_range(fixed!(5e17)..fixed!(1e18));
 
             // Calculate lp_shares from the rust function.
-            let result = catch_unwind(AssertUnwindSafe(|| {
-                state.calculate_add_liquidity(
-                    current_block_timestamp,
-                    contribution,
-                    min_lp_share_price,
-                    min_apr,
-                    max_apr,
-                    true,
-                )
-            }));
-
             // Testing mostly unhappy paths here since random state will mostly fail.
-            match result {
-                Ok(result) => match result {
-                    Ok(lp_shares) => {
-                        assert!(lp_shares >= min_lp_share_price);
+            match state.calculate_add_liquidity(
+                current_block_timestamp,
+                contribution,
+                min_lp_share_price,
+                min_apr,
+                max_apr,
+                true,
+            ) {
+                Ok(lp_shares) => {
+                    assert!(lp_shares >= min_lp_share_price);
+                }
+                Err(err) => {
+                    let message = err.to_string();
+
+                    if message == "MinimumTransactionAmount: Contribution is smaller than the minimum transaction." {
+                        assert!(contribution < state.minimum_transaction_amount());
                     }
-                    Err(err) => {
-                        let message = err.to_string();
 
-                        if message == "MinimumTransactionAmount: Contribution is smaller than the minimum transaction." {
-                          assert!(contribution < state.minimum_transaction_amount());
-                        }
-
-                        else if message == "InvalidApr: Apr is outside the slippage guard." {
-                            let apr = state.calculate_spot_rate();
-                            assert!(apr < min_apr || apr > max_apr);
-                        }
-
-                        else if message == "DecreasedPresentValueWhenAddingLiquidity: Present value decreased after adding liquidity." {
-                            let share_contribution =
-                                I256::try_from(contribution / state.vault_share_price()).unwrap();
-                            let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
-                            assert!(ending_present_value < starting_present_value);
-                        }
-
-                        else if message == "MinimumTransactionAmount: Not enough lp shares minted." {
-                            let share_contribution =
-                                I256::try_from(contribution / state.vault_share_price()).unwrap();
-                            let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
-                            let lp_shares = (ending_present_value - starting_present_value)
-                                .mul_div_down(state.lp_total_supply(), starting_present_value);
-                            assert!(lp_shares < state.minimum_transaction_amount());
-                        }
-
-                        else if message == "OutputLimit: Not enough lp shares minted." {
-                            let share_contribution =
-                                I256::try_from(contribution / state.vault_share_price()).unwrap();
-                            let new_state = state.get_state_after_liquidity_update(share_contribution);
-                            let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
-                            let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
-                            let lp_shares = (ending_present_value - starting_present_value)
-                                .mul_div_down(state.lp_total_supply(), starting_present_value);
-                            assert!(contribution.div_down(lp_shares) < min_lp_share_price);
-                        }
+                    else if message == "InvalidApr: Apr is outside the slippage guard." {
+                        let apr = state.calculate_spot_rate()?;
+                        assert!(apr < min_apr || apr > max_apr);
                     }
-                },
-                // ignore inner panics
-                Err(_) => {}
+
+                    else if message == "DecreasedPresentValueWhenAddingLiquidity: Present value decreased after adding liquidity." {
+                        let share_contribution =
+                            I256::try_from(contribution / state.vault_share_price()).unwrap();
+                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                        let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
+                        assert!(ending_present_value < starting_present_value);
+                    }
+
+                    else if message == "MinimumTransactionAmount: Not enough lp shares minted." {
+                        let share_contribution =
+                            I256::try_from(contribution / state.vault_share_price()).unwrap();
+                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                        let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
+                        let lp_shares = (ending_present_value - starting_present_value)
+                            .mul_div_down(state.lp_total_supply(), starting_present_value);
+                        assert!(lp_shares < state.minimum_transaction_amount());
+                    }
+
+                    else if message == "OutputLimit: Not enough lp shares minted." {
+                        let share_contribution =
+                            I256::try_from(contribution / state.vault_share_price()).unwrap();
+                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
+                        let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
+                        let lp_shares = (ending_present_value - starting_present_value)
+                            .mul_div_down(state.lp_total_supply(), starting_present_value);
+                        assert!(contribution.div_down(lp_shares) < min_lp_share_price);
+                    }
+                }
             }
         }
 

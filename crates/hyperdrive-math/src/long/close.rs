@@ -57,7 +57,6 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use eyre::Result;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 

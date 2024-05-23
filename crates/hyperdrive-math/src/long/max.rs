@@ -490,8 +490,9 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use ethers::types::U256;
-    use eyre::Result;
     use fixed_point::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
@@ -534,7 +535,7 @@ mod tests {
                     calculate_effective_share_reserves(
                         state.info.share_reserves.into(),
                         state.info.share_adjustment,
-                    )
+                    )?
                     .into(),
                     state.calculate_spot_price()?.into(),
                 )
@@ -542,11 +543,11 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
+                    let (actual_base_amount, actual_bond_amount) = actual.unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
-                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
+                Err(_) => assert!(actual.is_err()),
             }
         }
 
@@ -574,7 +575,7 @@ mod tests {
 
             // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 let sign = rng.gen::<bool>();
                 if sign {
                     -I256::try_from(value).unwrap()
@@ -585,11 +586,14 @@ mod tests {
 
             // Check Solidity against Rust.
             let max_iterations = 8usize;
-            let actual = state.calculate_max_long(
-                U256::MAX,
-                checkpoint_exposure,
-                Some(max_iterations.into()),
-            );
+            // We need to catch panics because of overflows.
+            let actual = panic::catch_unwind(|| {
+                state.calculate_max_long(
+                    U256::MAX,
+                    checkpoint_exposure,
+                    Some(max_iterations.into()),
+                )
+            });
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_long(
@@ -645,21 +649,17 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = state.calculate_open_long(amount - empirical_derivative_epsilon);
-            let p1;
-            let p2;
-            match p1_result {
-                Ok(p) => p1 = p,
+            let p1 = match state.calculate_open_long(amount - empirical_derivative_epsilon) {
+                Ok(p) => p,
                 // If the amount results in the pool being insolvent, skip this iteration
                 Err(_) => continue,
-            }
+            };
 
-            let p2_result = state.calculate_open_long(amount + empirical_derivative_epsilon);
-            match p2_result {
-                Ok(p) => p2 = p,
+            let p2 = match state.calculate_open_long(amount + empirical_derivative_epsilon) {
+                Ok(p) => p,
                 // If the amount results in the pool being insolvent, skip this iteration
                 Err(_) => continue,
-            }
+            };
             // Sanity check
             assert!(p2 > p1);
 
@@ -727,7 +727,7 @@ mod tests {
                 .await?;
 
             // Bob opens a max long.
-            let max_spot_price = bob.get_state().await?.calculate_max_spot_price();
+            let max_spot_price = bob.get_state().await?.calculate_max_spot_price()?;
             let max_long = bob.calculate_max_long(None).await?;
             let spot_price_after_long = bob
                 .get_state()

@@ -203,9 +203,9 @@ mod tests {
                 .await
             {
                 Ok(expected_t) => {
-                    assert_eq!(actual_t, FixedPoint::from(expected_t));
+                    assert_eq!(actual_t.unwrap(), FixedPoint::from(expected_t));
                 }
-                Err(err) => return Err(eyre!(format!("Test failed: {}", err))),
+                Err(_) => assert!(actual_t.is_err()),
             }
         }
 
@@ -219,7 +219,7 @@ mod tests {
             // Gen the random state.
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 let sign = rng.gen::<bool>();
                 if sign {
                     -I256::try_from(value).unwrap()
@@ -231,10 +231,7 @@ mod tests {
 
             // Get the min rate.
             let max_long = match state.calculate_max_long(U256::MAX, checkpoint_exposure, None) {
-                Ok(max_long) => match max_long {
-                    Ok(max_long) => max_long,
-                    Err(_) => continue,
-                },
+                Ok(max_long) => max_long,
                 Err(_) => continue, // Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
@@ -267,7 +264,7 @@ mod tests {
             // Make a new state with the updated reserves & check the spot rate.
             let mut new_state: State = state.clone();
             new_state.info.bond_reserves = bond_reserves.into();
-            assert_eq!(new_state.calculate_spot_rate(), target_rate)
+            assert_eq!(new_state.calculate_spot_rate()?, target_rate)
         }
         Ok(())
     }

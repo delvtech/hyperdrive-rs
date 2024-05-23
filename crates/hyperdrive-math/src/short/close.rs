@@ -115,8 +115,7 @@ impl State {
         let close_vault_share_price = close_vault_share_price.into();
 
         if bond_amount < self.config.minimum_transaction_amount.into() {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("MinimumTransactionAmount: Input amount too low");
+            return Err(eyre!("MinimumTransactionAmount: Input amount too low"));
         }
 
         // Ensure that the trader didn't purchase bonds at a negative interest
@@ -182,7 +181,6 @@ impl State {
 mod tests {
     use std::panic;
 
-    use eyre::Result;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -278,15 +276,13 @@ mod tests {
     async fn test_close_short_min_txn_amount() -> Result<()> {
         let mut rng = thread_rng();
         let state = rng.gen::<State>();
-        let result = std::panic::catch_unwind(|| {
-            state.calculate_close_short(
-                (state.config.minimum_transaction_amount - 10).into(),
-                state.calculate_spot_price()?,
-                state.vault_share_price(),
-                0.into(),
-                0.into(),
-            )
-        });
+        let result = state.calculate_close_short(
+            (state.config.minimum_transaction_amount - 10).into(),
+            state.calculate_spot_price()?,
+            state.vault_share_price(),
+            0.into(),
+            0.into(),
+        );
         assert!(result.is_err());
         Ok(())
     }
