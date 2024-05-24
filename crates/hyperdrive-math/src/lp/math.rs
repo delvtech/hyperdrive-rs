@@ -1384,17 +1384,7 @@ mod tests {
             {
                 Ok(expected) => {
                     let (sol_withdrawal_shares_redeemed, sol_share_proceeds) = expected;
-                    println!(
-                        "\nsol_withdrawal_shares_redeemed  {:#?}",
-                        sol_withdrawal_shares_redeemed
-                    );
                     let (rust_withdrawal_shares_redeemed, rust_share_proceeds) = actual?;
-                    println!(
-                        "rust_withdrawal_shares_redeemed {:#?}",
-                        rust_withdrawal_shares_redeemed
-                    );
-                    println!("rust_share_proceeds {:#?}", rust_share_proceeds);
-                    println!("sol_share_proceeds  {:#?}", sol_share_proceeds);
                     assert_eq!(
                         sol_withdrawal_shares_redeemed,
                         U256::from(rust_withdrawal_shares_redeemed)
