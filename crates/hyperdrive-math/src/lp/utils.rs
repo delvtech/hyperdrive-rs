@@ -1,13 +1,29 @@
 use ethers::types::{I256, U256};
 use eyre::Result;
-use fixed_point::fixed;
+use fixed_point::{fixed, FixedPoint};
 
 use crate::State;
 
 impl State {
+    // Helper method that calculates the net curve trade.
+    pub fn calculate_net_curve_trade(
+        &self,
+        long_average_time_remaining: FixedPoint,
+        short_average_time_remaining: FixedPoint,
+    ) -> Result<I256> {
+        let net_curve_trade =
+            I256::try_from(self.longs_outstanding().mul_up(long_average_time_remaining))?
+                - I256::try_from(
+                    self.shorts_outstanding()
+                        .mul_down(short_average_time_remaining),
+                )?;
+
+        Ok(net_curve_trade)
+    }
+
     // Helper method that calculates the average time remaining for the longs
     // and shorts and the net curve trade.
-    pub fn calculate_net_curve_trade_from_timestamp(
+    pub fn calculate_net_curve_trade_safe_from_timestamp(
         &self,
         current_block_timestamp: U256,
     ) -> Result<I256> {
@@ -23,7 +39,10 @@ impl State {
             current_block_timestamp,
         );
 
-        self.calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)
+        self.calculate_net_curve_trade_safe(
+            long_average_time_remaining,
+            short_average_time_remaining,
+        )
     }
 
     /// Calculates the result of closing the net flat position.

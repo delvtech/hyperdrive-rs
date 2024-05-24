@@ -148,8 +148,10 @@ impl State {
             self.short_average_maturity_time(),
             current_block_timestamp,
         );
-        let net_curve_trade = self
-            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
+        let net_curve_trade = self.calculate_net_curve_trade_safe(
+            long_average_time_remaining,
+            short_average_time_remaining,
+        )?;
         let net_flat_trade = self
             .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)?;
 
@@ -161,10 +163,10 @@ impl State {
             return Err(eyre!("Negative present value!"));
         }
 
-        present_value.try_into()
+        Ok(present_value.try_into())
     }
 
-    pub fn calculate_net_curve_trade(
+    pub fn calculate_net_curve_trade_safe(
         &self,
         long_average_time_remaining: FixedPoint,
         short_average_time_remaining: FixedPoint,
@@ -182,21 +184,35 @@ impl State {
         // compute the net curve position as:
         //
         // netCurveTrade = y_l * t_l - y_s * t_s.
-        let net_curve_position: I256 =
+        let net_curve_position =
             I256::try_from(self.longs_outstanding().mul_up(long_average_time_remaining))?
                 - I256::try_from(
                     self.shorts_outstanding()
                         .mul_down(short_average_time_remaining),
                 )?;
+        match self.effective_share_reserves_safe() {
+            Ok(effective_share_reserves) => {}
+            // NOTE: Return 0 to indicate that the net curve trade couldn't be
+            // computed.
+            Err(err) => return Ok(I256::zero()),
+        }
 
         // If the net curve position is positive, then the pool is net long.
         // Closing the net curve position results in the longs being paid out
         // from the share reserves, so we negate the result.
         match net_curve_position.cmp(&int256!(0)) {
             Ordering::Greater => {
-                let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
+                let net_curve_position: FixedPoint = FixedPoint::from(net_curve_position);
                 let max_curve_trade =
-                    self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())?;
+                    match self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves()) {
+                        Ok(max_curve_trade) => max_curve_trade,
+                        Err(err) => {
+                            // NOTE: Return 0 to indicate that the net curve trade couldn't
+                            // be computed.
+                            return Ok(I256::zero());
+                        }
+                    };
+
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_out_given_bonds_in_down_safe(net_curve_position) {
                         Ok(net_curve_trade) => Ok(-I256::try_from(net_curve_trade)?),
@@ -235,8 +251,15 @@ impl State {
                 }
             }
             Ordering::Less => {
-                let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
-                let max_curve_trade = self.calculate_max_buy_bonds_out_safe()?;
+                let net_curve_position: FixedPoint = FixedPoint::from(-net_curve_position);
+                let max_curve_trade = match self.calculate_max_buy_bonds_out_safe() {
+                    Ok(max_curve_trade) => max_curve_trade,
+                    Err(_) => {
+                        // NOTE: Return 0 to indicate that the net curve trade couldn't
+                        // be computed.
+                        return Ok(I256::zero());
+                    }
+                };
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
                         Ok(net_curve_trade) => Ok(I256::try_from(net_curve_trade)?),
@@ -253,7 +276,14 @@ impl State {
                         }
                     }
                 } else {
-                    let max_share_payment = self.calculate_max_buy_shares_in_safe()?;
+                    let max_share_payment = match self.calculate_max_buy_shares_in_safe() {
+                        Ok(max_share_payment) => max_share_payment,
+                        Err(_) => {
+                            // NOTE: Return 0 to indicate that the net curve trade couldn't
+                            // be computed.
+                            return Ok(I256::zero());
+                        }
+                    };
 
                     // NOTE: We round the difference down to underestimate the
                     // impact of closing the net curve position.
@@ -338,7 +368,7 @@ impl State {
             return Ok((fixed!(0), fixed!(0)));
         }
         let (max_share_reserves_delta, success) =
-            self.calculate_max_share_reserves_delta(current_block_timestamp)?;
+            self.calculate_max_share_reserves_delta_safe(current_block_timestamp)?;
         if success == false || max_share_reserves_delta == fixed!(0) {
             return Ok((fixed!(0), fixed!(0)));
         }
@@ -495,7 +525,7 @@ impl State {
         // If the pool is net neutral, the initial guess is equal to the final
         // result.
         let net_curve_trade =
-            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
         if net_curve_trade == int256!(0) {
             return Ok(share_proceeds);
         }
@@ -576,7 +606,7 @@ impl State {
                     // linear with respect to the share proceeds.
 
                     let (share_proceeds, success) = updated_state
-                        .calculate_distribute_excess_idle_share_proceeds_net_long_edge_case(
+                        .calculate_distribute_excess_idle_share_proceeds_net_long_edge_case_safe(
                             current_block_timestamp,
                             self.share_adjustment(),
                             self.share_reserves(),
@@ -775,7 +805,7 @@ impl State {
     ///
     /// We round the share proceeds down to err on the side of the
     /// withdrawal pool receiving slightly less shares.
-    fn calculate_distribute_excess_idle_share_proceeds_net_long_edge_case(
+    fn calculate_distribute_excess_idle_share_proceeds_net_long_edge_case_safe(
         &self,
         current_block_timestamp: U256,
         original_share_adjustment: I256,
@@ -878,12 +908,12 @@ impl State {
     /// the upper bound is the share reserves delta that results in the
     /// maximum amount of bonds that can be purchased being equal to the
     /// net short position.
-    fn calculate_max_share_reserves_delta(
+    fn calculate_max_share_reserves_delta_safe(
         &self,
         current_block_timestamp: U256,
     ) -> Result<(FixedPoint, bool)> {
         let net_curve_trade =
-            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
         let idle = self.calculate_idle_share_reserves();
         // If the net curve position is zero or net long, then the maximum
         // share reserves delta is equal to the pool's idle.
@@ -1190,7 +1220,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_net_curve_trade() -> Result<()> {
+    async fn fuzz_calculate_net_curve_trade_safe() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -1206,7 +1236,7 @@ mod tests {
                 state.short_average_maturity_time().into(),
                 current_block_timestamp.into(),
             );
-            let actual = state.calculate_net_curve_trade(
+            let actual = state.calculate_net_curve_trade_safe(
                 long_average_time_remaining,
                 short_average_time_remaining,
             );
@@ -1230,9 +1260,11 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), I256::try_from(expected)?);
+                    assert_eq!(actual.unwrap(), expected);
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => {
+                    assert!(actual.is_err());
+                }
             }
         }
 
@@ -1433,7 +1465,7 @@ mod tests {
                     Err(_) => continue,
                 };
             let (share_reserves_delta, _) =
-                present_state.calculate_max_share_reserves_delta(current_block_timestamp)?;
+                present_state.calculate_max_share_reserves_delta_safe(current_block_timestamp)?;
 
             // Calculate the result from the Rust implementation.
             let actual = present_state.calculate_distribute_excess_idle_withdrawal_shares_redeemed(
@@ -1556,7 +1588,7 @@ mod tests {
 
             // Calculate the result from the Rust implementation.
             let actual = present_state
-                .calculate_distribute_excess_idle_share_proceeds_net_long_edge_case(
+                .calculate_distribute_excess_idle_share_proceeds_net_long_edge_case_safe(
                     current_block_timestamp,
                     original_state.share_adjustment(),
                     original_state.share_reserves(),
