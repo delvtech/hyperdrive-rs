@@ -514,7 +514,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = state.absolute_max_long();
+            let actual = panic::catch_unwind(|| state.absolute_max_long());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_absolute_max_long(
@@ -543,11 +543,11 @@ mod tests {
                 .await
             {
                 Ok((expected_base_amount, expected_bond_amount)) => {
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap();
+                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
                     assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
                     assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 

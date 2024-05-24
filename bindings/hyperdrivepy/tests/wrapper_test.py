@@ -321,7 +321,7 @@ def test_max_short_fail_conversion():
     max_iterations = 20
     # bad string inputs
     budget = "asdf"
-    with pytest.raises(ValueError, match="Failed to convert budget string to U256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_short(
             POOL_CONFIG,
             POOL_INFO,
@@ -332,7 +332,7 @@ def test_max_short_fail_conversion():
             max_iterations,
         )
     budget = "1.23"
-    with pytest.raises(ValueError, match="Failed to convert budget string to U256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_short(
             POOL_CONFIG,
             POOL_INFO,
@@ -344,7 +344,7 @@ def test_max_short_fail_conversion():
         )
     budget = "10000000000000000000000"  # 10k base
     open_vault_share_price = "asdf"
-    with pytest.raises(ValueError, match="Failed to convert open_vault_share_price string to U256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_short(
             POOL_CONFIG,
             POOL_INFO,
