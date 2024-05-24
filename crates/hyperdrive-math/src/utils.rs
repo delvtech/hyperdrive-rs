@@ -172,6 +172,8 @@ pub fn calculate_hpr_given_apy(
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
@@ -230,22 +232,34 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
 
             // Get the min rate.
-            let max_long = match state.calculate_max_long(U256::MAX, checkpoint_exposure, None) {
-                Ok(max_long) => max_long,
-                Err(_) => continue, // Don't finish this fuzz iteration.
+            // We need to catch panics because of overflows.
+            let max_long = match panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+            }) {
+                Ok(max_long) => match max_long {
+                    Ok(max_long) => max_long,
+                    Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
+                },
+                Err(_) => continue, // Max threw a paanic. Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
 
             // Get the max rate.
-            let max_short = match state.calculate_max_short(
-                U256::MAX,
-                open_vault_share_price,
-                checkpoint_exposure,
-                None,
-                None,
-            ) {
-                Ok(max_short) => max_short,
-                Err(_) => continue, // Don't finish this fuzz iteration.
+            // We need to catch panics because of overflows.
+            let max_short = match panic::catch_unwind(|| {
+                state.calculate_max_short(
+                    U256::MAX,
+                    open_vault_share_price,
+                    checkpoint_exposure,
+                    None,
+                    None,
+                )
+            }) {
+                Ok(max_short) => match max_short {
+                    Ok(max_short) => max_short,
+                    Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
+                },
+                Err(_) => continue, // Max threw a paanic. Don't finish this fuzz iteration.
             };
             let max_rate = state.calculate_spot_rate_after_short(max_short, None)?;
 

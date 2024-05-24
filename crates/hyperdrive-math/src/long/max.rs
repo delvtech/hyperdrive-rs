@@ -649,18 +649,29 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1 = match state.calculate_open_long(amount - empirical_derivative_epsilon) {
-                Ok(p) => p,
-                // If the amount results in the pool being insolvent, skip this iteration
+            // We need to catch panics here because FixedPoint panics on overflow or underflow.
+            let p1 = match panic::catch_unwind(|| {
+                state.calculate_open_long(amount - empirical_derivative_epsilon)
+            }) {
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                },
+                // If the amount results in the pool being insolvent, skip this iteration.
                 Err(_) => continue,
             };
 
-            let p2 = match state.calculate_open_long(amount + empirical_derivative_epsilon) {
-                Ok(p) => p,
-                // If the amount results in the pool being insolvent, skip this iteration
+            let p2 = match panic::catch_unwind(|| {
+                state.calculate_open_long(amount + empirical_derivative_epsilon)
+            }) {
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                },
+                // If the amount results in the pool being insolvent, skip this iteration.
                 Err(_) => continue,
             };
-            // Sanity check
+            // Sanity check.
             assert!(p2 > p1);
 
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);

@@ -492,6 +492,8 @@ impl State {
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use ethers::types::U256;
     use fixed_point::uint256;
     use hyperdrive_test_utils::{
@@ -521,7 +523,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
                     -I256::try_from(value).unwrap()
                 } else {
@@ -530,13 +532,16 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            let actual = state.calculate_max_short(
-                U256::MAX,
-                open_vault_share_price,
-                checkpoint_exposure,
-                None,
-                Some(max_iterations),
-            );
+            // We need to catch panics because of overflows.
+            let actual = panic::catch_unwind(|| {
+                state.calculate_max_short(
+                    U256::MAX,
+                    open_vault_share_price,
+                    checkpoint_exposure,
+                    None,
+                    Some(max_iterations),
+                )
+            });
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_short(
@@ -567,12 +572,12 @@ mod tests {
                     // exact matchces. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
                     assert_eq!(
-                        U256::from(actual.unwrap()) / uint256!(1e11),
+                        U256::from(actual.unwrap().unwrap()) / uint256!(1e11),
                         expected / uint256!(1e11)
                     );
                 }
                 Err(_) => {
-                    assert!(actual.is_err());
+                    assert!(actual.is_err() || actual.unwrap().is_err());
                 }
             };
         }

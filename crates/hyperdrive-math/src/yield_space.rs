@@ -339,6 +339,8 @@ pub trait YieldSpace {
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -354,7 +356,9 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen::<FixedPoint>();
-            let actual = state.calculate_bonds_out_given_shares_in_down(in_);
+            // We need to catch panics because of overflows.
+            let actual =
+                panic::catch_unwind(|| state.calculate_bonds_out_given_shares_in_down(in_));
             match chain
                 .mock_yield_space_math()
                 .calculate_bonds_out_given_shares_in_down(
@@ -368,8 +372,8 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
-                Err(_) => assert!(actual.is_err()),
+                Ok(expected) => assert_eq!(actual.unwrap().unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
@@ -418,7 +422,8 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let out = rng.gen::<FixedPoint>();
-            let actual = state.calculate_shares_in_given_bonds_out_down(out);
+            let actual =
+                panic::catch_unwind(|| state.calculate_shares_in_given_bonds_out_down(out));
             match chain
                 .mock_yield_space_math()
                 .calculate_shares_in_given_bonds_out_down(
@@ -433,9 +438,9 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected));
+                    assert_eq!(actual.unwrap().unwrap(), FixedPoint::from(expected));
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
@@ -582,7 +587,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let z_min = rng.gen::<FixedPoint>();
-            let actual = state.calculate_max_sell_bonds_in_safe(z_min);
+            let actual = panic::catch_unwind(|| state.calculate_max_sell_bonds_in_safe(z_min));
             match chain
                 .mock_yield_space_math()
                 .calculate_max_sell_bonds_in_safe(
@@ -598,6 +603,7 @@ mod tests {
                 .await
             {
                 Ok((expected_out, expected_status)) => {
+                    let actual = actual.unwrap();
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }
