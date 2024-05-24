@@ -18,8 +18,8 @@ impl HyperdriveState {
             Ok(py_pool_config) => py_pool_config.pool_config,
             Err(err) => {
                 return Err(PyErr::new::<PyAssertionError, _>(format!(
-                    "Error extracting pool config: {:?}",
-                    err
+                    "Error extracting pool config {:?}: {}",
+                    pool_config, err
                 )));
             }
         };
@@ -27,8 +27,8 @@ impl HyperdriveState {
             Ok(py_pool_info) => py_pool_info.pool_info,
             Err(err) => {
                 return Err(PyErr::new::<PyAssertionError, _>(format!(
-                    "Error extracting pool info: {:?}",
-                    err
+                    "Error extracting pool info {:?}: {}",
+                    pool_info, err
                 )));
             }
         };

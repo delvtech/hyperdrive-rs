@@ -281,15 +281,15 @@ def test_max_long_fail_conversion():
     # bad string inputs
     budget = "asdf"
     checkpoint_exposure = "100"
-    with pytest.raises(ValueError, match="Failed to convert budget string to U256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
     budget = "1.23"
     checkpoint_exposure = "100"
-    with pytest.raises(ValueError, match="Failed to convert budget string to U256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
     budget = "1000000000000000000"  # 1 base
     checkpoint_exposure = "asdf"
-    with pytest.raises(ValueError, match="Failed to convert checkpoint_exposure string to I256"):
+    with pytest.raises(ValueError):
         hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
 
 

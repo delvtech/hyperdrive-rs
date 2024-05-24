@@ -11,31 +11,47 @@ impl HyperdriveState {
         bond_amount: &str,
         open_vault_share_price: &str,
     ) -> PyResult<String> {
-        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|_| {
-            PyErr::new::<PyValueError, _>("Failed to convert bond_amount string to U256")
+        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|err| {
+            PyErr::new::<PyValueError, _>(format!(
+                "Failed to convert bond_amount string {} to U256: {}",
+                bond_amount, err
+            ))
         })?);
         let open_vault_share_price_fp =
-            FixedPoint::from(U256::from_dec_str(open_vault_share_price).map_err(|_| {
-                PyErr::new::<PyValueError, _>(
-                    "Failed to convert open_vault_share_price string to U256",
-                )
+            FixedPoint::from(U256::from_dec_str(open_vault_share_price).map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!(
+                    "Failed to convert open_vault_share_price string {} to U256: {}",
+                    open_vault_share_price, err
+                ))
             })?);
         let result_fp = self
             .state
             .calculate_open_short(bond_amount_fp, open_vault_share_price_fp)
-            .unwrap();
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!("calculate_open_short: {}", err))
+            })?;
+
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
 
     pub fn calculate_pool_deltas_after_open_short(&self, bond_amount: &str) -> PyResult<String> {
-        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|_| {
-            PyErr::new::<PyValueError, _>("Failed to convert bond_amount string to U256")
+        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|err| {
+            PyErr::new::<PyValueError, _>(format!(
+                "Failed to convert bond_amount string {} to U256: {}",
+                bond_amount, err
+            ))
         })?);
         let result_fp = self
             .state
             .calculate_pool_deltas_after_open_short(bond_amount_fp)
-            .unwrap();
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!(
+                    "calculate_pool_deltas_after_open_short: {}",
+                    err
+                ))
+            })?;
+
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
@@ -45,15 +61,19 @@ impl HyperdriveState {
         bond_amount: &str,
         maybe_base_amount: Option<&str>,
     ) -> PyResult<String> {
-        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|_| {
-            PyErr::new::<PyValueError, _>("Failed to convert bond_amount string to U256")
+        let bond_amount_fp = FixedPoint::from(U256::from_dec_str(bond_amount).map_err(|err| {
+            PyErr::new::<PyValueError, _>(format!(
+                "Failed to convert bond_amount string {} to U256: {}",
+                bond_amount, err
+            ))
         })?);
         let maybe_base_amount_fp = if let Some(base_amount) = maybe_base_amount {
             Some(FixedPoint::from(U256::from_dec_str(base_amount).map_err(
-                |_| {
-                    PyErr::new::<PyValueError, _>(
-                        "Failed to convert maybe_base_amount string to U256",
-                    )
+                |err| {
+                    PyErr::new::<PyValueError, _>(format!(
+                        "Failed to convert base_amount string {} to U256: {}",
+                        base_amount, err
+                    ))
                 },
             )?))
         } else {
@@ -62,8 +82,8 @@ impl HyperdriveState {
         let result_fp = self
             .state
             .calculate_spot_price_after_short(bond_amount_fp, maybe_base_amount_fp)
-            .map_err(|_| {
-                PyErr::new::<PyValueError, _>("Failed to calculate spot price after short.")
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!("calculate_spot_price_after_short: {}", err))
             })?;
         Ok(U256::from(result_fp).to_string())
     }
