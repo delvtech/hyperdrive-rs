@@ -70,12 +70,12 @@ impl State {
 
         let share_contribution = {
             if as_base {
-                I256::try_from(contribution.div_down(self.vault_share_price())).unwrap()
+                I256::try_from(contribution.div_down(self.vault_share_price()))?
             } else {
-                I256::try_from(contribution).unwrap()
+                I256::try_from(contribution)?
             }
         };
-        Ok(self.get_state_after_liquidity_update(share_contribution))
+        self.get_state_after_liquidity_update(share_contribution)
     }
 
     pub fn calculate_pool_deltas_after_add_liquidity(
@@ -110,7 +110,7 @@ impl State {
     }
 
     /// Gets the resulting state when updating liquidity.
-    pub fn get_state_after_liquidity_update(&self, share_reserves_delta: I256) -> State {
+    pub fn get_state_after_liquidity_update(&self, share_reserves_delta: I256) -> Result<State> {
         let share_reserves = self.share_reserves();
         let share_adjustment = self.share_adjustment();
         let bond_reserves = self.bond_reserves();
@@ -124,18 +124,17 @@ impl State {
                 bond_reserves,
                 minimum_share_reserves,
                 share_reserves_delta,
-            )
-            .unwrap();
+            )?;
 
         // Update and return the new state.
         let mut new_info = self.info.clone();
         new_info.share_reserves = U256::from(updated_share_reserves);
         new_info.share_adjustment = updated_share_adjustment;
         new_info.bond_reserves = U256::from(updated_bond_reserves);
-        State {
+        Ok(State {
             config: self.config.clone(),
             info: new_info,
-        }
+        })
     }
 }
 
@@ -193,7 +192,7 @@ mod tests {
                     else if message == "DecreasedPresentValueWhenAddingLiquidity: Present value decreased after adding liquidity." {
                         let share_contribution =
                             I256::try_from(contribution / state.vault_share_price()).unwrap();
-                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let new_state = state.get_state_after_liquidity_update(share_contribution)?;
                         let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
                         let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                         assert!(ending_present_value < starting_present_value);
@@ -202,7 +201,7 @@ mod tests {
                     else if message == "MinimumTransactionAmount: Not enough lp shares minted." {
                         let share_contribution =
                             I256::try_from(contribution / state.vault_share_price()).unwrap();
-                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let new_state = state.get_state_after_liquidity_update(share_contribution)?;
                         let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
                         let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                         let lp_shares = (ending_present_value - starting_present_value)
@@ -213,7 +212,7 @@ mod tests {
                     else if message == "OutputLimit: Not enough lp shares minted." {
                         let share_contribution =
                             I256::try_from(contribution / state.vault_share_price()).unwrap();
-                        let new_state = state.get_state_after_liquidity_update(share_contribution);
+                        let new_state = state.get_state_after_liquidity_update(share_contribution)?;
                         let starting_present_value = state.calculate_present_value(current_block_timestamp)?;
                         let ending_present_value = new_state.calculate_present_value(current_block_timestamp)?;
                         let lp_shares = (ending_present_value - starting_present_value)

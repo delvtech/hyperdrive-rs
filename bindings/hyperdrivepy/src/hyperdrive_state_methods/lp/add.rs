@@ -1,5 +1,3 @@
-use std::thread::current;
-
 use ethers::core::types::U256;
 use fixed_point::FixedPoint;
 use pyo3::{exceptions::PyValueError, prelude::*};

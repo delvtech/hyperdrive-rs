@@ -33,7 +33,7 @@ pub trait YieldSpace {
     /// Core ///
 
     fn calculate_spot_price(&self) -> Result<FixedPoint> {
-        Ok(((self.mu() * self.ze()?) / self.y()).pow(self.t())?)
+        ((self.mu() * self.ze()?) / self.y()).pow(self.t())
     }
 
     /// Calculates the amount of bonds a user will receive from the pool by

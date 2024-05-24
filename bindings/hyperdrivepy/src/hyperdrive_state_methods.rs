@@ -13,7 +13,7 @@ use crate::HyperdriveState;
 impl HyperdriveState {
     #[new]
     pub fn __init__(pool_config: &PyAny, pool_info: &PyAny) -> PyResult<Self> {
-        Ok(HyperdriveState::new_from_pool(pool_config, pool_info)?)
+        HyperdriveState::new_from_pool(pool_config, pool_info)
     }
 
     pub fn to_checkpoint(&self, time: &str) -> PyResult<String> {

@@ -209,7 +209,7 @@ impl FixedPoint {
         ylnx = ylnx.wrapping_div(int256!(1e18));
 
         // Calculate exp(y * ln(x)) to get x^y
-        Ok(Self::exp(ylnx)?.try_into()?)
+        Self::exp(ylnx)?.try_into()
     }
 
     fn exp(mut x: I256) -> Result<I256> {

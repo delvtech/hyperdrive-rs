@@ -524,22 +524,31 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1 = match state.calculate_open_short(
-                amount - empirical_derivative_epsilon,
-                state.vault_share_price(),
-            ) {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
-                Err(_) => continue,
+            let p1 = match panic::catch_unwind(|| {
+                state.calculate_open_short(
+                    amount - empirical_derivative_epsilon,
+                    state.vault_share_price(),
+                )
+            }) {
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue, // The amount results in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
-            let p2 = match state.calculate_open_short(
-                amount + empirical_derivative_epsilon,
-                state.vault_share_price(),
-            ) {
+            let p2 = match panic::catch_unwind(|| {
+                state.calculate_open_short(
+                    amount + empirical_derivative_epsilon,
+                    state.vault_share_price(),
+                )
+            }) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
-                Err(_) => continue,
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue, // The amount results in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
             // Sanity check

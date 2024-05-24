@@ -31,10 +31,9 @@ impl State {
                 * (self.initial_vault_share_price() * self.minimum_share_reserves())
                     .pow(fixed!(1e18) - self.time_stretch())?)
         .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?;
-        Ok(
-            ((self.initial_vault_share_price() * self.minimum_share_reserves()) / y_max)
-                .pow(self.time_stretch())?,
-        )
+
+        ((self.initial_vault_share_price() * self.minimum_share_reserves()) / y_max)
+            .pow(self.time_stretch())
     }
 
     // TODO: Make it clear to the consumer that the maximum number of iterations
@@ -319,11 +318,10 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
-        let mut maybe_solvency = self.solvency_after_short(max_bond_amount, checkpoint_exposure)?;
-        if maybe_solvency.is_none() {
-            return Err(eyre!("Initial guess in `absolute_max_short` is insolvent."));
-        }
-        let mut solvency = maybe_solvency.unwrap();
+        let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
+            Some(solvency) => solvency,
+            None => return Err(eyre!("Initial guess in `absolute_max_short` is insolvent.")),
+        };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // TODO: It may be better to gracefully handle crossing over the
             // root by extending the fixed point math library to handle negative
@@ -345,14 +343,14 @@ impl State {
 
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
-            maybe_solvency =
-                self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure)?;
-            if let Some(s) = maybe_solvency {
-                solvency = s;
-                max_bond_amount = possible_max_bond_amount;
-            } else {
-                break;
-            }
+            solvency =
+                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure)? {
+                    Some(solvency) => {
+                        max_bond_amount = possible_max_bond_amount;
+                        solvency
+                    }
+                    None => break,
+                };
         }
 
         Ok(max_bond_amount)

@@ -26,7 +26,7 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -35,10 +35,9 @@ impl State {
             // payment.
             //
             let curve_bonds_in = bond_amount.mul_up(normalized_time_remaining);
-            self.calculate_shares_in_given_bonds_out_up_safe(curve_bonds_in)
-                .unwrap()
+            Ok(self.calculate_shares_in_given_bonds_out_up_safe(curve_bonds_in)?)
         } else {
-            fixed!(0)
+            Ok(fixed!(0))
         }
     }
 
@@ -47,14 +46,14 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         // Calculate the flat part of the trade
         let flat = self.calculate_close_short_flat(bond_amount, maturity_time, current_time);
         // Calculate the curve part of the trade
-        let curve = self.calculate_close_short_curve(bond_amount, maturity_time, current_time);
+        let curve = self.calculate_close_short_curve(bond_amount, maturity_time, current_time)?;
 
-        flat + curve
+        Ok(flat + curve)
     }
 
     // Calculates the proceeds in shares of closing a short position.
@@ -121,7 +120,7 @@ impl State {
         // Ensure that the trader didn't purchase bonds at a negative interest
         // rate after accounting for fees.
         let share_curve_delta =
-            self.calculate_close_short_curve(bond_amount, maturity_time, current_time);
+            self.calculate_close_short_curve(bond_amount, maturity_time, current_time)?;
         let bond_reserves_delta = bond_amount
             .mul_up(self.calculate_normalized_time_remaining(maturity_time, current_time));
         let short_curve_spot_price = {
@@ -159,7 +158,7 @@ impl State {
         // rework to avoid recalculating the curve and bond reserves
         // https://github.com/delvtech/hyperdrive/issues/943
         let share_reserves_delta =
-            self.calculate_close_short_flat_plus_curve(bond_amount, maturity_time, current_time);
+            self.calculate_close_short_flat_plus_curve(bond_amount, maturity_time, current_time)?;
         // Calculate flat + curve and subtract the fees from the trade.
         let share_reserves_delta_with_fees = share_reserves_delta
             + self.close_short_curve_fee(bond_amount, maturity_time, current_time)?
@@ -263,8 +262,8 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected.2)),
-                Err(_) => assert!(actual.is_err()),
+                Ok(expected) => assert_eq!(actual.unwrap().unwrap(), FixedPoint::from(expected.2)),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 

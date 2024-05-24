@@ -109,9 +109,8 @@ impl State {
 
         // Iteratively find a solution
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
-            let possible_target_bond_delta = self
-                .calculate_open_long(possible_target_base_delta)
-                .unwrap();
+            let possible_target_bond_delta =
+                self.calculate_open_long(possible_target_base_delta)?;
             let resulting_rate = self.calculate_spot_rate_after_long(
                 possible_target_base_delta,
                 Some(possible_target_bond_delta),
@@ -162,8 +161,7 @@ impl State {
         if self
             .solvency_after_long(
                 possible_target_base_delta,
-                self.calculate_open_long(possible_target_base_delta)
-                    .unwrap(),
+                self.calculate_open_long(possible_target_base_delta)?,
                 checkpoint_exposure,
             )?
             .is_none()
@@ -172,9 +170,7 @@ impl State {
         }
 
         // Final accuracy check.
-        let possible_target_bond_delta = self
-            .calculate_open_long(possible_target_base_delta)
-            .unwrap();
+        let possible_target_bond_delta = self.calculate_open_long(possible_target_base_delta)?;
         let resulting_rate = self.calculate_spot_rate_after_long(
             possible_target_base_delta,
             Some(possible_target_bond_delta),

@@ -1,4 +1,4 @@
-use ethers::{core::types::U256, providers::maybe};
+use ethers::core::types::U256;
 use fixed_point::FixedPoint;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
@@ -13,7 +13,12 @@ impl HyperdriveState {
                 base_amount, err
             ))
         })?);
-        let result_fp = self.state.calculate_open_long(base_amount_fp).unwrap();
+        let result_fp = self
+            .state
+            .calculate_open_long(base_amount_fp)
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!("calculate_open_long: {}", err))
+            })?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
@@ -64,7 +69,9 @@ impl HyperdriveState {
         let result_fp = self
             .state
             .calculate_spot_price_after_long(base_amount_fp, maybe_bond_amount_fp)
-            .unwrap();
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!("calculate_spot_price_after_long: {}", err))
+            })?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
@@ -95,7 +102,7 @@ impl HyperdriveState {
         let result_fp = self
             .state
             .calculate_spot_rate_after_long(base_amount_fp, maybe_bond_amount_fp)
-            .unwrap();
+            .map_err(|err| PyErr::new::<PyValueError, _>(format!("{}", err)))?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

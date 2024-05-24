@@ -21,3 +21,6 @@ authors = [
     "Ryan Goree <ryan@delv.tech>",
     "Sheng Lundquist <sheng@delv.tech>",
 ]
+
+[workspace.lints.clippy]
+comparison_chain = "allow"
