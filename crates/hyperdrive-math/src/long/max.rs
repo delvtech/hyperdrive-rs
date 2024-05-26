@@ -655,10 +655,9 @@ mod tests {
             }) {
                 Ok(p) => match p {
                     Ok(p) => p,
-                    Err(_) => continue,
+                    Err(_) => continue, // Err; the amount results in the pool being insolvent.
                 },
-                // If the amount results in the pool being insolvent, skip this iteration.
-                Err(_) => continue,
+                Err(_) => continue, // panic; likely in FixedPoint
             };
 
             let p2 = match panic::catch_unwind(|| {

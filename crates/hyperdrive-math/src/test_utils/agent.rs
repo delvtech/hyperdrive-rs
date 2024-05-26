@@ -83,10 +83,9 @@ pub trait HyperdriveMathAgent {
 impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     /// Gets the current state of the pool.
     async fn get_state(&self) -> Result<State> {
-        Ok(State::new(
-            self.get_config().clone(),
-            self.hyperdrive().get_pool_info().await?,
-        ))
+        let pool_config = self.get_config().clone();
+        let pool_info = self.hyperdrive().get_pool_info().await?;
+        Ok(State::new(pool_config, pool_info))
     }
 
     /// Gets the latest checkpoint.

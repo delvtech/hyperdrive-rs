@@ -678,9 +678,9 @@ mod tests {
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
                     Ok(max_bond_amount) => max_bond_amount,
-                    Err(_) => continue,
+                    Err(_) => continue, // Err; max short insolvent
                 },
-                Err(_) => continue,
+                Err(_) => continue, // panic; likely in FixedPoint
             };
             if max_bond_amount == fixed!(0) {
                 continue;
@@ -730,6 +730,10 @@ mod tests {
             alice.fund(contribution).await?;
             bob.fund(budget).await?;
 
+            // Alice initializes the pool.
+            // TODO: We'd like to set a random position duration & checkpoint duration.
+            alice.initialize(fixed_rate, contribution, None).await?;
+
             // Set a random variable rate.
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
             let vault = MockERC4626::new(
@@ -737,10 +741,6 @@ mod tests {
                 chain.client(BOB.clone()).await?,
             );
             vault.set_rate(variable_rate.into()).send().await?;
-
-            // Alice initializes the pool.
-            // TODO: We'd like to set a random position duration & checkpoint duration.
-            alice.initialize(fixed_rate, contribution, None).await?;
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
