@@ -444,7 +444,12 @@ impl State {
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
-            (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+            // check for underflow
+            if self.long_exposure() < checkpoint_exposure {
+                return Ok(None);
+            } else {
+                (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+            }
         };
         if share_reserves >= exposure + self.minimum_share_reserves() {
             Ok(Some(
