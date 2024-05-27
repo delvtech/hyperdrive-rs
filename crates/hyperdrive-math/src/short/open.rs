@@ -819,16 +819,16 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
-                    -I256::try_from(value).unwrap()
+                    -I256::try_from(value)?
                 } else {
-                    I256::try_from(value).unwrap()
+                    I256::try_from(value)?
                 }
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            // We need to catch panics because of overflows.
+            // We need to catch panics because of FixedPoint overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::MAX,
@@ -843,19 +843,25 @@ mod tests {
             match max_trade {
                 Ok(max_trade) => match max_trade {
                     Ok(max_trade) => {
-                        // TODO: Test that you should be able to add a small amount (e.g. 1e18) to max to fail.
+                        // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
                         // calc_open_short must be incorrect for the additional amount to have to be so large.
-                        let result = state.calculate_open_short(
-                            max_trade + fixed!(100_000_000e18),
-                            state.vault_share_price(),
-                        );
+                        let bond_amount = max_trade + fixed!(100_000_000e18);
+                        let result = panic::catch_unwind(|| {
+                            state.calculate_open_short(bond_amount, open_vault_share_price)
+                        });
                         match result {
-                            Ok(_) => {
-                                return Err(eyre!(
-                                    "calculate_open_short should have failed but succeeded."
-                                ));
-                            }
-                            Err(_) => continue, // Max was fine; open resulted in an Err.
+                            Ok(result) => match result {
+                                Ok(_) => {
+                                    return Err(eyre!(
+                                        format!(
+                                            "calculate_open_short for {} bonds should have failed but succeeded.",
+                                            bond_amount,
+                                        )
+                                    ));
+                                }
+                                Err(_) => continue, // Open threw an Err.
+                            },
+                            Err(_) => continue, // Open threw a panic, likely due to FixedPoint under/over flow.
                         }
                     }
                     Err(_) => continue, // Max threw an Err.
