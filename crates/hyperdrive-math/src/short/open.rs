@@ -8,28 +8,46 @@ impl State {
     /// Calculates the amount of base the trader will need to deposit for a short of
     /// a given size.
     ///
-    /// We can write out the short deposit function as:
+    /// For some number of bonds being shorted, $\Delta y$, the short deposit is made up of several components:
+    /// - The short principal: $P_{\text{lp}}(\Delta y)$
+    /// - The curve fee: $\Phi_{c}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y
+    /// - The flat fee: $\Phi_{f}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )
+    /// - The total value in shares that underlies the bonds: $\tfrac{c_1}{c_0 \cdot c} \Delta y$
+    ///
+    /// The short principal is given by:
     ///
     /// $$
-    /// D(\Delta y) = \Delta y - (c \cdot P(\Delta y) - \phi_{curve} \cdot (1 - p) \cdot \Delta y)
-    ///        + (c - c_0) \cdot \tfrac{\Delta y}{c_0} + \phi_{flat} \cdot \Delta y \\
-    ///      = \tfrac{c}{c_0} \cdot \Delta y - (c \cdot P(\Delta y) - \phi_{curve} \cdot (1 - p) \cdot \Delta y)
-    ///        + \phi_{flat} \cdot \Delta y
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
+    ///   \cdot (\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}))^{\tfrac{1}{1 - t_s}}
     /// $$
     ///
-    /// $\Delta y$ is the number of bonds being shorted and $P(\Delta y)$ is the amount of
-    /// shares the curve says the LPs need to pay the shorts (i.e. the LP
-    /// principal).
+    /// The short proceeds is given by
+    ///
+    /// $$
+    /// P_{\text{short}}(\Delta y) = \tfrac{\Delta y \cdot c_{1}}{c_{0} \cdot c}
+    ///   + \tfrac{\Delta y}{c} \cdot \Phi_{f}(\Delta y)
+    /// $$
+    ///
+    /// And finally the short deposit in base is:
+    ///
+    /// $$
+    ///     D(\Delta y)=
+    /// \begin{cases}
+    ///     c \cdot \left( P_{\text{short}}(\Delta y) - P_{\text{lp}}(\Delta y)
+    ///       + \Phi_{c}(\Delta y) \right),
+    ///       & \text{if } P_{\text{short}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
+    ///     0,              & \text{otherwise}
+    /// \end{cases}
+    /// $$
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
+        mut open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
         if bond_amount < self.config.minimum_transaction_amount.into() {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
-        let mut open_vault_share_price = open_vault_share_price;
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
         // in the next transaction.
@@ -37,24 +55,48 @@ impl State {
             open_vault_share_price = self.vault_share_price();
         }
 
-        let share_reserves_delta_in_base = self
-            .vault_share_price()
-            .mul_up(self.calculate_short_principal(bond_amount)?);
+        let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
         // If the base proceeds of selling the bonds is greater than the bond
         // amount, then the trade occurred in the negative interest domain. We
         // revert in these pathological cases.
-        if share_reserves_delta_in_base > bond_amount {
+        if share_reserves_delta.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
 
-        // NOTE: The order of additions and subtractions is important to avoid underflows.
-        let spot_price = self.calculate_spot_price()?;
-        Ok(
-            bond_amount.mul_div_down(self.vault_share_price(), open_vault_share_price)
-                + self.flat_fee() * bond_amount
-                + self.curve_fee() * (fixed!(1e18) - spot_price) * bond_amount
-                - share_reserves_delta_in_base,
-        )
+        // NOTE: Round up to overestimate the base deposit.
+        //
+        // The trader will need to deposit capital to pay for the fixed rate,
+        // the curve fee, the flat fee, and any back-paid interest that will be
+        // received back upon closing the trade. If negative interest has
+        // accrued during the current checkpoint, we set the close vault share
+        // price to equal the open vault share price. This ensures that shorts
+        // don't benefit from negative interest that accrued during the current
+        // checkpoint.
+        let curve_fee = self.open_short_curve_fee(bond_amount)?;
+        // Use the position duraiton as the current time and maturity time to simulate closing at maturity.
+        let flat_fee = self.close_short_flat_fee(
+            bond_amount,
+            self.position_duration().into(),
+            self.position_duration().into(),
+        );
+
+        // Now we can calculate the proceeds in a way that adjusts for the backdated vault price.
+        // $$
+        // \text{base_proceeds} = (
+        //    \frac{c1 \cdot \Delta y}{c0 \cdot c}
+        //    + \frac{\Delta y \cdot \phi_f}{c} - \Delta z
+        // ) \cdot c
+        // $$
+        let base_deposit = self
+            .calculate_short_proceeds_up(
+                bond_amount,
+                share_reserves_delta - curve_fee,
+                open_vault_share_price,
+                self.vault_share_price().max(open_vault_share_price),
+            )
+            .mul_up(self.vault_share_price());
+
+        Ok(base_deposit)
     }
 
     /// Calculates the derivative of the short deposit function with respect to the
@@ -64,36 +106,47 @@ impl State {
     /// Using this, calculating $D'(\Delta y)$ is straightforward:
     ///
     /// $$
-    /// D'(\Delta y) = \tfrac{c}{c_0} - (c \cdot P'(\Delta y) - \phi_{curve} \cdot (1 - p)) + \phi_{flat}
-    /// $$
-    ///
-    /// $$
-    /// P'(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}) \right)^{\tfrac{t_s}{1 - t_s}}
+    /// D'(\Delta y) = c \cdot (
+    ///   P^{\prime}_{\text{short}}(\Delta y)
+    ///   - P^{\prime}_{\text{lp}}(\Delta y)
+    ///   + \Phi^{\prime}_{c}(\Delta y)
+    /// )
     /// $$
     pub fn calculate_open_short_derivative(
         &self,
         bond_amount: FixedPoint,
         spot_price: FixedPoint,
         open_vault_share_price: FixedPoint,
+        close_vault_share_price: FixedPoint,
+        vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
-        // Theta calculates the inner component of the `short_principal` calculation,
-        // which makes the `short_principal` and `short_deposit_derivative` calculations
-        // easier. $\theta(\Delta y)$ is defined as:
-        //
-        // $$
-        // \theta(\Delta y) = \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-        // $$
-        let theta = (self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()?
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?);
-        // NOTE: The order of additions and subtractions is important to avoid underflows.
-        let payment_factor = (fixed!(1e18)
-            / (self.bond_reserves() + bond_amount).pow(self.time_stretch())?)
-            * theta.pow(self.time_stretch() / (fixed!(1e18) - self.time_stretch()))?;
-        Ok((self.vault_share_price() / open_vault_share_price)
-            + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - spot_price)
-            - payment_factor)
+        let flat_fee = self.close_short_flat_fee(
+            bond_amount,
+            self.position_duration().into(),
+            self.position_duration().into(),
+        );
+
+        // Short circuit the derivative if the forward function returns 0.
+        if self.calculate_short_proceeds_up(
+            bond_amount,
+            self.calculate_short_principal(bond_amount)? - self.open_short_curve_fee(bond_amount),
+            open_vault_share_price,
+            close_vault_share_price,
+        ) == fixed!(0)
+        {
+            return Ok(fixed!(0));
+        }
+
+        // Flat fee derivative = (1 - t) * phi_f / c
+        // Since t=0 when closing at maturity we can use phi_f / c
+        let flat_fee_derivative = self.flat_fee() / vault_share_price;
+        let curve_fee_derivative = self.curve_fee() * (fixed!(1e18) - spot_price);
+        let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount);
+        let short_proceeds_derivative =
+            self.calculate_short_proceeds_up_derivative(bond_amount, open_vault_share_price);
+
+        Ok(vault_share_price
+            * (short_proceeds_derivative - short_principal_derivative + curve_fee_derivative))
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -249,21 +302,24 @@ impl State {
     /// $$
     /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
     /// \implies \\
-    /// P(\Delta y) = z - \tfrac{1}{\mu} \cdot (\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}))^{\tfrac{1}{1 - t_s}}
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu} \cdot (
+    ///   \tfrac{\mu}{c}
+    ///   \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// )^{\tfrac{1}{1 - t_s}}
     /// $$
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
         self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
     }
 
-    /// Calculates the derivative of the short principal $P(\Delta y)$ w.r.t. the amount of
-    /// bonds that are shorted $\Delta y$.
+    /// Calculates the derivative of the short principal $P_{\text{lp}}(\Delta y)$
+    /// w.r.t. the amount of bonds that are shorted $\Delta y$.
     ///
     /// The derivative is calculated as:
     ///
     /// $$
-    /// P'(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(
-    ///             \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-    ///         \right)^{\tfrac{t_s}{1 - t_s}}
+    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(
+    ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    ///   \right)^{\tfrac{t_s}{1 - t_s}}
     /// $$
     pub fn calculate_short_principal_derivative(
         &self,
@@ -567,6 +623,8 @@ mod tests {
             let short_deposit_derivative = state.calculate_open_short_derivative(
                 amount,
                 state.calculate_spot_price()?,
+                state.vault_share_price(),
+                state.vault_share_price(),
                 state.vault_share_price(),
             )?;
 

@@ -173,10 +173,12 @@ impl State {
             }
 
             // Iteratively update max_bond_amount via newton's method.
-            let derivative = self.calculate_open_short_derivative(
+            let derivative = self.short_deposit_derivative(
                 max_bond_amount,
                 spot_price,
                 open_vault_share_price,
+                self.vault_share_price().max(open_vault_share_price),
+                self.vault_share_price(),
             )?;
             if deposit < target_budget {
                 max_bond_amount += (target_budget - deposit) / derivative
