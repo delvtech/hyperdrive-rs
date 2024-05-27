@@ -444,7 +444,7 @@ impl State {
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
-            // check for underflow
+            // Check for underflow.
             if self.long_exposure() < checkpoint_exposure {
                 return Ok(None);
             } else {
