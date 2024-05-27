@@ -48,7 +48,7 @@ impl State {
         }
 
         // NOTE: The order of additions and subtractions is important to avoid underflows.
-        let spot_price = self.calculate_spot_price();
+        let spot_price = self.calculate_spot_price()?;
         Ok(
             bond_amount.mul_div_down(self.vault_share_price(), open_vault_share_price)
                 + self.flat_fee() * bond_amount
@@ -75,7 +75,7 @@ impl State {
         bond_amount: FixedPoint,
         spot_price: FixedPoint,
         open_vault_share_price: FixedPoint,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         // Theta calculates the inner component of the `short_principal` calculation,
         // which makes the `short_principal` and `short_deposit_derivative` calculations
         // easier. $\theta(\Delta y)$ is defined as:
@@ -84,16 +84,16 @@ impl State {
         // \theta(\Delta y) = \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
         // $$
         let theta = (self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch()));
+            * (self.k_down()?
+                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?);
         // NOTE: The order of additions and subtractions is important to avoid underflows.
         let payment_factor = (fixed!(1e18)
-            / (self.bond_reserves() + bond_amount).pow(self.time_stretch()))
-            * theta.pow(self.time_stretch() / (fixed!(1e18) - self.time_stretch()));
-        (self.vault_share_price() / open_vault_share_price)
+            / (self.bond_reserves() + bond_amount).pow(self.time_stretch())?)
+            * theta.pow(self.time_stretch() / (fixed!(1e18) - self.time_stretch()))?;
+        Ok((self.vault_share_price() / open_vault_share_price)
             + self.flat_fee()
             + self.curve_fee() * (fixed!(1e18) - spot_price)
-            - payment_factor
+            - payment_factor)
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -122,10 +122,10 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let curve_fee_base = self.open_short_curve_fee(bond_amount);
+        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
         let curve_fee = curve_fee_base.div_up(self.vault_share_price());
         let gov_curve_fee = self
-            .open_short_governance_fee(bond_amount, Some(curve_fee_base))
+            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
             .div_up(self.vault_share_price());
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
@@ -149,7 +149,7 @@ impl State {
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(shares_amount))?;
-        Ok(updated_state.calculate_spot_price())
+        updated_state.calculate_spot_price()
     }
 
     /// Calculate the spot rate after a short has been opened.
@@ -218,7 +218,7 @@ impl State {
     ) -> Result<I256> {
         let base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
         let tpy =
-            (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration()) - fixed!(1e18);
+            (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration())? - fixed!(1e18);
         let base_proceeds = bond_amount * tpy;
         if base_proceeds > base_paid {
             Ok(I256::try_from(
@@ -256,19 +256,22 @@ impl State {
     ///             \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     ///         \right)^{\tfrac{t_s}{1 - t_s}}
     /// $$
-    pub fn calculate_short_principal_derivative(&self, bond_amount: FixedPoint) -> FixedPoint {
+    pub fn calculate_short_principal_derivative(
+        &self,
+        bond_amount: FixedPoint,
+    ) -> Result<FixedPoint> {
         let lhs = fixed!(1e18)
             / (self
                 .vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())));
+                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?));
         let rhs = ((self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())))
+            * (self.k_down()?
+                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?))
         .pow(
             self.time_stretch()
                 .div_up(fixed!(1e18) - self.time_stretch()),
-        );
-        lhs * rhs
+        )?;
+        Ok(lhs * rhs)
     }
 }
 
@@ -368,6 +371,7 @@ mod tests {
                 }
             };
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::MAX,
@@ -377,23 +381,25 @@ mod tests {
                     None,
                 )
             }) {
-                Ok(max_bond_amount) => max_bond_amount,
-                Err(_) => continue,
+                Ok(max_bond_amount) => match max_bond_amount {
+                    Ok(max_bond_amount) => max_bond_amount,
+                    Err(_) => continue, // Max threw an Err.
+                },
+                Err(_) => continue, // Max threw a panic.
             };
             if max_bond_amount == fixed!(0) {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
-            let curve_fee_base = state.open_short_curve_fee(bond_amount);
+            let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
+            let gov_fee = state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
             let fees = curve_fee_base.div_up(state.vault_share_price())
-                - state
-                    .open_short_governance_fee(bond_amount, Some(curve_fee_base))
-                    .div_up(state.vault_share_price());
+                - gov_fee.div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
-                    state.effective_share_reserves().into(),
+                    state.effective_share_reserves()?.into(),
                     state.bond_reserves().into(),
                     bond_amount.into(),
                     state.time_stretch().into(),
@@ -410,7 +416,9 @@ mod tests {
                         && expected_with_fees >= actual_with_fees - fixed!(10);
                     assert!(result_equal, "Should be equal.");
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(_) => {
+                    assert!(actual.is_err())
+                }
             };
         }
         Ok(())
@@ -428,7 +436,7 @@ mod tests {
         match chain
             .mock_yield_space_math()
             .calculate_shares_out_given_bonds_in_down_safe(
-                state.effective_share_reserves().into(),
+                state.effective_share_reserves()?.into(),
                 state.bond_reserves().into(),
                 bond_amount.into(),
                 (fixed!(1e18) - state.time_stretch()).into(),
@@ -463,16 +471,13 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = state.calculate_short_principal(amount - empirical_derivative_epsilon);
-
-            let p1 = match p1_result {
+            let p1 = match state.calculate_short_principal(amount - empirical_derivative_epsilon) {
                 // If the amount results in the pool being insolvent, skip this iteration
                 Ok(p) => p,
                 Err(_) => continue,
             };
 
-            let p2_result = state.calculate_short_principal(amount + empirical_derivative_epsilon);
-            let p2 = match p2_result {
+            let p2 = match state.calculate_short_principal(amount + empirical_derivative_epsilon) {
                 // If the amount results in the pool being insolvent, skip this iteration
                 Ok(p) => p,
                 Err(_) => continue,
@@ -481,7 +486,7 @@ mod tests {
             assert!(p2 > p1);
 
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let short_principal_derivative = state.calculate_short_principal_derivative(amount);
+            let short_principal_derivative = state.calculate_short_principal_derivative(amount)?;
 
             let derivative_diff;
             if short_principal_derivative >= empirical_derivative {
@@ -519,37 +524,32 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = panic::catch_unwind(|| {
+            let p1 = match panic::catch_unwind(|| {
                 state.calculate_open_short(
                     amount - empirical_derivative_epsilon,
                     state.vault_share_price(),
                 )
-            });
-            let p1;
-            let p2;
-            match p1_result {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p_panics) => match p_panics {
-                    Ok(p) => p1 = p,
-                    Err(_) => continue,
+            }) {
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue, // The amount results in the pool being insolvent.
                 },
-                Err(_) => continue,
-            }
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+            };
 
-            let p2_result = panic::catch_unwind(|| {
+            let p2 = match panic::catch_unwind(|| {
                 state.calculate_open_short(
                     amount + empirical_derivative_epsilon,
                     state.vault_share_price(),
                 )
-            });
-            match p2_result {
+            }) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p_panics) => match p_panics {
-                    Ok(p) => p2 = p,
-                    Err(_) => continue,
+                Ok(p) => match p {
+                    Ok(p) => p,
+                    Err(_) => continue, // The amount results in the pool being insolvent.
                 },
-                Err(_) => continue,
-            }
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+            };
 
             // Sanity check
             assert!(p2 > p1);
@@ -560,9 +560,9 @@ mod tests {
             // Setting open, close, and current vault share price to be equal assumes 0% variable yield.
             let short_deposit_derivative = state.short_deposit_derivative(
                 amount,
-                state.calculate_spot_price(),
+                state.calculate_spot_price()?,
                 state.vault_share_price(),
-            );
+            )?;
 
             let derivative_diff;
             if short_deposit_derivative >= empirical_derivative {
@@ -625,7 +625,7 @@ mod tests {
             // Verify that the predicted spot price is equal to the ending spot
             // price. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the short.
-            let actual_spot_price = bob.get_state().await?.calculate_spot_price();
+            let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
             let error = if actual_spot_price > expected_spot_price {
                 actual_spot_price - expected_spot_price
             } else {
@@ -658,7 +658,7 @@ mod tests {
             // allows all actions.
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
                     -I256::try_from(value).unwrap()
                 } else {
@@ -666,6 +666,7 @@ mod tests {
                 }
             };
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::MAX,
@@ -675,8 +676,11 @@ mod tests {
                     None,
                 )
             }) {
-                Ok(max_bond_amount) => max_bond_amount,
-                Err(_) => continue,
+                Ok(max_bond_amount) => match max_bond_amount {
+                    Ok(max_bond_amount) => max_bond_amount,
+                    Err(_) => continue, // Err; max short insolvent
+                },
+                Err(_) => continue, // panic; likely in FixedPoint
             };
             if max_bond_amount == fixed!(0) {
                 continue;
@@ -726,6 +730,10 @@ mod tests {
             alice.fund(contribution).await?;
             bob.fund(budget).await?;
 
+            // Alice initializes the pool.
+            // TODO: We'd like to set a random position duration & checkpoint duration.
+            alice.initialize(fixed_rate, contribution, None).await?;
+
             // Set a random variable rate.
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
             let vault = MockERC4626::new(
@@ -733,10 +741,6 @@ mod tests {
                 chain.client(BOB.clone()).await?,
             );
             vault.set_rate(variable_rate.into()).send().await?;
-
-            // Alice initializes the pool.
-            // TODO: We'd like to set a random position duration & checkpoint duration.
-            alice.initialize(fixed_rate, contribution, None).await?;
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
@@ -824,6 +828,7 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // We need to catch panics because of overflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::MAX,
@@ -834,24 +839,28 @@ mod tests {
                 )
             });
             // Since we're fuzzing it's possible that the max can fail.
-            // This failure can be an error or a panic.
             // We're only going to use it in this test if it succeeded.
             match max_trade {
-                Ok(max_trade) => {
-                    // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
-                    // calc_open_short must be incorrect for the additional amount to have to be so large.
-                    let result = state.calculate_open_short(
-                        max_trade + fixed!(100_000_000e18),
-                        state.vault_share_price(),
-                    );
-                    match result {
-                        Ok(_) => {
-                            panic!("calculate_open_short should have failed but succeeded.")
+                Ok(max_trade) => match max_trade {
+                    Ok(max_trade) => {
+                        // TODO: Test that you should be able to add a small amount (e.g. 1e18) to max to fail.
+                        // calc_open_short must be incorrect for the additional amount to have to be so large.
+                        let result = state.calculate_open_short(
+                            max_trade + fixed!(100_000_000e18),
+                            state.vault_share_price(),
+                        );
+                        match result {
+                            Ok(_) => {
+                                return Err(eyre!(
+                                    "calculate_open_short should have failed but succeeded."
+                                ));
+                            }
+                            Err(_) => continue, // Max was fine; open resulted in an Err.
                         }
-                        Err(_) => continue, // Max was fine; open resulted in an Error.
                     }
-                }
-                Err(_) => continue, // Max thew a panic (likely due to FixedPoint under/over flow.
+                    Err(_) => continue, // Max threw an Err.
+                },
+                Err(_) => continue, // Max thew an panic, likely due to FixedPoint under/over flow.
             }
         }
 

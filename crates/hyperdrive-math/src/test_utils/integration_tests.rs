@@ -121,7 +121,7 @@ mod tests {
                 checkpoint_exposure,
                 None,
                 None,
-            );
+            )?;
             let budget = bob.base();
             let slippage_tolerance = fixed!(0.001e18);
             let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
@@ -186,7 +186,7 @@ mod tests {
             //    considering fees.
             // 2. The pool's solvency is close to zero.
             // 3. Bob's budget is consumed.
-            let max_spot_price = bob.get_state().await?.calculate_max_spot_price();
+            let max_spot_price = bob.get_state().await?.calculate_max_spot_price()?;
             let max_long = bob.calculate_max_long(None).await?;
             let spot_price_after_long = bob
                 .get_state()

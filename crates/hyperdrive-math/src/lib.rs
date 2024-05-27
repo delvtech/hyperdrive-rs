@@ -121,13 +121,16 @@ impl State {
     }
 
     /// Calculates the pool's spot price.
-    pub fn calculate_spot_price(&self) -> FixedPoint {
+    pub fn calculate_spot_price(&self) -> Result<FixedPoint> {
         YieldSpace::calculate_spot_price(self)
     }
 
     /// Calculate the pool's current spot (aka "fixed") rate.
-    pub fn calculate_spot_rate(&self) -> FixedPoint {
-        calculate_rate_given_fixed_price(self.calculate_spot_price(), self.position_duration())
+    pub fn calculate_spot_rate(&self) -> Result<FixedPoint> {
+        Ok(calculate_rate_given_fixed_price(
+            self.calculate_spot_price()?,
+            self.position_duration(),
+        ))
     }
 
     /// Converts a timestamp to the checkpoint timestamp that it corresponds to.
@@ -183,7 +186,7 @@ impl State {
     fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint>>(
         &self,
         target_rate: F,
-    ) -> (FixedPoint, FixedPoint) {
+    ) -> Result<(FixedPoint, FixedPoint)> {
         let target_rate = target_rate.into();
 
         // First get the target share reserves
@@ -191,16 +194,16 @@ impl State {
             .vault_share_price()
             .div_up(self.initial_vault_share_price());
         let scaled_rate = (target_rate.mul_up(self.annualized_position_duration()) + fixed!(1e18))
-            .pow(fixed!(1e18) / self.time_stretch());
-        let inner = (self.k_down()
-            / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())))
-        .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()));
+            .pow(fixed!(1e18) / self.time_stretch())?;
+        let inner = (self.k_down()?
+            / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())?))
+        .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))?;
         let target_share_reserves = inner / self.initial_vault_share_price();
 
         // Then get the target bond reserves.
         let target_bond_reserves = inner * scaled_rate;
 
-        (target_share_reserves, target_bond_reserves)
+        Ok((target_share_reserves, target_bond_reserves))
     }
 
     /// Config ///
@@ -255,7 +258,7 @@ impl State {
         self.info.share_reserves.into()
     }
 
-    fn effective_share_reserves(&self) -> FixedPoint {
+    fn effective_share_reserves(&self) -> Result<FixedPoint> {
         calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())
     }
 

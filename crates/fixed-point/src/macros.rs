@@ -110,7 +110,7 @@ macro_rules! fixed {
 mod tests {
     use ethers::types::{I256, U256};
 
-    use crate::{fixed, int256, uint256, FixedPoint};
+    use crate::FixedPoint;
 
     #[test]
     fn test_int256() {

@@ -2,7 +2,10 @@ use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixed_point::{fixed, uint256, FixedPoint};
 
-pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+pub fn calculate_time_stretch(
+    rate: FixedPoint,
+    position_duration: FixedPoint,
+) -> Result<FixedPoint> {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
@@ -27,33 +30,33 @@ pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    (FixedPoint::from(FixedPoint::ln(
-        I256::try_from(fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year))
-            .unwrap(),
-    )) / FixedPoint::from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate).unwrap())))
-        * time_stretch
+    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
+        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
+    )?)?)?
+        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
+        * time_stretch)
 }
 
 pub fn calculate_effective_share_reserves(
     share_reserves: FixedPoint,
     share_adjustment: I256,
-) -> FixedPoint {
-    let effective_share_reserves = I256::try_from(share_reserves).unwrap() - share_adjustment;
+) -> Result<FixedPoint> {
+    let effective_share_reserves = I256::try_from(share_reserves)? - share_adjustment;
     if effective_share_reserves < I256::from(0) {
-        panic!("effective share reserves cannot be negative");
+        return Err(eyre!("effective share reserves cannot be negative"));
     }
-    effective_share_reserves.into()
+    effective_share_reserves.try_into()
 }
 
 pub fn calculate_effective_share_reserves_safe(
     share_reserves: FixedPoint,
     share_adjustment: I256,
 ) -> Result<FixedPoint> {
-    let effective_share_reserves = I256::try_from(share_reserves).unwrap() - share_adjustment;
+    let effective_share_reserves = I256::try_from(share_reserves)? - share_adjustment;
     if effective_share_reserves < I256::from(0) {
         return Err(eyre!("effective share reserves cannot be negative"));
     }
-    Ok(effective_share_reserves.into())
+    effective_share_reserves.try_into()
 }
 
 /// Calculates the bond reserves assuming that the pool has a given
@@ -84,7 +87,7 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
     initial_vault_share_price: FixedPoint,
     position_duration: FixedPoint,
     time_stretch: FixedPoint,
-) -> FixedPoint {
+) -> Result<FixedPoint> {
     // NOTE: Round down to underestimate the initial bond reserves.
     //
     // Normalize the time to maturity to fractions of a year since the provided
@@ -97,18 +100,18 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
     let mut inner = fixed!(1e18) + target_rate.mul_down(t);
     if inner >= fixed!(1e18) {
         // Rounding down the exponent results in a smaller result.
-        inner = inner.pow(fixed!(1e18) / time_stretch);
+        inner = inner.pow(fixed!(1e18) / time_stretch)?;
     } else {
         // Rounding up the exponent results in a smaller result.
-        inner = inner.pow(fixed!(1e18).div_up(time_stretch));
+        inner = inner.pow(fixed!(1e18).div_up(time_stretch))?;
     }
 
     // NOTE: Round down to underestimate the initial bond reserves.
     //
     // mu * (z - zeta) * (1 + apr * t) ** (1 / tau)
-    initial_vault_share_price
+    Ok(initial_vault_share_price
         .mul_down(effective_share_reserves)
-        .mul_down(inner)
+        .mul_down(inner))
 }
 
 /// Calculate the rate assuming a given price is constant for some annualized duration.
@@ -158,10 +161,13 @@ pub fn calculate_hpr_given_apr(apr: FixedPoint, position_duration: FixedPoint) -
 ///
 /// where $t$ is the holding period, in units of years. For example, if the
 /// holding period is 6 months, then $t=0.5$.
-pub fn calculate_hpr_given_apy(apy: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+pub fn calculate_hpr_given_apy(
+    apy: FixedPoint,
+    position_duration: FixedPoint,
+) -> Result<FixedPoint> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
-    (fixed!(1e18) + apy).pow(holding_period_in_years) - fixed!(1e18)
+    Ok((fixed!(1e18) + apy).pow(holding_period_in_years)? - fixed!(1e18))
 }
 
 #[cfg(test)]
@@ -199,9 +205,9 @@ mod tests {
                 .await
             {
                 Ok(expected_t) => {
-                    assert_eq!(actual_t, FixedPoint::from(expected_t));
+                    assert_eq!(actual_t.unwrap(), FixedPoint::from(expected_t));
                 }
-                Err(_) => panic!("Test failed."),
+                Err(_) => assert!(actual_t.is_err()),
             }
         }
 
@@ -215,7 +221,7 @@ mod tests {
             // Gen the random state.
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 let sign = rng.gen::<bool>();
                 if sign {
                     -I256::try_from(value).unwrap()
@@ -226,18 +232,20 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
 
             // Get the min rate.
+            // We need to catch panics because of overflows.
             let max_long = match panic::catch_unwind(|| {
                 state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
             }) {
                 Ok(max_long) => match max_long {
                     Ok(max_long) => max_long,
-                    Err(_) => continue,
+                    Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
                 },
-                Err(_) => continue, // Don't finish this fuzz iteration.
+                Err(_) => continue, // Max threw a paanic. Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
 
             // Get the max rate.
+            // We need to catch panics because of overflows.
             let max_short = match panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::MAX,
@@ -247,8 +255,11 @@ mod tests {
                     None,
                 )
             }) {
-                Ok(max_short) => max_short,
-                Err(_) => continue, // Don't finish this fuzz iteration.
+                Ok(max_short) => match max_short {
+                    Ok(max_short) => max_short,
+                    Err(_) => continue, // Max threw an Err; don't finish this fuzz iteration.
+                },
+                Err(_) => continue, // Max threw a panic; don't finish this fuzz iteration.
             };
             let max_rate = state.calculate_spot_rate_after_short(max_short, None)?;
 
@@ -257,17 +268,17 @@ mod tests {
 
             // Calculate the new bond reserves.
             let bond_reserves = calculate_bonds_given_effective_shares_and_rate(
-                state.effective_share_reserves(),
+                state.effective_share_reserves()?,
                 target_rate,
                 state.initial_vault_share_price(),
                 state.position_duration(),
                 state.time_stretch(),
-            );
+            )?;
 
             // Make a new state with the updated reserves & check the spot rate.
             let mut new_state: State = state.clone();
             new_state.info.bond_reserves = bond_reserves.into();
-            assert_eq!(new_state.calculate_spot_rate(), target_rate)
+            assert_eq!(new_state.calculate_spot_rate()?, target_rate)
         }
         Ok(())
     }

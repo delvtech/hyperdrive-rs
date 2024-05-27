@@ -47,7 +47,7 @@ impl State {
         let bond_reserves = self.initial_vault_share_price().mul_div_down(
             self.vault_share_price().mul_down(share_reserves),
             self.vault_share_price()
-                .mul_down(target_price.pow(one.div_down(self.time_stretch())))
+                .mul_down(target_price.pow(one.div_down(self.time_stretch()))?)
                 + self.initial_vault_share_price().mul_up(target_price),
         );
 
@@ -57,8 +57,7 @@ impl State {
         //
         // zeta = (p_target * y) / c
         let share_adjustment =
-            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))
-                .unwrap();
+            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))?;
 
         Ok((share_reserves, share_adjustment, bond_reserves))
     }
@@ -79,35 +78,35 @@ impl State {
 
         // Get the updated share reserves.
         let new_share_reserves = if share_reserves_delta > I256::zero() {
-            I256::try_from(share_reserves).unwrap() + share_reserves_delta
+            I256::try_from(share_reserves)? + share_reserves_delta
         } else {
-            I256::try_from(share_reserves).unwrap() - share_reserves_delta
+            I256::try_from(share_reserves)? - share_reserves_delta
         };
 
         // Ensure the minimum share reserve level.
-        if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
+        if new_share_reserves < I256::try_from(minimum_share_reserves)? {
             return Err(eyre!(
                 "Update would result in share reserves below minimum."
             ));
         }
 
         // Convert to Fixedpoint to allow the math below.
-        let new_share_reserves = FixedPoint::from(new_share_reserves);
+        let new_share_reserves = FixedPoint::try_from(new_share_reserves)?;
 
         // Get the updated share adjustment.
         let new_share_adjustment = if share_adjustment >= I256::zero() {
-            let share_adjustment_fp = FixedPoint::from(share_adjustment);
+            let share_adjustment_fp = FixedPoint::try_from(share_adjustment)?;
             I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
         } else {
-            let share_adjustment_fp = FixedPoint::from(-share_adjustment);
+            let share_adjustment_fp = FixedPoint::try_from(-share_adjustment)?;
             -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
         };
 
         // Get the updated bond reserves.
         let old_effective_share_reserves =
-            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment());
+            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())?;
         let new_effective_share_reserves =
-            calculate_effective_share_reserves(new_share_reserves, new_share_adjustment);
+            calculate_effective_share_reserves(new_share_reserves, new_share_adjustment)?;
         let new_bond_reserves =
             bond_reserves.mul_div_down(new_effective_share_reserves, old_effective_share_reserves);
 
@@ -135,14 +134,14 @@ impl State {
             .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)?;
 
         let present_value: I256 =
-            I256::try_from(self.share_reserves()).unwrap() + net_curve_trade + net_flat_trade
-                - I256::try_from(self.minimum_share_reserves()).unwrap();
+            I256::try_from(self.share_reserves())? + net_curve_trade + net_flat_trade
+                - I256::try_from(self.minimum_share_reserves())?;
 
         if present_value < int256!(0) {
             return Err(eyre!("Negative present value!"));
         }
 
-        Ok(present_value.into())
+        present_value.try_into()
     }
 
     pub fn calculate_net_curve_trade(
@@ -164,22 +163,20 @@ impl State {
         //
         // netCurveTrade = y_l * t_l - y_s * t_s.
         let net_curve_position: I256 =
-            I256::try_from(self.longs_outstanding().mul_up(long_average_time_remaining)).unwrap()
+            I256::try_from(self.longs_outstanding().mul_up(long_average_time_remaining))?
                 - I256::try_from(
                     self.shorts_outstanding()
                         .mul_down(short_average_time_remaining),
-                )
-                .unwrap();
+                )?;
 
         // If the net curve position is positive, then the pool is net long.
         // Closing the net curve position results in the longs being paid out
         // from the share reserves, so we negate the result.
         match net_curve_position.cmp(&int256!(0)) {
             Ordering::Greater => {
-                let net_curve_position: FixedPoint = FixedPoint::from(net_curve_position);
-                let max_curve_trade = self
-                    .calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())
-                    .unwrap();
+                let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
+                let max_curve_trade =
+                    self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())?;
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_out_given_bonds_in_down_safe(net_curve_position) {
                         Ok(net_curve_trade) => Ok(-I256::try_from(net_curve_trade)?),
@@ -203,7 +200,7 @@ impl State {
                     // `effectiveShareReserves - minimumShareReserves`.
                     if self.share_adjustment() >= I256::from(0) {
                         Ok(-I256::try_from(
-                            self.effective_share_reserves() - self.minimum_share_reserves(),
+                            self.effective_share_reserves()? - self.minimum_share_reserves(),
                         )?)
 
                     // Otherwise, the effective share reserves are greater than the
@@ -218,7 +215,7 @@ impl State {
                 }
             }
             Ordering::Less => {
-                let net_curve_position: FixedPoint = FixedPoint::from(-net_curve_position);
+                let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
                 let max_curve_trade = self.calculate_max_buy_bonds_out_safe()?;
                 if max_curve_trade >= net_curve_position {
                     match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
@@ -337,7 +334,7 @@ impl State {
     ) -> Result<FixedPoint> {
         // Calculate the bond reserves after the bond amount is applied.
         let bond_reserves_after = if bond_amount >= I256::zero() {
-            self.bond_reserves() + bond_amount.into()
+            self.bond_reserves() + bond_amount.try_into()?
         } else {
             let bond_amount = FixedPoint::from(U256::try_from(-bond_amount)?);
             if bond_amount < self.bond_reserves() {
@@ -357,15 +354,15 @@ impl State {
         let derivative = self.vault_share_price().div_up(
             self.initial_vault_share_price()
                 .mul_down(effective_share_reserves)
-                .pow(self.time_stretch()),
+                .pow(self.time_stretch())?,
         ) + original_bond_reserves.div_up(
             original_effective_share_reserves
-                .mul_down(self.bond_reserves().pow(self.time_stretch())),
+                .mul_down(self.bond_reserves().pow(self.time_stretch())?),
         );
 
         // NOTE: Rounding this down rounds the subtraction up.
         let rhs = original_bond_reserves.div_down(
-            original_effective_share_reserves.mul_up(bond_reserves_after.pow(self.time_stretch())),
+            original_effective_share_reserves.mul_up(bond_reserves_after.pow(self.time_stretch())?),
         );
         if derivative < rhs {
             return Err(eyre!("Derivative is less than right hand side"));
@@ -377,8 +374,8 @@ impl State {
         // inner = (
         //             (mu / c) * (k(x) - (y(x) + dy) ** (1 - t_s))
         //         ) ** (t_s / (1 - t_s))
-        let k = self.k_up();
-        let inner = bond_reserves_after.pow(fixed!(1e18) - self.time_stretch());
+        let k = self.k_up()?;
+        let inner = bond_reserves_after.pow(fixed!(1e18) - self.time_stretch())?;
         if k < inner {
             return Err(eyre!("k is less than inner"));
         }
@@ -389,13 +386,13 @@ impl State {
             inner.pow(
                 self.time_stretch()
                     .div_up(fixed!(1e18) - self.time_stretch()),
-            )
+            )?
         } else {
             // NOTE: Round the exponent down since this rounds the result up.
             inner.pow(
                 self.time_stretch()
                     .div_down(fixed!(1e18) - self.time_stretch()),
-            )
+            )?
         };
         let derivative = derivative.mul_div_up(inner, self.vault_share_price());
         let derivative = if fixed!(1e18) > derivative {
@@ -411,7 +408,7 @@ impl State {
         // derivative = derivative * (1 - (zeta / z))
         let derivative = if original_share_adjustment >= I256::zero() {
             let right_hand_side =
-                FixedPoint::from(original_share_adjustment).div_up(original_share_reserves);
+                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
             if right_hand_side > fixed!(1e18) {
                 return Err(eyre!("Right hand side is greater than 1e18"));
             }
@@ -420,7 +417,7 @@ impl State {
         } else {
             derivative.mul_down(
                 fixed!(1e18)
-                    + FixedPoint::from(-original_share_adjustment)
+                    + FixedPoint::try_from(-original_share_adjustment)?
                         .div_down(original_share_reserves),
             )
         };
@@ -450,9 +447,8 @@ mod tests {
             let state = rng.gen::<State>();
             let initial_contribution = rng.gen_range(fixed!(0)..=state.bond_reserves());
             let initial_rate = rng.gen_range(fixed!(0)..=fixed!(1));
-            let (actual_share_reserves, actual_share_adjustment, actual_bond_reserves) = state
-                .calculate_initial_reserves(initial_contribution, initial_rate)
-                .unwrap();
+            let (actual_share_reserves, actual_share_adjustment, actual_bond_reserves) =
+                state.calculate_initial_reserves(initial_contribution, initial_rate)?;
             match chain
                 .mock_lp_math()
                 .calculate_initial_reserves(
@@ -654,7 +650,7 @@ mod tests {
                 bond_amount,
                 original_state.share_reserves(),
                 original_state.bond_reserves(),
-                original_state.effective_share_reserves(),
+                original_state.effective_share_reserves()?,
                 original_state.share_adjustment(),
             );
 
@@ -708,7 +704,7 @@ mod tests {
             match mock
                 .calculate_shares_delta_given_bonds_delta_derivative_safe(
                     params,
-                    U256::from(original_state.effective_share_reserves()),
+                    U256::from(original_state.effective_share_reserves()?),
                     bond_amount,
                 )
                 .call()

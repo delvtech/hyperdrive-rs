@@ -4,7 +4,7 @@ use std::{
 };
 
 use ethers::types::{Sign, I256, U256};
-use eyre::{eyre, Error, Result};
+use eyre::{eyre, ErrReport, Error, Result};
 use rand::{
     distributions::{
         uniform::{SampleBorrow, SampleUniform, UniformSampler},
@@ -44,10 +44,17 @@ impl fmt::Display for FixedPoint {
 
 /// Conversions ///
 
-impl From<I256> for FixedPoint {
-    fn from(i: I256) -> FixedPoint {
-        assert!(i >= int256!(0), "FixedPoint cannot be negative");
-        i.into_raw().into()
+impl TryFrom<I256> for FixedPoint {
+    type Error = ErrReport;
+
+    fn try_from(i: I256) -> Result<FixedPoint> {
+        if i < int256!(0) {
+            return Err(eyre!(
+                "failed to convert {} into FixedPoint; intput must be positive",
+                i
+            ));
+        }
+        Ok(i.into_raw().into())
     }
 }
 
@@ -86,7 +93,7 @@ impl TryFrom<FixedPoint> for I256 {
 
     fn try_from(f: FixedPoint) -> Result<I256> {
         I256::checked_from_sign_and_abs(Sign::Positive, f.0)
-            .ok_or(eyre!("fixed-point: failed to convert {} to I256", f))
+            .ok_or(eyre!("failed to convert {} to I256", f))
     }
 }
 
@@ -179,43 +186,43 @@ impl FixedPoint {
         self.mul_div_up(fixed!(1e18), other)
     }
 
-    pub fn pow(self, y: FixedPoint) -> FixedPoint {
+    pub fn pow(self, y: FixedPoint) -> Result<FixedPoint> {
         // If the exponent is 0, return 1.
         if y == fixed!(0) {
-            return fixed!(1e18);
+            return Ok(fixed!(1e18));
         }
 
         // If the base is 0, return 0.
         if self == fixed!(0) {
-            return fixed!(0);
+            return Ok(fixed!(0));
         }
 
         // Using properties of logarithms we calculate x^y:
         // -> ln(x^y) = y * ln(x)
         // -> e^(y * ln(x)) = x^y
-        let y_int256 = I256::try_from(y).unwrap();
+        let y_int256 = I256::try_from(y)?;
 
         // Compute y*ln(x)
         // Any overflow for x will be caught in _ln() in the initial bounds check
-        let lnx: I256 = Self::ln(I256::from_raw(self.0));
+        let lnx: I256 = Self::ln(I256::from_raw(self.0))?;
         let mut ylnx: I256 = y_int256.wrapping_mul(lnx);
         ylnx = ylnx.wrapping_div(int256!(1e18));
 
         // Calculate exp(y * ln(x)) to get x^y
-        Self::exp(ylnx).into()
+        Self::exp(ylnx)?.try_into()
     }
 
-    fn exp(mut x: I256) -> I256 {
+    fn exp(mut x: I256) -> Result<I256> {
         // When the result is < 0.5 we return zero. This happens when
         // x <= floor(log(0.5e18) * 1e18) ~ -42e18
         if x <= int256!(-42139678854452767551) {
-            return I256::zero();
+            return Ok(I256::zero());
         }
 
         // When the result is > (2**255 - 1) / 1e18 we can not represent it as an
         // int. This happens when x >= floor(log((2**255 - 1) / 1e18) * 1e18) ~ 135.
         if x >= int256!(135305999368893231589) {
-            panic!("invalid exponent");
+            return Err(eyre!("invalid exponent"));
         }
 
         // x is now in the range (-42, 136) * 1e18. Convert to (-42, 136) * 2**96
@@ -291,12 +298,12 @@ impl FixedPoint {
                 .shr(int256!(195).wrapping_sub(k).low_usize()),
         );
 
-        r
+        Ok(r)
     }
 
-    pub fn ln(mut x: I256) -> I256 {
+    pub fn ln(mut x: I256) -> Result<I256> {
         if x <= I256::zero() {
-            panic!("ln of negative number or zero");
+            return Err(eyre!("ln of negative number or zero"));
         }
 
         // We want to convert x from 10**18 fixed point to 2**96 fixed point.
@@ -384,7 +391,7 @@ impl FixedPoint {
         // base conversion: mul 2**18 / 2**192
         r = r.asr(174);
 
-        r
+        Ok(r)
     }
 
     fn to_scaled_string(self, decimals: usize) -> String {
@@ -481,7 +488,6 @@ mod tests {
     use std::panic;
 
     use ethers::signers::Signer;
-    use eyre::Result;
     use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
     use rand::thread_rng;
     use test_utils::{chain::Chain, constants::DEPLOYER};
@@ -713,7 +719,7 @@ mod tests {
         for _ in 0..10_000 {
             let x: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
             let y: FixedPoint = rng.gen_range(fixed!(0)..=fixed!(1e18));
-            let actual = panic::catch_unwind(|| x.pow(y));
+            let actual = x.pow(y);
             match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => {
                     assert_eq!(actual.unwrap(), FixedPoint::from(expected));
@@ -737,7 +743,7 @@ mod tests {
         for _ in 0..10_000 {
             let x: FixedPoint = rng.gen();
             let y: FixedPoint = rng.gen();
-            let actual = panic::catch_unwind(|| x.pow(y));
+            let actual = x.pow(y);
             match mock_fixed_point_math.pow(x.into(), y.into()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
                 Err(_) => assert!(actual.is_err()),
@@ -758,7 +764,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e18))).unwrap();
-            let actual = panic::catch_unwind(|| FixedPoint::ln(x));
+            let actual = FixedPoint::ln(x);
             match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
@@ -779,8 +785,8 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 =
-                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
-            let actual = panic::catch_unwind(|| FixedPoint::exp(x));
+                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::try_from(I256::MAX)?)).unwrap();
+            let actual = FixedPoint::exp(x);
             match mock_fixed_point_math.exp(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
@@ -801,7 +807,7 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e18))).unwrap();
-            let actual = panic::catch_unwind(|| FixedPoint::ln(x));
+            let actual = FixedPoint::ln(x);
             match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
@@ -822,8 +828,8 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..10_000 {
             let x: I256 =
-                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::from(I256::MAX))).unwrap();
-            let actual = panic::catch_unwind(|| FixedPoint::ln(x));
+                I256::try_from(rng.gen_range(fixed!(0)..FixedPoint::try_from(I256::MAX)?)).unwrap();
+            let actual = FixedPoint::ln(x);
             match mock_fixed_point_math.ln(x).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),

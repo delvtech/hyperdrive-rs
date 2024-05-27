@@ -14,13 +14,13 @@ impl State {
     /// $$
     /// p_max = \frac{1 - \phi_f}{1 + \phi_c * \left( p_0^{-1} - 1 \right) * \left( \phi_f - 1 \right)}
     /// $$
-    pub fn calculate_max_spot_price(&self) -> FixedPoint {
-        (fixed!(1e18) - self.flat_fee())
+    pub fn calculate_max_spot_price(&self) -> Result<FixedPoint> {
+        Ok((fixed!(1e18) - self.flat_fee())
             / (fixed!(1e18)
                 + self
                     .curve_fee()
-                    .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18)))
-            .mul_up(fixed!(1e18) - self.flat_fee())
+                    .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18)))
+            .mul_up(fixed!(1e18) - self.flat_fee()))
     }
 
     /// Calculates the pool's solvency.
@@ -52,7 +52,7 @@ impl State {
         // max spot price
         let spot_price_after_min_long =
             self.calculate_spot_price_after_long(self.minimum_transaction_amount(), None)?;
-        if spot_price_after_min_long > self.calculate_max_spot_price() {
+        if spot_price_after_min_long > self.calculate_max_spot_price()? {
             return Ok(fixed!(0));
         }
 
@@ -64,7 +64,7 @@ impl State {
                 absolute_max_base_amount,
                 absolute_max_bond_amount,
                 checkpoint_exposure,
-            )
+            )?
             .is_some()
         {
             return Ok(absolute_max_base_amount.min(budget));
@@ -88,7 +88,7 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut max_base_amount =
-            self.max_long_guess(absolute_max_base_amount, checkpoint_exposure);
+            self.max_long_guess(absolute_max_base_amount, checkpoint_exposure)?;
 
         // possible_max_base_amount might be less than minimum transaction amount.
         // we clamp here if so
@@ -99,7 +99,7 @@ impl State {
             max_base_amount,
             self.calculate_open_long(max_base_amount)?,
             checkpoint_exposure,
-        ) {
+        )? {
             Some(solvency) => solvency,
             None => return Err(eyre!("Initial guess in `calculate_max_long` is insolvent.")),
         };
@@ -129,7 +129,7 @@ impl State {
             // candidate solution, we check to see if the pool is solvent after
             // a long is opened with the candidate amount. If the pool isn't
             // solvent, then we're done.
-            let derivative = match self.solvency_after_long_derivative(max_base_amount) {
+            let derivative = match self.solvency_after_long_derivative(max_base_amount)? {
                 Some(derivative) => derivative,
                 None => break,
             };
@@ -146,7 +146,7 @@ impl State {
                 possible_max_base_amount,
                 self.calculate_open_long(possible_max_base_amount)?,
                 checkpoint_exposure,
-            ) {
+            )? {
                 Some(s) => s,
                 None => break,
             };
@@ -204,19 +204,21 @@ impl State {
         //           )
         //       ) ** (1 / (1 - t_s))
         let inner = self
-            .k_down()
+            .k_down()?
             .div_down(
                 self.vault_share_price()
                     .div_up(self.initial_vault_share_price())
                     + ((fixed!(1e18)
                         + self
                             .curve_fee()
-                            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()) - fixed!(1e18))
+                            .mul_up(
+                                fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18),
+                            )
                             .mul_up(fixed!(1e18) - self.flat_fee()))
                     .div_up(fixed!(1e18) - self.flat_fee()))
-                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch())),
+                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch()))?,
             )
-            .pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()));
+            .pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?;
         let target_share_reserves = inner.div_down(self.initial_vault_share_price());
 
         // Now that we have the target share reserves, we can calculate the
@@ -228,15 +230,15 @@ impl State {
         //
         // y_t = inner * ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** (1 / t_s)
         let fee_adjustment = self.curve_fee()
-            * (fixed!(1e18) / self.calculate_spot_price() - fixed!(1e18))
+            * (fixed!(1e18) / self.calculate_spot_price()? - fixed!(1e18))
             * (fixed!(1e18) - self.flat_fee());
         let target_bond_reserves = ((fixed!(1e18) + fee_adjustment)
             / (fixed!(1e18) - self.flat_fee()))
-        .pow(fixed!(1e18).div_up(self.time_stretch()))
+        .pow(fixed!(1e18).div_up(self.time_stretch()))?
             * inner;
 
         // Catch if the target share reserves are smaller than the effective share reserves.
-        let effective_share_reserves = self.effective_share_reserves();
+        let effective_share_reserves = self.effective_share_reserves()?;
         if target_share_reserves < effective_share_reserves {
             return Err(eyre!(
                 "target share reserves less than effective share reserves"
@@ -251,7 +253,7 @@ impl State {
         // The absolute max bond amount is given by:
         // absolute_max_bond_amount = (y - y_t) - Phi_c(absolute_max_base_amount)
         let absolute_max_bond_amount = (self.bond_reserves() - target_bond_reserves)
-            - self.open_long_curve_fee(absolute_max_base_amount);
+            - self.open_long_curve_fee(absolute_max_base_amount)?;
 
         Ok((absolute_max_base_amount, absolute_max_bond_amount))
     }
@@ -264,11 +266,11 @@ impl State {
         &self,
         absolute_max_base_amount: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         // Calculate an initial estimate of the max long by using the spot price as
         // our conservative price.
-        let spot_price = self.calculate_spot_price();
-        let guess = self.max_long_estimate(spot_price, spot_price, checkpoint_exposure);
+        let spot_price = self.calculate_spot_price()?;
+        let guess = self.max_long_estimate(spot_price, spot_price, checkpoint_exposure)?;
 
         // We know that the spot price is 1 when the absolute max base amount is
         // used to open a long. We also know that our spot price isn't a great
@@ -277,7 +279,7 @@ impl State {
         // price by interpolating between the spot price and 1 depending on how
         // large the estimate is.
         let t = (guess / absolute_max_base_amount)
-            .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))
+            .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
             * fixed!(0.8e18);
         let estimate_price = spot_price * (fixed!(1e18) - t) + fixed!(1e18) * t;
 
@@ -326,8 +328,8 @@ impl State {
         estimate_price: FixedPoint,
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> FixedPoint {
-        let checkpoint_exposure = FixedPoint::from(-checkpoint_exposure.min(int256!(0)));
+    ) -> Result<FixedPoint> {
+        let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         let mut estimate =
             self.calculate_solvency() + checkpoint_exposure / self.vault_share_price();
         estimate = estimate.mul_div_down(self.vault_share_price(), fixed!(2e18));
@@ -335,7 +337,7 @@ impl State {
             + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
             - fixed!(1e18)
             - self.curve_fee() * (fixed!(1e18) / spot_price - fixed!(1e18));
-        estimate
+        Ok(estimate)
     }
 
     /// Calculates the solvency of the pool $S(x)$ after a long is opened with a base
@@ -378,22 +380,22 @@ impl State {
         base_amount: FixedPoint,
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> Option<FixedPoint> {
-        let governance_fee = self.open_long_governance_fee(base_amount, None);
+    ) -> Result<Option<FixedPoint>> {
+        let governance_fee = self.open_long_governance_fee(base_amount, None)?;
         let share_reserves = self.share_reserves() + base_amount / self.vault_share_price()
             - governance_fee / self.vault_share_price();
         let exposure = self.long_exposure() + bond_amount;
-        let checkpoint_exposure = FixedPoint::from(-checkpoint_exposure.min(int256!(0)));
+        let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         if share_reserves + checkpoint_exposure / self.vault_share_price()
             >= exposure / self.vault_share_price() + self.minimum_share_reserves()
         {
-            Some(
+            Ok(Some(
                 share_reserves + checkpoint_exposure / self.vault_share_price()
                     - exposure / self.vault_share_price()
                     - self.minimum_share_reserves(),
-            )
+            ))
         } else {
-            None
+            Ok(None)
         }
     }
 
@@ -416,16 +418,14 @@ impl State {
     pub(super) fn solvency_after_long_derivative(
         &self,
         base_amount: FixedPoint,
-    ) -> Option<FixedPoint> {
-        let maybe_derivative = self.long_amount_derivative(base_amount);
-        maybe_derivative.map(|derivative| {
-            (derivative
-                + self.governance_lp_fee()
-                    * self.curve_fee()
-                    * (fixed!(1e18) - self.calculate_spot_price())
+    ) -> Result<Option<FixedPoint>> {
+        let maybe_derivative = self.long_amount_derivative(base_amount)?;
+        let spot_price = self.calculate_spot_price()?;
+        Ok(maybe_derivative.map(|derivative| {
+            (derivative + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
                 - fixed!(1e18))
             .mul_div_down(fixed!(1e18), self.vault_share_price())
-        })
+        }))
     }
 
     /// Calculates the derivative of [long_amount](long_amount) with respect to the
@@ -455,33 +455,36 @@ impl State {
     /// $$
     /// c'(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
     /// $$
-    pub(super) fn long_amount_derivative(&self, base_amount: FixedPoint) -> Option<FixedPoint> {
+    pub(super) fn long_amount_derivative(
+        &self,
+        base_amount: FixedPoint,
+    ) -> Result<Option<FixedPoint>> {
         let share_amount = base_amount / self.vault_share_price();
         let inner =
-            self.initial_vault_share_price() * (self.effective_share_reserves() + share_amount);
-        let mut derivative = fixed!(1e18) / (inner).pow(self.time_stretch());
+            self.initial_vault_share_price() * (self.effective_share_reserves()? + share_amount);
+        let mut derivative = fixed!(1e18) / (inner).pow(self.time_stretch())?;
 
         // It's possible that k is slightly larger than the rhs in the inner
         // calculation. If this happens, we are close to the root, and we short
         // circuit.
-        let k = self.k_down();
+        let k = self.k_down()?;
         let rhs = self.vault_share_price().mul_div_down(
-            inner.pow(self.time_stretch()),
+            inner.pow(self.time_stretch())?,
             self.initial_vault_share_price(),
         );
         if k < rhs {
-            return None;
+            return Ok(None);
         }
         derivative *= (k - rhs).pow(
             self.time_stretch()
                 .div_up(fixed!(1e18) - self.time_stretch()),
-        );
+        )?;
 
         // Finish computing the derivative.
         derivative -=
-            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price()) - fixed!(1e18));
+            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price()?) - fixed!(1e18));
 
-        Some(derivative)
+        Ok(Some(derivative))
     }
 }
 
@@ -490,7 +493,6 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use eyre::Result;
     use fixed_point::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
@@ -533,9 +535,9 @@ mod tests {
                     calculate_effective_share_reserves(
                         state.info.share_reserves.into(),
                         state.info.share_adjustment,
-                    )
+                    )?
                     .into(),
-                    state.calculate_spot_price().into(),
+                    state.calculate_spot_price()?.into(),
                 )
                 .call()
                 .await
@@ -573,7 +575,7 @@ mod tests {
 
             // Generate a random checkpoint exposure.
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(I256::MAX));
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 let sign = rng.gen::<bool>();
                 if sign {
                     -I256::try_from(value).unwrap()
@@ -584,7 +586,7 @@ mod tests {
 
             // Check Solidity against Rust.
             let max_iterations = 8usize;
-            // Need to catch panics because of FixedPoint.
+            // We need to catch panics because of overflows.
             let actual = panic::catch_unwind(|| {
                 state.calculate_max_long(
                     U256::MAX,
@@ -647,37 +649,33 @@ mod tests {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1_result = std::panic::catch_unwind(|| {
+            // We need to catch panics here because FixedPoint panics on overflow or underflow.
+            let p1 = match panic::catch_unwind(|| {
                 state.calculate_open_long(amount - empirical_derivative_epsilon)
-            });
-            let p1;
-            let p2;
-            match p1_result {
+            }) {
                 Ok(p) => match p {
-                    Ok(p) => p1 = p,
-                    Err(_) => continue,
+                    Ok(p) => p,
+                    Err(_) => continue, // Err; the amount results in the pool being insolvent.
                 },
-                // If the amount results in the pool being insolvent, skip this iteration
-                Err(_) => continue,
-            }
+                Err(_) => continue, // panic; likely in FixedPoint
+            };
 
-            let p2_result = std::panic::catch_unwind(|| {
+            let p2 = match panic::catch_unwind(|| {
                 state.calculate_open_long(amount + empirical_derivative_epsilon)
-            });
-            match p2_result {
+            }) {
                 Ok(p) => match p {
-                    Ok(p) => p2 = p,
+                    Ok(p) => p,
                     Err(_) => continue,
                 },
-                // If the amount results in the pool being insolvent, skip this iteration
+                // If the amount results in the pool being insolvent, skip this iteration.
                 Err(_) => continue,
-            }
-            // Sanity check
+            };
+            // Sanity check.
             assert!(p2 > p1);
 
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let open_long_derivative = state.long_amount_derivative(amount);
-            open_long_derivative.map(|derivative| {
+            let maybe_open_long_derivative = state.long_amount_derivative(amount)?;
+            maybe_open_long_derivative.map(|derivative| {
                 let derivative_diff;
                 if derivative >= empirical_derivative {
                     derivative_diff = derivative - empirical_derivative;
@@ -739,7 +737,7 @@ mod tests {
                 .await?;
 
             // Bob opens a max long.
-            let max_spot_price = bob.get_state().await?.calculate_max_spot_price();
+            let max_spot_price = bob.get_state().await?.calculate_max_spot_price()?;
             let max_long = bob.calculate_max_long(None).await?;
             let spot_price_after_long = bob
                 .get_state()

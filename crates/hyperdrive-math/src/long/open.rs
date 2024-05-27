@@ -31,17 +31,17 @@ impl State {
         }
 
         let bond_amount =
-            self.calculate_bonds_out_given_shares_in_down(base_amount / self.vault_share_price());
+            self.calculate_bonds_out_given_shares_in_down(base_amount / self.vault_share_price())?;
 
         // Throw an error if opening the long would result in negative interest.
         let ending_spot_price =
             self.calculate_spot_price_after_long(base_amount, bond_amount.into())?;
-        let max_spot_price = self.calculate_max_spot_price();
+        let max_spot_price = self.calculate_max_spot_price()?;
         if ending_spot_price > max_spot_price {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
 
-        Ok(bond_amount - self.open_long_curve_fee(base_amount))
+        Ok(bond_amount - self.open_long_curve_fee(base_amount)?)
     }
 
     /// Calculate an updated pool state after opening a long.
@@ -88,9 +88,9 @@ impl State {
         let mut state: State = self.clone();
         state.info.bond_reserves -= bond_amount.into();
         state.info.share_reserves += (base_amount / state.vault_share_price()
-            - self.open_long_governance_fee(base_amount, None) / state.vault_share_price())
+            - self.open_long_governance_fee(base_amount, None)? / state.vault_share_price())
         .into();
-        Ok(state.calculate_spot_price())
+        state.calculate_spot_price()
     }
 
     /// Calculate the spot rate after a long has been opened.
@@ -233,7 +233,7 @@ mod tests {
             // Verify that the predicted spot price is equal to the ending spot
             // price. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the long.
-            let actual_spot_price = bob.get_state().await?.calculate_spot_price();
+            let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
             let delta = if actual_spot_price > expected_spot_price {
                 actual_spot_price - expected_spot_price
             } else {
@@ -295,7 +295,7 @@ mod tests {
             // Verify that the predicted spot rate is equal to the ending spot
             // rate. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the long.
-            let actual_spot_rate = bob.get_state().await?.calculate_spot_rate();
+            let actual_spot_rate = bob.get_state().await?.calculate_spot_rate()?;
             let delta = if actual_spot_rate > expected_spot_rate {
                 actual_spot_rate - expected_spot_rate
             } else {

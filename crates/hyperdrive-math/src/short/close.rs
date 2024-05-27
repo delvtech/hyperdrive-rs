@@ -1,4 +1,5 @@
 use ethers::types::U256;
+use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
 use crate::{State, YieldSpace};
@@ -25,7 +26,7 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -34,10 +35,9 @@ impl State {
             // payment.
             //
             let curve_bonds_in = bond_amount.mul_up(normalized_time_remaining);
-            self.calculate_shares_in_given_bonds_out_up_safe(curve_bonds_in)
-                .unwrap()
+            Ok(self.calculate_shares_in_given_bonds_out_up_safe(curve_bonds_in)?)
         } else {
-            fixed!(0)
+            Ok(fixed!(0))
         }
     }
 
@@ -46,14 +46,14 @@ impl State {
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         // Calculate the flat part of the trade
         let flat = self.calculate_close_short_flat(bond_amount, maturity_time, current_time);
         // Calculate the curve part of the trade
-        let curve = self.calculate_close_short_curve(bond_amount, maturity_time, current_time);
+        let curve = self.calculate_close_short_curve(bond_amount, maturity_time, current_time)?;
 
-        flat + curve
+        Ok(flat + curve)
     }
 
     // Calculates the proceeds in shares of closing a short position.
@@ -93,11 +93,11 @@ impl State {
     /// $$
     /// p_max = 1 - \phi_c * (1 - p_0)
     /// $$
-    fn calculate_close_short_max_spot_price(&self) -> FixedPoint {
-        fixed!(1e18)
+    fn calculate_close_short_max_spot_price(&self) -> Result<FixedPoint> {
+        Ok(fixed!(1e18)
             - self
                 .curve_fee()
-                .mul_up(fixed!(1e18) - self.calculate_spot_price())
+                .mul_up(fixed!(1e18) - self.calculate_spot_price()?))
     }
 
     /// Calculates the amount of shares the trader will receive after fees for closing a short
@@ -108,52 +108,49 @@ impl State {
         close_vault_share_price: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> Result<FixedPoint> {
         let bond_amount = bond_amount.into();
         let open_vault_share_price = open_vault_share_price.into();
         let close_vault_share_price = close_vault_share_price.into();
 
         if bond_amount < self.config.minimum_transaction_amount.into() {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("MinimumTransactionAmount: Input amount too low");
+            return Err(eyre!("MinimumTransactionAmount: Input amount too low"));
         }
 
         // Ensure that the trader didn't purchase bonds at a negative interest
         // rate after accounting for fees.
         let share_curve_delta =
-            self.calculate_close_short_curve(bond_amount, maturity_time, current_time);
+            self.calculate_close_short_curve(bond_amount, maturity_time, current_time)?;
         let bond_reserves_delta = bond_amount
             .mul_up(self.calculate_normalized_time_remaining(maturity_time, current_time));
         let short_curve_spot_price = {
             let mut state: State = self.clone();
             state.info.bond_reserves -= bond_reserves_delta.into();
             state.info.share_reserves += share_curve_delta.into();
-            state.calculate_spot_price()
+            state.calculate_spot_price()?
         };
-        let max_spot_price = self.calculate_close_short_max_spot_price();
+        let max_spot_price = self.calculate_close_short_max_spot_price()?;
         if short_curve_spot_price > max_spot_price {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("InsufficientLiquidity: Negative Interest");
+            return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
 
         // Ensure ending spot price is less than one
-        let curve_fee = self.close_short_curve_fee(bond_amount, maturity_time, current_time);
+        let curve_fee = self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
         let share_curve_delta_with_fees = share_curve_delta + curve_fee
             - self.close_short_governance_fee(
                 bond_amount,
                 maturity_time,
                 current_time,
                 Some(curve_fee),
-            );
+            )?;
         let share_curve_delta_with_fees_spot_price = {
             let mut state: State = self.clone();
             state.info.bond_reserves -= bond_reserves_delta.into();
             state.info.share_reserves += share_curve_delta_with_fees.into();
-            state.calculate_spot_price()
+            state.calculate_spot_price()?
         };
         if share_curve_delta_with_fees_spot_price > fixed!(1e18) {
-            // TODO would be nice to return a `Result` here instead of a panic.
-            panic!("InsufficientLiquidity: Negative Interest");
+            return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
 
         // Now calculate short proceeds
@@ -161,21 +158,21 @@ impl State {
         // rework to avoid recalculating the curve and bond reserves
         // https://github.com/delvtech/hyperdrive/issues/943
         let share_reserves_delta =
-            self.calculate_close_short_flat_plus_curve(bond_amount, maturity_time, current_time);
+            self.calculate_close_short_flat_plus_curve(bond_amount, maturity_time, current_time)?;
         // Calculate flat + curve and subtract the fees from the trade.
         let share_reserves_delta_with_fees = share_reserves_delta
-            + self.close_short_curve_fee(bond_amount, maturity_time, current_time)
+            + self.close_short_curve_fee(bond_amount, maturity_time, current_time)?
             + self.close_short_flat_fee(bond_amount, maturity_time, current_time);
 
         // Calculate the share proceeds owed to the short.
-        self.calculate_short_proceeds(
+        Ok(self.calculate_short_proceeds(
             bond_amount,
             share_reserves_delta_with_fees,
             open_vault_share_price,
             close_vault_share_price,
             self.vault_share_price(),
             self.flat_fee(),
-        )
+        ))
     }
 }
 
@@ -183,7 +180,6 @@ impl State {
 mod tests {
     use std::panic;
 
-    use eyre::Result;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -255,7 +251,7 @@ mod tests {
             match chain
                 .mock_hyperdrive_math()
                 .calculate_close_short(
-                    state.effective_share_reserves().into(),
+                    state.effective_share_reserves()?.into(),
                     state.bond_reserves().into(),
                     in_.into(),
                     normalized_time_remaining.into(),
@@ -266,8 +262,8 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected.2)),
-                Err(_) => assert!(actual.is_err()),
+                Ok(expected) => assert_eq!(actual.unwrap().unwrap(), FixedPoint::from(expected.2)),
+                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
@@ -279,15 +275,13 @@ mod tests {
     async fn test_close_short_min_txn_amount() -> Result<()> {
         let mut rng = thread_rng();
         let state = rng.gen::<State>();
-        let result = std::panic::catch_unwind(|| {
-            state.calculate_close_short(
-                (state.config.minimum_transaction_amount - 10).into(),
-                state.calculate_spot_price(),
-                state.vault_share_price(),
-                0.into(),
-                0.into(),
-            )
-        });
+        let result = state.calculate_close_short(
+            (state.config.minimum_transaction_amount - 10).into(),
+            state.calculate_spot_price()?,
+            state.vault_share_price(),
+            0.into(),
+            0.into(),
+        );
         assert!(result.is_err());
         Ok(())
     }

@@ -51,7 +51,7 @@ impl State {
         };
 
         // Check input args.
-        let current_rate = self.calculate_spot_rate();
+        let current_rate = self.calculate_spot_rate()?;
         if target_rate > current_rate {
             return Err(eyre!(
                 "target_rate = {} argument must be less than the current_rate = {} for a targeted long.",
@@ -61,9 +61,9 @@ impl State {
 
         // Estimate the long that achieves a target rate.
         let (target_share_reserves, target_bond_reserves) =
-            self.reserves_given_rate_ignoring_exposure(target_rate);
+            self.reserves_given_rate_ignoring_exposure(target_rate)?;
         let (mut target_base_delta, target_bond_delta) =
-            self.long_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves);
+            self.long_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves)?;
 
         // Determine what rate was achieved.
         let resulting_rate =
@@ -79,7 +79,7 @@ impl State {
 
             // If we were still close enough and solvent, return.
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)?
                 .is_some()
                 && rate_error < allowable_error
             {
@@ -95,7 +95,7 @@ impl State {
             // If solvent & within the allowable error, stop here.
             let rate_error = resulting_rate - target_rate;
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)?
                 .is_some()
                 && rate_error < allowable_error
             {
@@ -109,9 +109,8 @@ impl State {
 
         // Iteratively find a solution
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
-            let possible_target_bond_delta = self
-                .calculate_open_long(possible_target_base_delta)
-                .unwrap();
+            let possible_target_bond_delta =
+                self.calculate_open_long(possible_target_base_delta)?;
             let resulting_rate = self.calculate_spot_rate_after_long(
                 possible_target_base_delta,
                 Some(possible_target_bond_delta),
@@ -135,7 +134,7 @@ impl State {
                     possible_target_base_delta,
                     possible_target_bond_delta,
                     checkpoint_exposure,
-                )
+                )?
                 .is_some()
                 && loss < allowable_error
             {
@@ -162,19 +161,16 @@ impl State {
         if self
             .solvency_after_long(
                 possible_target_base_delta,
-                self.calculate_open_long(possible_target_base_delta)
-                    .unwrap(),
+                self.calculate_open_long(possible_target_base_delta)?,
                 checkpoint_exposure,
-            )
+            )?
             .is_none()
         {
             return Err(eyre!("Guess in `calculate_targeted_long` is insolvent."));
         }
 
         // Final accuracy check.
-        let possible_target_bond_delta = self
-            .calculate_open_long(possible_target_base_delta)
-            .unwrap();
+        let possible_target_bond_delta = self.calculate_open_long(possible_target_base_delta)?;
         let resulting_rate = self.calculate_spot_rate_after_long(
             possible_target_base_delta,
             Some(possible_target_bond_delta),
@@ -282,12 +278,12 @@ impl State {
         // g'(x) = \phi_g \phi_c (1 - p_0)
         let gov_fee_derivative = self.governance_lp_fee()
             * self.curve_fee()
-            * (fixed!(1e18) - self.calculate_spot_price());
+            * (fixed!(1e18) - self.calculate_spot_price()?);
 
         // a(x) = mu * (z_{e,0} + 1/c (x - g(x))
         let inner_numerator = self.mu()
-            * (self.ze()
-                + (base_amount - self.open_long_governance_fee(base_amount, None))
+            * (self.ze()?
+                + (base_amount - self.open_long_governance_fee(base_amount, None)?)
                     .div_down(self.vault_share_price()));
 
         // a'(x) = (mu / c) (1 - g'(x))
@@ -301,7 +297,7 @@ impl State {
 
         // b'(x) = -y'(x)
         // -b'(x) = y'(x)
-        let long_amount_derivative = match self.long_amount_derivative(base_amount) {
+        let long_amount_derivative = match self.long_amount_derivative(base_amount)? {
             Some(derivative) => derivative,
             None => return Err(eyre!("long_amount_derivative failure.")),
         };
@@ -319,7 +315,7 @@ impl State {
         // v(x) is flipped to (denominator / numerator) to avoid a negative exponent
         Ok(inner_derivative
             * self.time_stretch()
-            * (inner_denominator / inner_numerator).pow(fixed!(1e18) - self.time_stretch()))
+            * (inner_denominator / inner_numerator).pow(fixed!(1e18) - self.time_stretch())?)
     }
 
     /// Calculate the base & bond deltas for a long trade that moves the current
@@ -339,12 +335,12 @@ impl State {
         &self,
         ending_share_reserves: FixedPoint,
         ending_bond_reserves: FixedPoint,
-    ) -> (FixedPoint, FixedPoint) {
+    ) -> Result<(FixedPoint, FixedPoint)> {
         let base_delta =
-            (ending_share_reserves - self.effective_share_reserves()) * self.vault_share_price();
+            (ending_share_reserves - self.effective_share_reserves()?) * self.vault_share_price();
         let bond_delta =
-            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fee(base_delta);
-        (base_delta, bond_delta)
+            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fee(base_delta)?;
+        Ok((base_delta, bond_delta))
     }
 }
 
@@ -435,7 +431,7 @@ mod tests {
 
             // Get a targeted long amount.
             // TODO: explore tighter bounds on this.
-            let target_rate = bob.get_state().await?.calculate_spot_rate()
+            let target_rate = bob.get_state().await?.calculate_spot_rate()?
                 / rng.gen_range(fixed!(1.0001e18)..=fixed!(10e18));
             // let target_rate = initial_fixed_rate / fixed!(2e18);
             let targeted_long_result = bob
@@ -448,7 +444,7 @@ mod tests {
 
             // Bob opens a targeted long.
             let current_state = bob.get_state().await?;
-            let max_spot_price_before_long = current_state.calculate_max_spot_price();
+            let max_spot_price_before_long = current_state.calculate_max_spot_price()?;
             match targeted_long_result {
                 // If the code ran without error, open the long
                 Ok(targeted_long) => {
@@ -495,7 +491,7 @@ mod tests {
 
             // Check that our resulting price is under the max
             let current_state = bob.get_state().await?;
-            let spot_price_after_long = current_state.calculate_spot_price();
+            let spot_price_after_long = current_state.calculate_spot_price()?;
             assert!(
                 max_spot_price_before_long > spot_price_after_long,
                 "Resulting price is greater than the max."
@@ -505,7 +501,7 @@ mod tests {
             let is_solvent = { current_state.calculate_solvency() > allowable_solvency_error };
             assert!(is_solvent, "Resulting pool state is not solvent.");
 
-            let new_rate = current_state.calculate_spot_rate();
+            let new_rate = current_state.calculate_spot_rate()?;
             // If the budget was NOT consumed, then we assume the target was hit.
             if bob.base() > allowable_budget_error {
                 // Actual price might result in long overshooting the target.

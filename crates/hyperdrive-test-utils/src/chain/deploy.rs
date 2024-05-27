@@ -55,7 +55,10 @@ where
 }
 
 // This is defined in hyperdrive-math, but re-defined here to avoid cyclic dependencies.
-pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+pub fn calculate_time_stretch(
+    rate: FixedPoint,
+    position_duration: FixedPoint,
+) -> Result<FixedPoint> {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
@@ -80,11 +83,11 @@ pub fn calculate_time_stretch(rate: FixedPoint, position_duration: FixedPoint) -
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    (FixedPoint::from(FixedPoint::ln(
-        I256::try_from(fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year))
-            .unwrap(),
-    )) / FixedPoint::from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate).unwrap())))
-        * time_stretch
+    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
+        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
+    )?)?)?
+        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
+        * time_stretch)
 }
 
 /// A configuration for a test chain that specifies the factory parameters,
@@ -333,7 +336,7 @@ impl TestnetDeploy for Chain {
             time_stretch: calculate_time_stretch(
                 fixed!(0.05e18),
                 U256::from(60 * 60 * 24 * 365).into(),
-            )
+            )?
             .into(), // time stretch for 5% rate
             fee_collector: client.address(),
             sweep_collector: client.address(),
@@ -931,7 +934,7 @@ impl TestnetDeploy for Chain {
 #[cfg(test)]
 mod tests {
     use hyperdrive_wrappers::wrappers::ihyperdrive::IHyperdrive;
-    use test_utils::{chain::Chain, constants::ALICE};
+    use test_utils::constants::ALICE;
 
     use super::*;
     use crate::chain::TestChain;
@@ -975,7 +978,7 @@ mod tests {
                 test_chain_config
                     .erc4626_hyperdrive_position_duration
                     .into(),
-            )
+            )?
             .into()
         );
         assert_eq!(config.governance, test_chain_config.admin);
@@ -1012,7 +1015,7 @@ mod tests {
             calculate_time_stretch(
                 test_chain_config.steth_hyperdrive_time_stretch_apr.into(),
                 test_chain_config.steth_hyperdrive_position_duration.into(),
-            )
+            )?
             .into()
         );
         assert_eq!(config.governance, test_chain_config.admin);
@@ -1088,7 +1091,7 @@ mod tests {
                 test_chain_config
                     .erc4626_hyperdrive_position_duration
                     .into(),
-            )
+            )?
             .into()
         );
         assert_eq!(config.governance, test_chain_config.admin);
@@ -1125,7 +1128,7 @@ mod tests {
             calculate_time_stretch(
                 test_chain_config.steth_hyperdrive_time_stretch_apr.into(),
                 test_chain_config.steth_hyperdrive_position_duration.into(),
-            )
+            )?
             .into()
         );
         assert_eq!(config.governance, test_chain_config.admin);
