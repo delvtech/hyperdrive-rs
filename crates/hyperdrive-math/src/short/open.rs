@@ -44,8 +44,12 @@ impl State {
         bond_amount: FixedPoint,
         mut open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
-        if bond_amount < self.config.minimum_transaction_amount.into() {
-            return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
+        let min_transaction_amount = FixedPoint::from(self.config.minimum_transaction_amount);
+        if bond_amount < min_transaction_amount {
+            return Err(eyre!(format!(
+                "MinimumTransactionAmount: bond_amount = {} must be >= {}",
+                bond_amount, min_transaction_amount
+            )));
         }
 
         // If the open share price hasn't been set, we use the current share
@@ -73,12 +77,16 @@ impl State {
         // don't benefit from negative interest that accrued during the current
         // checkpoint.
         let curve_fee = self.open_short_curve_fee(bond_amount)?;
-        // Use the position duraiton as the current time and maturity time to simulate closing at maturity.
-        let flat_fee = self.close_short_flat_fee(
-            bond_amount,
-            self.position_duration().into(),
-            self.position_duration().into(),
-        );
+
+        if share_reserves_delta < curve_fee {
+            return Err(eyre!(format!(
+                "The transaction curve fee = {} from curve fee coefficient = {}
+                is too high, it must be less than share reserves delta = {}",
+                curve_fee,
+                self.curve_fee(),
+                share_reserves_delta
+            )));
+        }
 
         // Now we can calculate the proceeds in a way that adjusts for the backdated vault price.
         // $$
@@ -120,16 +128,11 @@ impl State {
         close_vault_share_price: FixedPoint,
         vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
-        let flat_fee = self.close_short_flat_fee(
-            bond_amount,
-            self.position_duration().into(),
-            self.position_duration().into(),
-        );
-
         // Short circuit the derivative if the forward function returns 0.
         if self.calculate_short_proceeds_up(
             bond_amount,
-            self.calculate_short_principal(bond_amount)? - self.open_short_curve_fee(bond_amount),
+            self.calculate_short_principal(bond_amount)?
+                - self.open_short_curve_fee(bond_amount)?,
             open_vault_share_price,
             close_vault_share_price,
         ) == fixed!(0)
@@ -137,11 +140,8 @@ impl State {
             return Ok(fixed!(0));
         }
 
-        // Flat fee derivative = (1 - t) * phi_f / c
-        // Since t=0 when closing at maturity we can use phi_f / c
-        let flat_fee_derivative = self.flat_fee() / vault_share_price;
         let curve_fee_derivative = self.curve_fee() * (fixed!(1e18) - spot_price);
-        let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount);
+        let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount)?;
         let short_proceeds_derivative =
             self.calculate_short_proceeds_up_derivative(bond_amount, open_vault_share_price);
 
@@ -971,10 +971,18 @@ mod tests {
                 .await?;
             let slippage_tolerance = fixed!(0.001e18);
             let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
-            let min_bond_amount = FixedPoint::from(state.config.minimum_transaction_amount)
-                * FixedPoint::from(state.info.vault_share_price);
-            let short_amount = rng.gen_range(min_bond_amount..=max_short);
-
+            // Minimum transaction amount is without units; it's a global min across all transaction types.
+            let min_short = FixedPoint::from(state.config.minimum_transaction_amount);
+            let short_amount;
+            if max_short < min_short {
+                continue;
+            } else if max_short == min_short {
+                short_amount = min_short;
+            } else {
+                short_amount = rng.gen_range(
+                    FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
+                );
+            }
             // Compare the open short call output against calculate_open_short.
             let actual_base_amount =
                 state.calculate_open_short(short_amount, open_vault_share_price.into());

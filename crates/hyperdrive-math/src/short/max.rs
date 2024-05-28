@@ -81,6 +81,11 @@ impl State {
         // short amount.
         let mut max_bond_amount =
             self.absolute_max_short(spot_price, checkpoint_exposure, maybe_max_iterations)?;
+        // The max bond amount might be below the pool's minimum.
+        // If so, no short can be opened.
+        if max_bond_amount < self.minimum_transaction_amount().into() {
+            return Ok(fixed!(0));
+        }
         let absolute_max_bond_amount = max_bond_amount;
         let absolute_max_deposit =
             match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
@@ -164,6 +169,12 @@ impl State {
             // TODO this always iterates for max_iterations unless
             // it makes the pool insolvent. Likely want to check an
             // epsilon to early break
+        }
+
+        // The max bond amount might be below the pool's minimum.
+        // If so, no short can be opened.
+        if best_valid_max_bond_amount < self.minimum_transaction_amount().into() {
+            return Ok(fixed!(0));
         }
 
         // Verify that the max short satisfies the budget.
