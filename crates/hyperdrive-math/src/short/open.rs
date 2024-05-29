@@ -61,8 +61,8 @@ impl State {
 
         let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
         // If the base proceeds of selling the bonds is greater than the bond
-        // amount, then the trade occurred in the negative interest domain. We
-        // revert in these pathological cases.
+        // amount, then the trade occurred in the negative interest domain.
+        // We revert in these pathological cases.
         if share_reserves_delta.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
@@ -80,8 +80,8 @@ impl State {
 
         if share_reserves_delta < curve_fee {
             return Err(eyre!(format!(
-                "The transaction curve fee = {} from curve fee coefficient = {}
-                is too high, it must be less than share reserves delta = {}",
+                "The transaction curve fee = {}, computed with coefficient = {},
+                is too high. It must be less than share reserves delta = {}",
                 curve_fee,
                 self.curve_fee(),
                 share_reserves_delta
@@ -359,6 +359,9 @@ mod tests {
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     /// Executes random trades throughout a Hyperdrive term.
+    ///
+    /// This fn initializes a Hyperdrive pool and does random trades
+    /// to force the pool into a random state.
     async fn preamble(
         rng: &mut ChaCha8Rng,
         alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
@@ -383,17 +386,15 @@ mod tests {
         let mut time_remaining = alice.get_config().position_duration;
         while time_remaining > uint256!(0) {
             // Bob opens a long.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let long_amount =
-                rng.gen_range(fixed!(1e12)..=bob.calculate_max_long(None).await? * discount);
+            let min_txn =
+                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
+            let max_long = fixed!(1e26); // 100M max
+            let long_amount = rng.gen_range(min_txn..=max_long);
             bob.open_long(long_amount, None, None).await?;
 
             // Celine opens a short.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let min_short =
-                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
-            let max_short = celine.calculate_max_short(None).await? * discount;
-            let short_amount = rng.gen_range(min_short..=max_short);
+            let max_short = fixed!(1e26); // 100M max
+            let short_amount = rng.gen_range(min_txn..=max_short);
             celine.open_short(short_amount, None, None).await?;
 
             // Advance the time and mint all of the intermediate checkpoints.
@@ -956,76 +957,80 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // Run the preamble.
+            // Run the preamble, but only test on valid states.
             let fixed_rate = fixed!(0.05e18);
-            preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
+            if let Ok(_) = preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await {
+                // Get state and trade details.
+                let state = alice.get_state().await?;
 
-            // Get state and trade details.
-            let state = alice.get_state().await?;
-            let Checkpoint {
-                vault_share_price: open_vault_share_price,
-                weighted_spot_price: _,
-                last_weighted_spot_price_update_time: _,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
-            let slippage_tolerance = fixed!(0.001e18);
-            let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
-            // Minimum transaction amount is without units; it's a global min across all transaction types.
-            let min_short = FixedPoint::from(state.config.minimum_transaction_amount);
-            let short_amount;
-            if max_short < min_short {
-                continue;
-            } else if max_short == min_short {
-                short_amount = min_short;
-            } else {
-                short_amount = rng.gen_range(
-                    FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
-                );
-            }
-            // Compare the open short call output against calculate_open_short.
-            let actual_base_amount =
-                state.calculate_open_short(short_amount, open_vault_share_price.into());
+                // Get the open vault share price.
+                let Checkpoint {
+                    vault_share_price: open_vault_share_price,
+                    weighted_spot_price: _,
+                    last_weighted_spot_price_update_time: _,
+                } = alice
+                    .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                    .await?;
 
-            match bob
-                .hyperdrive()
-                .open_short(
-                    short_amount.into(),
-                    FixedPoint::from(U256::MAX).into(),
-                    fixed!(0).into(),
-                    Options {
-                        destination: bob.address(),
-                        as_base: true,
-                        extra_data: [].into(),
-                    },
-                )
-                .call()
-                .await
-            {
-                Ok((_, expected_base_amount)) => {
-                    let actual = actual_base_amount.unwrap();
-                    let error = if actual >= expected_base_amount.into() {
-                        actual - FixedPoint::from(expected_base_amount)
-                    } else {
-                        FixedPoint::from(expected_base_amount) - actual
-                    };
-                    assert!(
-                        error <= tolerance,
-                        "error {} exceeds tolerance of {}",
-                        error,
-                        tolerance
+                // We could use calculate_max_short here, but we don't want to conflate what we are testing.
+                // So instead we will use a big number and only run the test if it is valid.
+                let max_short = fixed!(1e26); // 100M max bonds
+
+                // Minimum transaction amount is without units; it's a global min across all transaction types.
+                let min_txn = FixedPoint::from(state.config.minimum_transaction_amount);
+                let bond_amount;
+                if max_short < min_txn {
+                    continue;
+                } else if max_short == min_txn {
+                    bond_amount = min_txn;
+                } else {
+                    bond_amount = rng.gen_range(
+                        FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
                     );
                 }
-                Err(_) => assert!(actual_base_amount.is_err()),
+                // Compare the open short call output against calculate_open_short.
+                let actual_base_amount =
+                    state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+                match bob
+                    .hyperdrive()
+                    .open_short(
+                        bond_amount.into(),
+                        FixedPoint::from(U256::MAX).into(),
+                        fixed!(0).into(),
+                        Options {
+                            destination: bob.address(),
+                            as_base: true,
+                            extra_data: [].into(),
+                        },
+                    )
+                    .call()
+                    .await
+                {
+                    Ok((_, expected_base_amount)) => {
+                        let actual = actual_base_amount.unwrap();
+                        let error = if actual >= expected_base_amount.into() {
+                            actual - FixedPoint::from(expected_base_amount)
+                        } else {
+                            FixedPoint::from(expected_base_amount) - actual
+                        };
+                        assert!(
+                            error <= tolerance,
+                            "error {} exceeds tolerance of {}",
+                            error,
+                            tolerance
+                        );
+                    }
+                    Err(_) => assert!(actual_base_amount.is_err()),
+                }
+
+                // Revert to the snapshot and reset the agent's wallets.
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
             }
-
-            // Revert to the snapshot and reset the agent's wallets.
-            chain.revert(id).await?;
-            alice.reset(Default::default()).await?;
-            bob.reset(Default::default()).await?;
-            celine.reset(Default::default()).await?;
         }
-
         Ok(())
     }
 }
