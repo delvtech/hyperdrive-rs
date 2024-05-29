@@ -40,4 +40,4 @@ jobs:
           components: rustfmt, clippy
 
       - name: test
-        run: make test
+        run: cargo test --release --
