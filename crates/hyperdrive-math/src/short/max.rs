@@ -444,7 +444,12 @@ impl State {
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
-            (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+            // Check for underflow.
+            if self.long_exposure() < checkpoint_exposure {
+                return Ok(None);
+            } else {
+                (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+            }
         };
         if share_reserves >= exposure + self.minimum_share_reserves() {
             Ok(Some(
@@ -523,9 +528,9 @@ mod tests {
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
-                    -I256::try_from(value).unwrap()
+                    -I256::try_from(value)?
                 } else {
-                    I256::try_from(value).unwrap()
+                    I256::try_from(value)?
                 }
             };
             let max_iterations = 7;
@@ -570,8 +575,8 @@ mod tests {
                     // exact matchces. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
                     assert_eq!(
-                        U256::from(actual.unwrap().unwrap()) / uint256!(1e11),
-                        expected / uint256!(1e11)
+                        U256::from(actual.unwrap().unwrap()) / uint256!(1e12),
+                        expected / uint256!(1e12)
                     );
                 }
                 Err(_) => {
