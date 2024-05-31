@@ -1,17 +1,19 @@
 use std::{
     collections::HashMap,
     env,
-    fs::{create_dir_all, read_to_string, OpenOptions},
+    fs::{self, create_dir_all, read_to_string, OpenOptions},
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
 };
 
 use dotenv::dotenv;
 use ethers::prelude::Abigen;
 use eyre::Result;
+use filetime::FileTime;
 use heck::ToSnakeCase;
 use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
 
 const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
@@ -67,35 +69,73 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    // Re-run this script whenever the build script itself, the version file, or a contract changes.
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=hyperdrive.version");
-    println!("cargo:rerun-if-changed=hyperdrive/contracts/");
-
-    // load dotenv
+    // Load dotenv file in the environment.
     dotenv().ok();
 
+    // Get the root directory of the project.
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+
+    // Load the hyperdrive version to use from the hyperdrive.version file.
+    let version_file = root.join("hyperdrive.version");
+    let git_ref = read_to_string(version_file)?.trim().to_string();
+
+    // See if we are doing local development to skip re-loading the hyperdrive repo.
     let local_development = match env::var("LOCAL_DEVELOPMENT") {
         Ok(local_development) => local_development == "true",
         _ => false,
     };
 
-    // Get the root directory of the project
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-
-    // Load the hyperdrive version to use from the hyperdrive.version file
-    let version_file = root.join("hyperdrive.version");
-    let git_ref = read_to_string(version_file)?.trim().to_string();
-
-    // Clone the hyperdrive repository if it doesn't exist
+    // Clone the hyperdrive repository if it doesn't exist.
     let hyperdrive_dir = root.join("hyperdrive");
-
     if !local_development {
         if hyperdrive_dir.exists() {
             checkout_branch(&git_ref, &hyperdrive_dir)?;
         } else {
             clone_repo(HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
         }
+    }
+
+    // Path to the directory containing Solidity files.
+    let solidity_dir = hyperdrive_dir.join("contracts");
+
+    // Find all Solidity files.
+    let solidity_files: Vec<PathBuf> = WalkDir::new(&solidity_dir)
+        .into_iter()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            if entry.path().extension()? == "sol" {
+                Some(entry.path().to_path_buf())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Get the latest modification time of Solidity files.
+    let solidity_latest_mod_time = solidity_files
+        .iter()
+        .map(|path| FileTime::from_last_modification_time(&fs::metadata(path).unwrap()))
+        .max()
+        .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
+
+    // Path to the directory where generated Rust files are placed.
+    let generated_dir = root.join("src/wrappers");
+
+    // Get the latest modification time of the generated Rust files.
+    let output_latest_mod_time = fs::read_dir(&generated_dir)?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| FileTime::from_last_modification_time(&fs::metadata(entry.path()).unwrap()))
+        .max();
+
+    // Check if we need to run the build process.
+    let need_to_build = match output_latest_mod_time {
+        Some(output_mod_time) => output_mod_time < solidity_latest_mod_time,
+        None => true,
+    };
+
+    if !need_to_build {
+        println!("No changes detected in Solidity files, skipping build process.");
+        return Ok(());
     }
 
     // Compile the contracts.
