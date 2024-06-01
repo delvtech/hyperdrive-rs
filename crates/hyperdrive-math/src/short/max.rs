@@ -537,17 +537,14 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let fixed_rate = state.calculate_spot_rate();
+            let fixed_rate = state.calculate_spot_rate().expect("Failed to get fixed rate");
             if lowest_rate.is_none() || fixed_rate < lowest_rate.unwrap() {
                 lowest_rate = Some(fixed_rate);
             }
             if highest_rate.is_none() || fixed_rate > highest_rate.unwrap() {
                 highest_rate = Some(fixed_rate);
             }
-            println!(
-                "Fixed rate: {}",
-                fixed_rate.expect("Failed to get fixed rate")
-            );
+            println!("Fixed rate: {}", fixed_rate);
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
