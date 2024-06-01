@@ -1,12 +1,6 @@
 use ethers::types::I256;
-<<<<<<< HEAD
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
-=======
-use fixed_point::FixedPoint;
-use eyre::{eyre, Result};
-use fixed_point_macros::fixed;
->>>>>>> 4ef681e (actually make test fail)
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -300,12 +294,7 @@ impl State {
             optimal_bond_reserves - self.bond_reserves()
         };
         if self
-<<<<<<< HEAD
             .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)?
-=======
-            .solvency_after_short(absolute_max_bond_amount, spot_price, checkpoint_exposure)
-            .unwrap()
->>>>>>> 4ef681e (actually make test fail)
             .is_some()
         {
             return Ok(absolute_max_bond_amount);
@@ -328,21 +317,11 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-<<<<<<< HEAD
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
         let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
             Some(solvency) => solvency,
             None => return Err(eyre!("Initial guess in `absolute_max_short` is insolvent.")),
         };
-=======
-        let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure).unwrap();
-        let mut maybe_solvency =
-            self.solvency_after_short(max_bond_amount, spot_price, checkpoint_exposure).unwrap();
-        if maybe_solvency.is_none() {
-            panic!("Initial guess in `absolute_max_short` is insolvent.");
-        }
-        let mut solvency = maybe_solvency.unwrap();
->>>>>>> 4ef681e (actually make test fail)
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // TODO: It may be better to gracefully handle crossing over the
             // root by extending the fixed point math library to handle negative
@@ -364,7 +343,6 @@ impl State {
 
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
-<<<<<<< HEAD
             solvency =
                 match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure)? {
                     Some(solvency) => {
@@ -373,19 +351,6 @@ impl State {
                     }
                     None => break,
                 };
-=======
-            maybe_solvency = self.solvency_after_short(
-                possible_max_bond_amount,
-                spot_price,
-                checkpoint_exposure,
-            ).unwrap();
-            if let Some(s) = maybe_solvency {
-                solvency = s;
-                max_bond_amount = possible_max_bond_amount;
-            } else {
-                break;
-            }
->>>>>>> 4ef681e (actually make test fail)
         }
 
         Ok(max_bond_amount)
@@ -484,7 +449,6 @@ impl State {
                     - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?)
                     / self.vault_share_price());
         let exposure = {
-<<<<<<< HEAD
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
             // Check for underflow.
@@ -498,16 +462,6 @@ impl State {
             Ok(Some(
                 share_reserves - exposure - self.minimum_share_reserves(),
             ))
-=======
-            let checkpoint_exposure: FixedPoint = checkpoint_exposure.max(I256::zero()).into();
-            if self.long_exposure() <= checkpoint_exposure {
-                return Err(eyre!("InsufficientLongExposure",));
-            }
-            (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
-        };
-        if share_reserves >= exposure + self.minimum_share_reserves() {
-            Ok(Some(share_reserves - exposure - self.minimum_share_reserves()))
->>>>>>> 4ef681e (actually make test fail)
         } else {
             Ok(None)
         }
@@ -635,35 +589,26 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
-<<<<<<< HEAD
                     // TODO: remove this tolerance when calculate_open_short
                     // rust implementation matches solidity.
                     // Currently, only about 1 - 4 / 1000 tests aren't
-                    // exact matchces. Related issue:
+                    // exact matches. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
+                    passed_tests += 1;
                     assert_eq!(
                         U256::from(actual.unwrap().unwrap()) / uint256!(1e12),
                         expected / uint256!(1e12)
                     );
                 }
-                Err(_) => {
-                    assert!(actual.is_err() || actual.unwrap().is_err());
-                }
-            };
-=======
-                    passed_tests += 1;
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected));
-                }
                 Err(expected) => {
                     failed_tests += 1;
                     println!("Test failed: actual: {:?} expected: {:?}", actual, expected);
-                    assert!(actual.is_err());
+                    assert!(actual.is_err() || actual.unwrap().is_err());
                 }
-            }  // end for loop
+            };
             let total_tests = failed_tests + passed_tests;
             let failure_rate = failed_tests as f64 / total_tests as f64;
             println!("Total tests: {} Passed: {} Failed: {}, Failure rate: {}", total_tests, passed_tests, failed_tests, failure_rate);
->>>>>>> 4ef681e (actually make test fail)
         }
         Ok(())
     }
