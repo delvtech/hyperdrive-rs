@@ -544,7 +544,10 @@ mod tests {
             if highest_rate.is_none() || fixed_rate > highest_rate.unwrap() {
                 highest_rate = Some(fixed_rate);
             }
-            println!("Fixed rate: {}", fixed_rate.expect("Failed to get fixed rate"));
+            println!(
+                "Fixed rate: {}",
+                fixed_rate.expect("Failed to get fixed rate")
+            );
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
@@ -608,7 +611,10 @@ mod tests {
             };
             let total_tests = failed_tests + passed_tests;
             let failure_rate = failed_tests as f64 / total_tests as f64;
-            println!("Total tests: {} Passed: {} Failed: {}, Failure rate: {}", total_tests, passed_tests, failed_tests, failure_rate);
+            println!(
+                "Total tests: {} Passed: {} Failed: {}, Failure rate: {}",
+                total_tests, passed_tests, failed_tests, failure_rate
+            );
         }
         Ok(())
     }
