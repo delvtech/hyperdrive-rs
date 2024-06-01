@@ -222,7 +222,9 @@ impl State {
         variable_apy: FixedPoint,
     ) -> Result<I256> {
         let full_base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
-        let backpaid_interest = bond_amount.mul_down(self.vault_share_price() - open_vault_share_price);
+        let backpaid_interest = bond_amount
+            .mul_div_down(self.vault_share_price(), open_vault_share_price)
+            - bond_amount;
         let base_paid = full_base_paid - backpaid_interest;
         let tpy =
             (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration())? - fixed!(1e18);
