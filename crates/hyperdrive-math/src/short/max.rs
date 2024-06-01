@@ -544,7 +544,7 @@ mod tests {
             if highest_rate.is_none() || fixed_rate > highest_rate.unwrap() {
                 highest_rate = Some(fixed_rate);
             }
-            println!("Fixed rate: {}", fixed_rate);
+            println!("Fixed rate: {}", fixed_rate.expect("Failed to get fixed rate"));
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
