@@ -537,7 +537,9 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let fixed_rate = state.calculate_spot_rate().expect("Failed to get fixed rate");
+            let fixed_rate = state
+                .calculate_spot_rate()
+                .expect("Failed to get fixed rate");
             if lowest_rate.is_none() || fixed_rate < lowest_rate.unwrap() {
                 lowest_rate = Some(fixed_rate);
             }
