@@ -474,11 +474,6 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .request::<[u128; 1], ()>("anvil_mine", [1])
             .await?;
 
-        // HACK: Sleep to give anvil some time to catch up. We shouldn't need
-        // this, but anvil gets stuck in timeout loops when these calls are
-        // made in quick succession with retries.
-        sleep(Duration::from_millis(50)).await;
-
         Ok(())
     }
 
