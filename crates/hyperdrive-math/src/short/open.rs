@@ -210,13 +210,22 @@ impl State {
     /// &= (1 + APY)^{d} - 1
     /// \end{align}
     /// $$
+    ///
+    /// We use the TPY to figure out the base proceeds, and calculate the rate of
+    /// return based on the short's opening cost. Since shorts must backpay the
+    /// variable interest accrued since the last checkpoint, we subtract that from
+    /// the opening cost, as they get it back upon closing the short.
     pub fn calculate_implied_rate(
         &self,
         bond_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
         variable_apy: FixedPoint,
     ) -> Result<I256> {
-        let base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
+        let full_base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
+        let backpaid_interest = bond_amount
+            .mul_div_down(self.vault_share_price(), open_vault_share_price)
+            - bond_amount;
+        let base_paid = full_base_paid - backpaid_interest;
         let tpy =
             (fixed!(1e18) + variable_apy).pow(self.annualized_position_duration())? - fixed!(1e18);
         let base_proceeds = bond_amount * tpy;
