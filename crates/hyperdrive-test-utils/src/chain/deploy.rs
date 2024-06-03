@@ -219,23 +219,23 @@ impl Default for TestChainConfig {
             // lido configuration
             lido_starting_rate: uint256!(0.035e18),
             // factory configuration
-            factory_checkpoint_duration_resolution: U256::from(60 * 60), // 1 hour
-            factory_min_checkpoint_duration: U256::from(60 * 60),        // 1 hour
-            factory_max_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
-            factory_min_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
+            factory_checkpoint_duration_resolution: U256::from(60 * 60),        // 1 hour
+            factory_min_checkpoint_duration: U256::from(60 * 60),               // 1 hour
+            factory_max_checkpoint_duration: U256::from(60 * 60 * 24),          // 1 day
+            factory_min_position_duration: U256::from(60 * 60 * 24 * 7),        // 7 days
             factory_max_position_duration: U256::from(60 * 60 * 24 * 365 * 10), // 10 years
             factory_min_circuit_breaker_delta: uint256!(0.15e18),
             factory_max_circuit_breaker_delta: uint256!(2e18),
-            factory_min_fixed_apr: uint256!(0.1e18),
-            factory_max_fixed_apr: uint256!(10e18),
-            factory_min_time_stretch_apr: uint256!(0),
-            factory_max_time_stretch_apr: uint256!(10e18),
-            factory_min_curve_fee: uint256!(0.0001e18),
-            factory_min_flat_fee: uint256!(0.0001e18),
+            factory_min_fixed_apr: uint256!(0.0001e18),                         // 0.01% or 1bps
+            factory_max_fixed_apr: uint256!(10e18),                             // 1000%
+            factory_min_time_stretch_apr: uint256!(0),                          // 0%
+            factory_max_time_stretch_apr: uint256!(10e18),                      // 1000%
+            factory_min_curve_fee: uint256!(0.0001e18),                         // 0.01%
+            factory_min_flat_fee: uint256!(0.0001e18),                          // 0.01%
             factory_min_governance_lp_fee: uint256!(0.15e18),
             factory_min_governance_zombie_fee: uint256!(0.03e18),
-            factory_max_curve_fee: uint256!(0.1e18),
-            factory_max_flat_fee: uint256!(0.001e18),
+            factory_max_curve_fee: uint256!(0.1e18),                            // 10%
+            factory_max_flat_fee: uint256!(0.001e18),                           // 0.1%
             factory_max_governance_lp_fee: uint256!(0.15e18),
             factory_max_governance_zombie_fee: uint256!(0.03e18),
             // erc4626 hyperdrive configuration
@@ -248,7 +248,7 @@ impl Default for TestChainConfig {
             erc4626_hyperdrive_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
             erc4626_hyperdrive_checkpoint_duration: U256::from(60 * 60),        // 1 hour
             erc4626_hyperdrive_curve_fee: uint256!(0.01e18),
-            erc4626_hyperdrive_flat_fee: uint256!(0.0005e18) / uint256!(52), // 0.05% APR
+            erc4626_hyperdrive_flat_fee: uint256!(0.0005e18) / uint256!(52),    // 0.05% APR
             erc4626_hyperdrive_governance_lp_fee: uint256!(0.15e18),
             erc4626_hyperdrive_governance_zombie_fee: uint256!(0.03e18),
             // steth hyperdrive configuration
@@ -258,10 +258,10 @@ impl Default for TestChainConfig {
             steth_hyperdrive_minimum_share_reserves: uint256!(1e15),
             steth_hyperdrive_minimum_transaction_amount: uint256!(1e15),
             steth_hyperdrive_circuit_breaker_delta: uint256!(2e18),
-            steth_hyperdrive_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
-            steth_hyperdrive_checkpoint_duration: U256::from(60 * 60),        // 1 hour
+            steth_hyperdrive_position_duration: U256::from(60 * 60 * 24 * 7),   // 7 days
+            steth_hyperdrive_checkpoint_duration: U256::from(60 * 60),          // 1 hour
             steth_hyperdrive_curve_fee: uint256!(0.01e18),
-            steth_hyperdrive_flat_fee: uint256!(0.0005e18) / uint256!(52), // 0.05% APR
+            steth_hyperdrive_flat_fee: uint256!(0.0005e18) / uint256!(52),      // 0.05% APR
             steth_hyperdrive_governance_lp_fee: uint256!(0.15e18),
             steth_hyperdrive_governance_zombie_fee: uint256!(0.03e18),
         }

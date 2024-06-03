@@ -644,7 +644,7 @@ mod tests {
             let id = chain.snapshot().await?;
 
             // Fund Alice and Bob.
-            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
+            let fixed_rate = rng.gen_range(fixed!(0.0001e18)..=fixed!(1e18));  // 0.01% to 100%
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 
