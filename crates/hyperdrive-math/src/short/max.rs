@@ -530,8 +530,9 @@ mod tests {
         let mut lowest_rate: Option<FixedPoint> = None;
         let mut highest_rate: Option<FixedPoint> = None;
 
-        let mut passed_tests = 0;
-        let mut failed_tests = 0;
+        let mut both_pass_tests = 0;
+        let mut both_fail_tests = 0;
+        let mut mismatched_tests = 0;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
@@ -596,23 +597,28 @@ mod tests {
                     // Currently, only about 1 - 4 / 1000 tests aren't
                     // exact matches. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
-                    passed_tests += 1;
                     assert_eq!(
                         U256::from(actual.unwrap().unwrap()) / uint256!(1e12),
                         expected / uint256!(1e12)
                     );
+                    both_pass_tests += 1;
                 }
-                Err(expected) => {
-                    failed_tests += 1;
-                    println!("Test failed: actual: {:?} expected: {:?}", actual, expected);
-                    assert!(actual.is_err() || actual.unwrap().is_err());
-                }
+                Err(expected) => match actual {
+                    Err(_) => {
+                        both_fail_tests += 1;
+                        println!("Both failed: actual: {:?} expected: {:?}", actual, expected);
+                    },
+                    Ok(_) => {
+                        mismatched_tests += 1;
+                        println!("MISMATCHED: actual: {:?} expected: {:?}", actual, expected);
+                    },
+                },
             };
-            let total_tests = failed_tests + passed_tests;
-            let failure_rate = failed_tests as f64 / total_tests as f64;
+            let total_tests = both_pass_tests + both_fail_tests + mismatched_tests;
+            let failure_rate = mismatched_tests as f64 / total_tests as f64;
             println!(
-                "Total tests: {} Passed: {} Failed: {}, Failure rate: {}",
-                total_tests, passed_tests, failed_tests, failure_rate
+                "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
+                total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
             );
         }
         Ok(())
