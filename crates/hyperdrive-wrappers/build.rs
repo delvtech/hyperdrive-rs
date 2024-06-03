@@ -1,7 +1,10 @@
 use std::{
     collections::HashMap,
     env,
-    fs::{self, create_dir_all, read_to_string, OpenOptions},
+    fs::{
+        create_dir_all, metadata as fs_metadata, read_dir, read_to_string, remove_dir_all,
+        OpenOptions,
+    },
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -69,13 +72,16 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
+    println!("main build.rs");
     // Load dotenv file in the environment.
     dotenv().ok();
 
     // Get the root directory of the project.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    println!("root {:#?}", root);
 
     let hyperdrive_dir = root.join("hyperdrive");
+    println!("hyperdrive_dir {:#?}", hyperdrive_dir);
 
     // Conditionally reload the hyperdrive repo.
     load_hyperdrive_repo(root, &hyperdrive_dir)?;
@@ -86,25 +92,25 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    // Compile the contracts.
+    // Compile the contracts and exit early if there are no changes.
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
         .arg("install")
         .output()?;
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
-        .args(["build", "--force"])
+        .args(["build"])
         .output()?;
 
     // If there is an existing `wrappers` module, remove it. Then prepare to
     // re-write these files.
     let generated = root.join("src/wrappers");
     if generated.exists() {
-        std::fs::remove_dir_all(&generated)?;
+        remove_dir_all(&generated)?;
     }
-    std::fs::create_dir_all(&generated)?;
+    create_dir_all(&generated)?;
     let mod_file = generated.join("mod.rs");
-    let mut mod_file = std::fs::OpenOptions::new()
+    let mut mod_file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
@@ -229,13 +235,13 @@ fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool, eyre::Er
         .collect();
     let solidity_latest_mod_time = solidity_files
         .iter()
-        .map(|path| FileTime::from_last_modification_time(&fs::metadata(path).unwrap()))
+        .map(|path| FileTime::from_last_modification_time(&fs_metadata(path).unwrap()))
         .max()
         .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
     let generated_dir = root.join("src/wrappers");
-    let output_latest_mod_time = fs::read_dir(&generated_dir)?
+    let output_latest_mod_time = read_dir(&generated_dir)?
         .filter_map(|entry| entry.ok())
-        .map(|entry| FileTime::from_last_modification_time(&fs::metadata(entry.path()).unwrap()))
+        .map(|entry| FileTime::from_last_modification_time(&fs_metadata(entry.path()).unwrap()))
         .max();
     let need_to_build = match output_latest_mod_time {
         Some(output_mod_time) => output_mod_time < solidity_latest_mod_time,
@@ -277,7 +283,7 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<Artifact>> {
         create_dir_all(artifacts_path)?;
     }
     let mut artifacts = Vec::new();
-    for entry in std::fs::read_dir(artifacts_path)? {
+    for entry in read_dir(artifacts_path)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
