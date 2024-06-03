@@ -226,7 +226,7 @@ impl Default for TestChainConfig {
             factory_max_position_duration: U256::from(60 * 60 * 24 * 365 * 10), // 10 years
             factory_min_circuit_breaker_delta: uint256!(0.15e18),
             factory_max_circuit_breaker_delta: uint256!(2e18),
-            factory_min_fixed_apr: uint256!(0.0001e18),                         // 0.01% or 1bps
+            factory_min_fixed_apr: uint256!(0),                                 // 0%
             factory_max_fixed_apr: uint256!(10e18),                             // 1000%
             factory_min_time_stretch_apr: uint256!(0),                          // 0%
             factory_max_time_stretch_apr: uint256!(10e18),                      // 1000%
@@ -342,9 +342,9 @@ impl TestnetDeploy for Chain {
             sweep_collector: client.address(),
             governance: client.address(),
             fees: Fees {
-                curve: uint256!(0.01e18),
-                flat: uint256!(0e18),
-                governance_lp: uint256!(0.1e18),
+                curve: uint256!(0.05e18),
+                flat: uint256!(0.0005e18),
+                governance_lp: uint256!(0.15e18),
                 governance_zombie: uint256!(0.15e18),
             },
         };

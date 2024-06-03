@@ -620,6 +620,7 @@ mod tests {
                 "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
                 total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
             );
+            println!("Fuzzed over fixed rate from {:?} to {:?}", lowest_rate, highest_rate);
         }
         Ok(())
     }
