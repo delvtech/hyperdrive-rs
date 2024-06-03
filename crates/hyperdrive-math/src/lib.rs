@@ -65,13 +65,27 @@ impl Distribution<State> for Standard {
         // We need the spot price to be less than or equal to 1, so we need to
         // generate the bond reserves so that mu * z <= y
         let share_reserves = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
+        let share_adjustment = {
+            if rng.gen() {
+                -I256::try_from(rng.gen_range(fixed!(0)..=fixed!(100_000e18))).unwrap()
+            } else {
+                // We generate values that satisfy `z - zeta >= z_min`,
+                // so `z - z_min >= zeta`.
+                I256::try_from(rng.gen_range(
+                    fixed!(0)..(share_reserves - FixedPoint::from(config.minimum_share_reserves)),
+                ))
+                .unwrap()
+            }
+        };
+        let effective_share_reserves =
+            calculate_effective_share_reserves(share_reserves, share_adjustment).unwrap();
         let info = PoolInfo {
             share_reserves: share_reserves.into(),
             zombie_base_proceeds: fixed!(0).into(),
             zombie_share_reserves: fixed!(0).into(),
             bond_reserves: rng
                 .gen_range(
-                    share_reserves * FixedPoint::from(config.initial_vault_share_price)
+                    effective_share_reserves * FixedPoint::from(config.initial_vault_share_price)
                         ..=fixed!(1_000_000_000e18),
                 )
                 .into(),
@@ -79,19 +93,7 @@ impl Distribution<State> for Standard {
             longs_outstanding: rng.gen_range(fixed!(0)..=fixed!(100_000e18)).into(),
             shorts_outstanding: rng.gen_range(fixed!(0)..=fixed!(100_000e18)).into(),
             long_exposure: rng.gen_range(fixed!(0)..=fixed!(100_000e18)).into(),
-            share_adjustment: {
-                if rng.gen() {
-                    -I256::try_from(rng.gen_range(fixed!(0)..=fixed!(100_000e18))).unwrap()
-                } else {
-                    // We generate values that satisfy `z - zeta >= z_min`,
-                    // so `z - z_min >= zeta`.
-                    I256::try_from(rng.gen_range(
-                        fixed!(0)
-                            ..(share_reserves - FixedPoint::from(config.minimum_share_reserves)),
-                    ))
-                    .unwrap()
-                }
-            },
+            share_adjustment: share_adjustment.into(),
             // If this range returns greater than position duration, then both rust and solidity will fail
             // on calls that depend on this value.
             long_average_maturity_time: rng
