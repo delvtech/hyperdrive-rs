@@ -607,11 +607,11 @@ mod tests {
                     Err(_) => {
                         both_fail_tests += 1;
                         println!("Both failed: actual: {:?} expected: {:?}", actual, expected);
-                    },
+                    }
                     Ok(_) => {
                         mismatched_tests += 1;
                         println!("MISMATCHED: actual: {:?} expected: {:?}", actual, expected);
-                    },
+                    }
                 },
             };
             let total_tests = both_pass_tests + both_fail_tests + mismatched_tests;
@@ -620,7 +620,10 @@ mod tests {
                 "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
                 total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
             );
-            println!("Fuzzed over fixed rate from {:?} to {:?}", lowest_rate, highest_rate);
+            println!(
+                "Fuzzed over fixed rate from {:?} to {:?}",
+                lowest_rate, highest_rate
+            );
         }
         Ok(())
     }
@@ -645,7 +648,7 @@ mod tests {
             let id = chain.snapshot().await?;
 
             // Fund Alice and Bob.
-            let fixed_rate = rng.gen_range(fixed!(0.0001e18)..=fixed!(1e18));  // 0.01% to 100%
+            let fixed_rate = rng.gen_range(fixed!(0.0001e18)..=fixed!(1e18)); // 0.01% to 100%
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 
