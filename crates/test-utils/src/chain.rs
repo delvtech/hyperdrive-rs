@@ -142,7 +142,7 @@ impl Chain {
     /// chains.
     pub async fn revert<U: Into<U256>>(&self, id: U) -> Result<()> {
         if !self.is_anvil() {
-            panic!("Can't snapshot a non-anvil chain");
+            panic!("Can't revert a non-anvil chain");
         }
         self.provider
             .request::<[U256; 1], bool>("evm_revert", [id.into()])
@@ -153,7 +153,7 @@ impl Chain {
     /// Increases the chains time. This only works for anvil chains.
     pub async fn increase_time(&self, duration: u128) -> Result<()> {
         if !self.is_anvil() {
-            panic!("Can't snapshot a non-anvil chain");
+            panic!("Can't increase time on a non-anvil chain");
         }
         self.provider
             .request::<[u128; 1], i128>("anvil_increaseTime", [duration])
@@ -167,7 +167,7 @@ impl Chain {
     /// Mints a ether to an address. This only works for anvil chains.
     pub async fn deal<U: Into<U256>>(&self, address: Address, amount: U) -> Result<()> {
         if !self.is_anvil() {
-            panic!("Can't snapshot a non-anvil chain");
+            panic!("Can't mint ether to an address on a non-anvil chain");
         }
         let balance = self.provider.get_balance(address, None).await?;
         self.provider

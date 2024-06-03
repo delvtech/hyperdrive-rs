@@ -745,11 +745,7 @@ mod tests {
 
             // Set a random variable rate.
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
-            let vault = MockERC4626::new(
-                bob.get_config().vault_shares_token,
-                chain.client(BOB.clone()).await?,
-            );
-            vault.set_rate(variable_rate.into()).send().await?;
+            alice.advance_time(variable_rate, 12.into()).await?;
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.

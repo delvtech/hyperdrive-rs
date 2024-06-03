@@ -6,7 +6,7 @@ use ethers::{
     prelude::EthLogDecode,
     providers::Middleware,
     signers::LocalWallet,
-    types::{Address, BlockId, I256, U256},
+    types::{Address, BlockId, I256, U256, U64},
 };
 use eyre::Result;
 use fixed_point::{uint256, FixedPoint};
@@ -525,6 +525,17 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .await?
             .unwrap()
             .timestamp)
+    }
+
+    /// Gets the current block number.
+    pub async fn current_block_number(&self) -> Result<U64> {
+        Ok(self
+            .client
+            .get_block(self.client.get_block_number().await?)
+            .await?
+            .unwrap()
+            .number
+            .unwrap())
     }
 
     /// Gets the pool config.

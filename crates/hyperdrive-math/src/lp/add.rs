@@ -125,7 +125,7 @@ mod tests {
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     #[tokio::test]
-    async fn fuzz_test_calculate_add_liquidity_unhappy_with_random_state() -> Result<()> {
+    async fn fuzz_calculate_add_liquidity_unhappy_with_random_state() -> Result<()> {
         // Get the State from solidity before adding liquidity.
         let mut rng = thread_rng();
 
@@ -202,7 +202,7 @@ mod tests {
         Ok(())
     }
     #[tokio::test]
-    async fn fuzz_test_calculate_add_liquidity() -> Result<()> {
+    async fn fuzz_calculate_add_liquidity() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_pool_state_after_add_liquidity() -> Result<()> {
+    async fn fuzz_calculate_pool_state_after_add_liquidity() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;

@@ -1125,7 +1125,10 @@ impl State {
 #[cfg(test)]
 mod tests {
     use fixed_point::uint256;
-    use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
         DistributeExcessIdleParams, PresentValueParams,
     };
@@ -1134,7 +1137,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn fuzz_test_calculate_initial_reserves() -> Result<()> {
+    async fn fuzz_calculate_initial_reserves() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -1324,7 +1327,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_distribute_excess_idle() -> Result<()> {
+    async fn fuzz_calculate_distribute_excess_idle() -> Result<()> {
         let chain = TestChain::new().await?;
         let alice = chain.alice().await?;
         let mock = chain.mock_lp_math();
@@ -1332,7 +1335,7 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
 
-        for _ in 0..*FAST_FUZZ_RUNS {
+        for _ in 0..*FUZZ_RUNS {
             // Generate random states.
             let mut present_state = rng.gen::<State>();
 
@@ -1432,7 +1435,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_distribute_excess_idle_withdrawal_shares_redeemed() -> Result<()> {
+    async fn fuzz_calculate_distribute_excess_idle_withdrawal_shares_redeemed() -> Result<()> {
         let chain = TestChain::new().await?;
         let alice = chain.alice().await?;
         let mock = chain.mock_lp_math();
@@ -1544,8 +1547,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_distribute_excess_idle_share_proceeds_net_long_edge_case(
-    ) -> Result<()> {
+    async fn fuzz_calculate_distribute_excess_idle_share_proceeds_net_long_edge_case() -> Result<()>
+    {
         let chain = TestChain::new().await?;
         let alice = chain.alice().await?;
         let mock = chain.mock_lp_math();
@@ -1655,7 +1658,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_should_short_circuit_distribute_excess_idle_share_proceeds() -> Result<()> {
+    async fn fuzz_should_short_circuit_distribute_excess_idle_share_proceeds() -> Result<()> {
         let chain = TestChain::new().await?;
         let mock = chain.mock_lp_math();
 
@@ -1710,7 +1713,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_shares_delta_given_bonds_delta_derivative() -> Result<()> {
+    async fn fuzz_calculate_shares_delta_given_bonds_delta_derivative() -> Result<()> {
         let chain = TestChain::new().await?;
         let mock = chain.mock_lp_math();
 
