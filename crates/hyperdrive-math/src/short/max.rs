@@ -541,7 +541,7 @@ mod tests {
             if highest_rate.is_none() || fixed_rate > highest_rate.unwrap() {
                 highest_rate = Some(fixed_rate);
             }
-            println!("Fixed rate: {}", fixed_rate);
+            // println!("Fixed rate: {}", fixed_rate);
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
@@ -600,11 +600,17 @@ mod tests {
                 Err(expected) => match actual {
                     Err(_) => {
                         both_fail_tests += 1;
-                        println!("Both failed: actual: {:?} expected: {:?}", actual, expected);
+                        // println!("Both failed: actual: {:?} expected: {:?}", actual, expected);
                     }
                     Ok(_) => {
                         mismatched_tests += 1;
+                        println!("Fixed rate: {}", fixed_rate);
                         println!("MISMATCHED: actual: {:?} expected: {:?}", actual, expected);
+
+                        let rust_result = actual.unwrap().unwrap();
+                        let solidity_result = expected;
+                        println!("Rust: {:?} Solidity: {:?}", rust_result, solidity_result);
+
                         if lowest_rate_mismatch.is_none()
                             || fixed_rate < lowest_rate_mismatch.unwrap()
                         {
@@ -618,21 +624,21 @@ mod tests {
                     }
                 },
             };
-            let total_tests = both_pass_tests + both_fail_tests + mismatched_tests;
-            let failure_rate = mismatched_tests as f64 / total_tests as f64;
-            println!(
-                "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
-                total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
-            );
-            println!(
-                "Fuzzed over fixed rate from {:?} to {:?}",
-                lowest_rate, highest_rate
-            );
-            println!(
-                "Mismatched  fixed rate from {:?} to {:?}",
-                lowest_rate_mismatch, highest_rate_mismatch
-            );
         }
+        let total_tests = both_pass_tests + both_fail_tests + mismatched_tests;
+        let failure_rate = mismatched_tests as f64 / total_tests as f64;
+        println!(
+            "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
+            total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
+        );
+        println!(
+            "Fuzzed over fixed rate from {:?} to {:?}",
+            lowest_rate, highest_rate
+        );
+        println!(
+            "Mismatched  fixed rate from {:?} to {:?}",
+            lowest_rate_mismatch, highest_rate_mismatch
+        );
         Ok(())
     }
 
