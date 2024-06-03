@@ -1125,7 +1125,10 @@ impl State {
 #[cfg(test)]
 mod tests {
     use fixed_point::uint256;
-    use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::mock_lp_math::{
         DistributeExcessIdleParams, PresentValueParams,
     };
@@ -1332,7 +1335,7 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
 
-        for _ in 0..*FAST_FUZZ_RUNS {
+        for _ in 0..*FUZZ_RUNS {
             // Generate random states.
             let mut present_state = rng.gen::<State>();
 
