@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_test_calculate_pool_state_after_add_liquidity() -> Result<()> {
+    async fn fuzz_calculate_pool_state_after_add_liquidity() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;
