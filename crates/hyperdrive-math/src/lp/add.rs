@@ -75,7 +75,7 @@ impl State {
                 I256::try_from(contribution)?
             }
         };
-        self.get_state_after_liquidity_update(share_contribution)
+        Ok(self.get_state_after_liquidity_update(share_contribution)?)
     }
 
     pub fn calculate_pool_deltas_after_add_liquidity(
@@ -107,34 +107,6 @@ impl State {
             new_share_adjustment - share_adjustment,
             new_bond_reserves - bond_reserves,
         ))
-    }
-
-    /// Gets the resulting state when updating liquidity.
-    pub fn get_state_after_liquidity_update(&self, share_reserves_delta: I256) -> Result<State> {
-        let share_reserves = self.share_reserves();
-        let share_adjustment = self.share_adjustment();
-        let bond_reserves = self.bond_reserves();
-        let minimum_share_reserves = self.minimum_share_reserves();
-
-        // Calculate new reserve and adjustment levels.
-        let (updated_share_reserves, updated_share_adjustment, updated_bond_reserves) = self
-            .calculate_update_liquidity(
-                share_reserves,
-                share_adjustment,
-                bond_reserves,
-                minimum_share_reserves,
-                share_reserves_delta,
-            )?;
-
-        // Update and return the new state.
-        let mut new_info = self.info.clone();
-        new_info.share_reserves = U256::from(updated_share_reserves);
-        new_info.share_adjustment = updated_share_adjustment;
-        new_info.bond_reserves = U256::from(updated_bond_reserves);
-        Ok(State {
-            config: self.config.clone(),
-            info: new_info,
-        })
     }
 }
 
