@@ -1,17 +1,22 @@
 use std::{
     collections::HashMap,
     env,
-    fs::{create_dir_all, read_to_string, OpenOptions},
+    fs::{
+        create_dir_all, metadata as fs_metadata, read_dir, read_to_string, remove_dir_all,
+        OpenOptions,
+    },
     io::Write,
-    path::Path,
+    path::{Path, PathBuf},
     process::Command,
 };
 
 use dotenv::dotenv;
 use ethers::prelude::Abigen;
 use eyre::Result;
+use filetime::FileTime;
 use heck::ToSnakeCase;
 use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
 
 const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 
@@ -67,56 +72,42 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    // Re-run this script whenever the build script itself, the version file, or a contract changes.
-    println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=hyperdrive.version");
-    println!("cargo:rerun-if-changed=hyperdrive/contracts/");
-
-    // load dotenv
+    // Load dotenv file in the environment.
     dotenv().ok();
 
-    let local_development = match env::var("LOCAL_DEVELOPMENT") {
-        Ok(local_development) => local_development == "true",
-        _ => false,
-    };
-
-    // Get the root directory of the project
+    // Get the root directory of the project.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
-    // Load the hyperdrive version to use from the hyperdrive.version file
-    let version_file = root.join("hyperdrive.version");
-    let git_ref = read_to_string(version_file)?.trim().to_string();
-
-    // Clone the hyperdrive repository if it doesn't exist
     let hyperdrive_dir = root.join("hyperdrive");
 
-    if !local_development {
-        if hyperdrive_dir.exists() {
-            checkout_branch(&git_ref, &hyperdrive_dir)?;
-        } else {
-            clone_repo(HYPERDRIVE_URL, &git_ref, &hyperdrive_dir)?;
-        }
+    // Conditionally reload the hyperdrive repo.
+    load_hyperdrive_repo(root, &hyperdrive_dir)?;
+
+    // Only rebuild if solidity files have changed.
+    if !need_to_build(&hyperdrive_dir, root)? {
+        println!("No changes detected in Solidity files, skipping build process.");
+        return Ok(());
     }
 
-    // Compile the contracts.
+    // Compile the contracts and exit early if there are no changes.
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
         .arg("install")
         .output()?;
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
-        .args(["build", "--force"])
+        .arg("build")
         .output()?;
 
     // If there is an existing `wrappers` module, remove it. Then prepare to
     // re-write these files.
     let generated = root.join("src/wrappers");
     if generated.exists() {
-        std::fs::remove_dir_all(&generated)?;
+        remove_dir_all(&generated)?;
     }
-    std::fs::create_dir_all(&generated)?;
+    create_dir_all(&generated)?;
     let mod_file = generated.join("mod.rs");
-    let mut mod_file = std::fs::OpenOptions::new()
+    let mut mod_file = OpenOptions::new()
         .create(true)
         .truncate(true)
         .write(true)
@@ -226,6 +217,64 @@ impl<M: ::ethers::providers::Middleware> {name}<M> {{
     Ok(())
 }
 
+fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool> {
+    // First check if we've never built wrappers before.
+    let generated_dir = root.join("src/wrappers");
+    if !generated_dir.exists() {
+        return Ok(true);
+    }
+
+    // Get the solidity files to check modifications times on.
+    let solidity_dir = hyperdrive_dir.join("contracts");
+    let solidity_files: Vec<PathBuf> = WalkDir::new(&solidity_dir)
+        .into_iter()
+        .filter_map(|entry| {
+            let entry = entry.ok()?;
+            if entry.path().extension()? == "sol" {
+                Some(entry.path().to_path_buf())
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Get the most recent update amongst all solidity files.
+    let solidity_latest_mod_time = solidity_files
+        .iter()
+        .map(|path| FileTime::from_last_modification_time(&fs_metadata(path).unwrap()))
+        .max()
+        .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
+
+    // Get the most recent update amongst all wrapper files.
+    let output_latest_mod_time = read_dir(&generated_dir)?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| FileTime::from_last_modification_time(&fs_metadata(entry.path()).unwrap()))
+        .max();
+
+    // If the solidity files were updated after the wrapper files, we need to rebuild.
+    let need_to_build = match output_latest_mod_time {
+        Some(output_mod_time) => output_mod_time < solidity_latest_mod_time,
+        None => true,
+    };
+    Ok(need_to_build)
+}
+
+fn load_hyperdrive_repo(root: &Path, hyperdrive_dir: &PathBuf) -> Result<()> {
+    let version_file = root.join("hyperdrive.version");
+    let git_ref = read_to_string(version_file)?.trim().to_string();
+    let local_development = match env::var("LOCAL_DEVELOPMENT") {
+        Ok(local_development) => local_development == "true",
+        _ => false,
+    };
+    Ok(if !local_development {
+        if hyperdrive_dir.exists() {
+            checkout_branch(&git_ref, hyperdrive_dir)?;
+        } else {
+            clone_repo(HYPERDRIVE_URL, &git_ref, hyperdrive_dir)?;
+        }
+    })
+}
+
 struct ArtifactLibs {
     file_path: String,
     lib_name: String,
@@ -243,7 +292,7 @@ fn get_artifacts(artifacts_path: &Path) -> Result<Vec<Artifact>> {
         create_dir_all(artifacts_path)?;
     }
     let mut artifacts = Vec::new();
-    for entry in std::fs::read_dir(artifacts_path)? {
+    for entry in read_dir(artifacts_path)? {
         let entry = entry?;
         let path = entry.path();
         if path.is_file() {
