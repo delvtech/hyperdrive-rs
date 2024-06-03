@@ -124,7 +124,7 @@ impl State {
         //                          =>
         // y_new = (z_new - zeta_new) * (y_old / (z_old - zeta_old))
         let old_effective_share_reserves =
-            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment());
+            calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())?;
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment)?;
         let new_bond_reserves =
@@ -163,7 +163,7 @@ impl State {
             return Err(eyre!("Negative present value!"));
         }
 
-        Ok(present_value.try_into())
+        Ok(present_value.try_into()?)
     }
 
     pub fn calculate_net_curve_trade_safe(
@@ -191,10 +191,10 @@ impl State {
                         .mul_down(short_average_time_remaining),
                 )?;
         match self.effective_share_reserves_safe() {
-            Ok(effective_share_reserves) => {}
+            Ok(_) => {}
             // NOTE: Return 0 to indicate that the net curve trade couldn't be
             // computed.
-            Err(err) => return Ok(I256::zero()),
+            Err(_) => return Ok(I256::zero()),
         }
 
         // If the net curve position is positive, then the pool is net long.
@@ -202,11 +202,11 @@ impl State {
         // from the share reserves, so we negate the result.
         match net_curve_position.cmp(&int256!(0)) {
             Ordering::Greater => {
-                let net_curve_position: FixedPoint = FixedPoint::from(net_curve_position);
+                let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
                 let max_curve_trade =
                     match self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves()) {
                         Ok(max_curve_trade) => max_curve_trade,
-                        Err(err) => {
+                        Err(_) => {
                             // NOTE: Return 0 to indicate that the net curve trade couldn't
                             // be computed.
                             return Ok(I256::zero());
@@ -251,7 +251,7 @@ impl State {
                 }
             }
             Ordering::Less => {
-                let net_curve_position: FixedPoint = FixedPoint::from(-net_curve_position);
+                let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
                 let max_curve_trade = match self.calculate_max_buy_bonds_out_safe() {
                     Ok(max_curve_trade) => max_curve_trade,
                     Err(_) => {
@@ -668,7 +668,7 @@ impl State {
                     net_curve_trade,
                     self.share_reserves(),
                     self.bond_reserves(),
-                    self.effective_share_reserves(),
+                    self.effective_share_reserves()?,
                     self.share_adjustment(),
                 ) {
                 Ok(derivative) => derivative,
@@ -703,11 +703,11 @@ impl State {
             if delta > I256::zero() {
                 // NOTE: Round the quotient down to avoid overshooting.
                 share_proceeds = share_proceeds
-                    + FixedPoint::from(delta)
+                    + FixedPoint::try_from(delta)?
                         .div_down(derivative)
                         .div_down(lp_total_supply);
             } else if delta < I256::zero() {
-                let delta = FixedPoint::from(-delta)
+                let delta = FixedPoint::try_from(-delta)?
                     .div_down(derivative)
                     .div_down(lp_total_supply);
                 if delta < share_proceeds {
@@ -745,9 +745,9 @@ impl State {
 
         // Verify that the LP share price was conserved within a reasonable
         // tolerance.
-        if (
-            // NOTE: Round down to make the check stricter.
-            closest_present_value.div_down(active_lp_total_supply)
+        if
+        // NOTE: Round down to make the check stricter.
+        closest_present_value.div_down(active_lp_total_supply)
                 < starting_present_value.mul_div_up(
                     fixed!(1e18) - FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
                     lp_total_supply,
@@ -758,7 +758,7 @@ impl State {
                     fixed!(1e18) + FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
                     lp_total_supply,
                 )
-        ) {
+        {
             return Err(eyre!("LP share price was not conserved within tolerance."));
         }
 
@@ -843,14 +843,14 @@ impl State {
             );
             if net_flat_trade >= I256::zero() {
                 if net_flat_trade < I256::try_from(rhs)? {
-                    rhs - net_flat_trade.into()
+                    rhs - net_flat_trade.try_into()?
                 } else {
                     // NOTE: Return a failure flag if computing the rhs would
                     // underflow.
                     return Ok((fixed!(0), false));
                 }
             } else {
-                rhs + (-net_flat_trade).into()
+                rhs + (-net_flat_trade).try_into()?
             }
         };
 
@@ -920,7 +920,7 @@ impl State {
         if net_curve_trade >= I256::from(0) {
             return Ok((idle, true));
         }
-        let net_curve_trade = FixedPoint::from(-net_curve_trade);
+        let net_curve_trade = FixedPoint::try_from(-net_curve_trade)?;
 
         // Calculate the max bond amount. if the calculation fails, we return a
         // failure flag. if the calculation succeeds but the max bond amount
