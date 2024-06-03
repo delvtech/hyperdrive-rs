@@ -436,18 +436,13 @@ impl State {
             return Ok(None);
         };
         let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        // let share_reserves = self.share_reserves()
-        //     - principal
-        //     + (
-        //         curve_fee_base
-        //         - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-        //     )
-        //     / self.vault_share_price();
         let share_reserves = self.share_reserves()
-            - (principal
-                - (curve_fee_base
-                    - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?)
-                    / self.vault_share_price());
+            - principal
+            + (
+                curve_fee_base
+                - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?
+            )
+            / self.vault_share_price();
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
@@ -529,6 +524,8 @@ mod tests {
         let chain = TestChain::new().await?;
         let mut lowest_rate: Option<FixedPoint> = None;
         let mut highest_rate: Option<FixedPoint> = None;
+        let mut lowest_rate_mismatch: Option<FixedPoint> = None;
+        let mut highest_rate_mismatch: Option<FixedPoint> = None;
 
         let mut both_pass_tests = 0;
         let mut both_fail_tests = 0;
@@ -611,6 +608,12 @@ mod tests {
                     Ok(_) => {
                         mismatched_tests += 1;
                         println!("MISMATCHED: actual: {:?} expected: {:?}", actual, expected);
+                        if lowest_rate_mismatch.is_none() || fixed_rate < lowest_rate_mismatch.unwrap() {
+                            lowest_rate_mismatch = Some(fixed_rate);
+                        }
+                        if highest_rate_mismatch.is_none() || fixed_rate > highest_rate_mismatch.unwrap() {
+                            highest_rate_mismatch = Some(fixed_rate);
+                        }
                     }
                 },
             };
@@ -623,6 +626,10 @@ mod tests {
             println!(
                 "Fuzzed over fixed rate from {:?} to {:?}",
                 lowest_rate, highest_rate
+            );
+            println!(
+                "Mismatched  fixed rate from {:?} to {:?}",
+                lowest_rate_mismatch, highest_rate_mismatch
             );
         }
         Ok(())
