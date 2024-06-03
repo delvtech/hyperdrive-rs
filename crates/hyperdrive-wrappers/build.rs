@@ -72,16 +72,13 @@ const TARGETS: &[&str] = &[
 ];
 
 fn main() -> Result<()> {
-    println!("main build.rs");
     // Load dotenv file in the environment.
     dotenv().ok();
 
     // Get the root directory of the project.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    println!("root {:#?}", root);
 
     let hyperdrive_dir = root.join("hyperdrive");
-    println!("hyperdrive_dir {:#?}", hyperdrive_dir);
 
     // Conditionally reload the hyperdrive repo.
     load_hyperdrive_repo(root, &hyperdrive_dir)?;
@@ -99,7 +96,7 @@ fn main() -> Result<()> {
         .output()?;
     Command::new("forge")
         .current_dir(&hyperdrive_dir)
-        .args(["build"])
+        .arg("build")
         .output()?;
 
     // If there is an existing `wrappers` module, remove it. Then prepare to
@@ -220,7 +217,14 @@ impl<M: ::ethers::providers::Middleware> {name}<M> {{
     Ok(())
 }
 
-fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool, eyre::Error> {
+fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool> {
+    // First check if we've never built wrappers before.
+    let generated_dir = root.join("src/wrappers");
+    if !generated_dir.exists() {
+        return Ok(true);
+    }
+
+    // Get the solidity files to check modifications times on.
     let solidity_dir = hyperdrive_dir.join("contracts");
     let solidity_files: Vec<PathBuf> = WalkDir::new(&solidity_dir)
         .into_iter()
@@ -233,16 +237,21 @@ fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool, eyre::Er
             }
         })
         .collect();
+
+    // Get the most recent update amongst all solidity files.
     let solidity_latest_mod_time = solidity_files
         .iter()
         .map(|path| FileTime::from_last_modification_time(&fs_metadata(path).unwrap()))
         .max()
         .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
-    let generated_dir = root.join("src/wrappers");
+
+    // Get the most recent update amongst all wrapper files.
     let output_latest_mod_time = read_dir(&generated_dir)?
         .filter_map(|entry| entry.ok())
         .map(|entry| FileTime::from_last_modification_time(&fs_metadata(entry.path()).unwrap()))
         .max();
+
+    // If the solidity files were updated after the wrapper files, we need to rebuild.
     let need_to_build = match output_latest_mod_time {
         Some(output_mod_time) => output_mod_time < solidity_latest_mod_time,
         None => true,
@@ -250,7 +259,7 @@ fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool, eyre::Er
     Ok(need_to_build)
 }
 
-fn load_hyperdrive_repo(root: &Path, hyperdrive_dir: &PathBuf) -> Result<(), eyre::Error> {
+fn load_hyperdrive_repo(root: &Path, hyperdrive_dir: &PathBuf) -> Result<()> {
     let version_file = root.join("hyperdrive.version");
     let git_ref = read_to_string(version_file)?.trim().to_string();
     let local_development = match env::var("LOCAL_DEVELOPMENT") {
