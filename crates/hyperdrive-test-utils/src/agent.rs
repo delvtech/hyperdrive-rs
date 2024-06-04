@@ -295,7 +295,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         &mut self,
         shares: FixedPoint,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<()> {
+    ) -> Result<(U256, U256)> {
         // Ensure that the agent has a sufficient balance of LP shares.
         if self.wallet.lp_shares < shares {
             return Err(eyre::eyre!(
@@ -348,7 +348,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         self.wallet.base += log.amount.into();
         self.wallet.withdrawal_shares += log.withdrawal_share_amount.into();
 
-        Ok(())
+        Ok((log.amount, log.withdrawal_share_amount))
     }
 
     #[instrument(skip(self))]

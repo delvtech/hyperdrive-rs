@@ -1,10 +1,9 @@
-use crate::State;
-
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
 use super::math::SHARE_PROCEEDS_MAX_ITERATIONS;
+use crate::State;
 
 impl State {
     /// Allows an LP to burn shares and withdraw from the pool.
