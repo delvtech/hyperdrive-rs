@@ -293,12 +293,9 @@ mod tests {
     use hyperdrive_test_utils::{
         agent::Agent,
         chain::{ChainClient, TestChain},
-        constants::{BOB, FAST_FUZZ_RUNS, FUZZ_RUNS},
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
-    use hyperdrive_wrappers::wrappers::{
-        ihyperdrive::{Checkpoint, Options},
-        mock_erc4626::MockERC4626,
-    };
+    use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
