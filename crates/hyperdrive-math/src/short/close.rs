@@ -56,28 +56,123 @@ impl State {
         Ok(flat + curve)
     }
 
-    // Calculates the proceeds in shares of closing a short position.
-    fn calculate_short_proceeds(
+    /// Calculates the proceeds in shares of closing a short position. This
+    /// takes into account the trading profits, the interest that was
+    /// earned by the short, the flat fee the short pays, and the amount of
+    /// margin that was released by closing the short. The math for the
+    /// short's proceeds in base is given by:
+    ///
+    /// $$
+    /// proceeds = (\frac{c1}{c_0 \cdot c}
+    /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
+    /// - dz
+    /// $$
+    ///
+    /// We convert the proceeds to shares by dividing by the current vault
+    /// share price. In the event that the interest is negative and
+    /// outweighs the trading profits and margin released, the short's
+    /// proceeds are marked to zero.
+    pub fn calculate_short_proceeds_up(
         &self,
         bond_amount: FixedPoint,
         share_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
         close_vault_share_price: FixedPoint,
-        vault_share_price: FixedPoint,
-        flat_fee: FixedPoint,
     ) -> FixedPoint {
-        let mut bond_factor = bond_amount
-            .mul_div_down(
-                close_vault_share_price,
-                // We round up here do avoid overestimating the share proceeds.
-                open_vault_share_price,
-            )
-            .div_down(vault_share_price);
-        bond_factor += bond_amount.mul_div_down(flat_fee, vault_share_price);
+        // NOTE: Round up to overestimate the short proceeds.
+        //
+        // The total value is the amount of shares that underlies the bonds that
+        // were shorted. The bonds start by being backed 1:1 with base, and the
+        // total value takes into account all of the interest that has accrued
+        // since the short was opened.
+        //
+        // total_value = (c1 / (c0 * c)) * dy
+        let mut total_value = bond_amount
+            .mul_div_up(close_vault_share_price, open_vault_share_price)
+            .div_up(self.vault_share_price());
 
-        if bond_factor > share_amount {
+        // NOTE: Round up to overestimate the short proceeds.
+        //
+        // We increase the total value by the flat fee amount, because it is
+        // included in the total amount of capital underlying the short.
+        total_value += bond_amount.mul_div_up(self.flat_fee(), self.vault_share_price());
+
+        // If the interest is more negative than the trading profits and margin
+        // released, then the short proceeds are marked to zero. Otherwise, we
+        // calculate the proceeds as the sum of the trading proceeds, the
+        // interest proceeds, and the margin released.
+        if total_value > share_amount {
             // proceeds = (c1 / c0 * c) * dy - dz
-            bond_factor - share_amount
+            total_value - share_amount
+        } else {
+            fixed!(0)
+        }
+    }
+
+    /// Returns the derivative of the short proceeds calculation, assuming that the interest is
+    /// less negative than the trading profits and margin released.
+    ///
+    /// $$
+    /// P^{\prime}_{\text{short}}(\Delta y) = \tfrac{c_{1}}{c_{0} \cdot c}
+    /// + \tfrac{\phi_{f}}{c}
+    /// $$
+    pub fn calculate_short_proceeds_up_derivative(
+        &self,
+        open_vault_share_price: FixedPoint,
+        close_vault_share_price: FixedPoint,
+    ) -> FixedPoint {
+        close_vault_share_price.div_up(open_vault_share_price.mul_up(self.vault_share_price()))
+            + self.flat_fee().div_up(self.vault_share_price())
+    }
+
+    /// Calculates the proceeds in shares of closing a short position. This
+    /// takes into account the trading profits, the interest that was
+    /// earned by the short, the flat fee the short pays, and the amount of
+    /// margin that was released by closing the short. The math for the
+    /// short's proceeds in base is given by:
+    ///
+    /// $$
+    /// proceeds = (\frac{c1}{c_0 \cdot c}
+    /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
+    /// - dz
+    /// $$
+    ///
+    /// We convert the proceeds to shares by dividing by the current vault
+    /// share price. In the event that the interest is negative and
+    /// outweighs the trading profits and margin released, the short's
+    /// proceeds are marked to zero.
+    fn calculate_short_proceeds_down(
+        &self,
+        bond_amount: FixedPoint,
+        share_amount: FixedPoint,
+        open_vault_share_price: FixedPoint,
+        close_vault_share_price: FixedPoint,
+    ) -> FixedPoint {
+        // NOTE: Round down to underestimate the short proceeds.
+        //
+        // The total value is the amount of shares that underlies the bonds that
+        // were shorted. The bonds start by being backed 1:1 with base, and the
+        // total value takes into account all of the interest that has accrued
+        // since the short was opened.
+        //
+        // total_value = (c1 / (c0 * c)) * dy
+        let mut total_value = bond_amount
+            .mul_div_down(close_vault_share_price, open_vault_share_price)
+            .div_down(self.vault_share_price());
+
+        // NOTE: Round down to underestimate the short proceeds.
+        //
+        // We increase the total value by the flat fee amount, because it is
+        // included in the total amount of capital underlying the short.
+        total_value += bond_amount.mul_div_down(self.flat_fee(), self.vault_share_price());
+
+        // If the interest is more negative than the trading profits and margin
+        // released, then the short proceeds are marked to zero. Otherwise, we
+        // calculate the proceeds as the sum of the trading proceeds, the
+        // interest proceeds, and the margin released.
+        if total_value > share_amount {
+            // proceeds = (c1 / c0 * c) * dy - dz
+            total_value - share_amount
         } else {
             fixed!(0)
         }
@@ -165,13 +260,11 @@ impl State {
             + self.close_short_flat_fee(bond_amount, maturity_time, current_time);
 
         // Calculate the share proceeds owed to the short.
-        Ok(self.calculate_short_proceeds(
+        Ok(self.calculate_short_proceeds_down(
             bond_amount,
             share_reserves_delta_with_fees,
             open_vault_share_price,
             close_vault_share_price,
-            self.vault_share_price(),
-            self.flat_fee(),
         ))
     }
 }
@@ -186,7 +279,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn fuzz_calculate_short_proceeds() -> Result<()> {
+    async fn fuzz_calculate_short_proceeds_up() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -197,13 +290,118 @@ mod tests {
             let share_amount = rng.gen_range(fixed!(0)..=bond_amount);
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             let actual = panic::catch_unwind(|| {
-                state.calculate_short_proceeds(
+                state.calculate_short_proceeds_up(
                     bond_amount,
                     share_amount,
                     open_vault_share_price,
                     state.vault_share_price(),
+                )
+            });
+            match chain
+                .mock_hyperdrive_math()
+                .calculate_short_proceeds_up(
+                    bond_amount.into(),
+                    share_amount.into(),
+                    open_vault_share_price.into(),
+                    state.vault_share_price().into(),
+                    state.vault_share_price().into(),
+                    state.flat_fee().into(),
+                )
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    /// This test empirically tests `calculate_short_proceeds_up_derivative` by
+    /// calling `calculate_short_proceeds_up` at two points and comparing the
+    /// empirical result with the output of `short_proceeds_up_derivative`.
+    #[tokio::test]
+    async fn test_calculate_short_proceeds_up_derivative() -> Result<()> {
+        let empirical_derivative_epsilon = fixed!(1e8);
+        let test_comparison_epsilon = fixed!(1e11);
+
+        // Fuzz the Rust and Solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let bond_amount =
+                rng.gen_range(state.minimum_transaction_amount()..=state.bond_reserves());
+            let share_amount = rng.gen_range(fixed!(0)..=bond_amount);
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+
+            let p1 = state.calculate_short_proceeds_up(
+                bond_amount - empirical_derivative_epsilon,
+                share_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+            );
+            let p2 = state.calculate_short_proceeds_up(
+                bond_amount + empirical_derivative_epsilon,
+                share_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+            );
+
+            // If the share amount is sufficiently large, then the fn shortcuts to return 0.
+            // Due to the epsilon, it's possible that p1 returns zero but p2 does not.
+            // If one or both returns zero this test would not be expected to work.
+            if p1 == fixed!(0) {
+                continue;
+            }
+
+            // Sanity check
+            assert!(p2 > p1);
+
+            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
+
+            let short_proceeds_derivative = state.calculate_short_proceeds_up_derivative(
+                open_vault_share_price,
+                state.vault_share_price(),
+            );
+
+            // Compare the empirical result against the calculated result.
+            let derivative_diff = if short_proceeds_derivative >= empirical_derivative {
+                short_proceeds_derivative - empirical_derivative
+            } else {
+                empirical_derivative - short_proceeds_derivative
+            };
+            assert!(
+                derivative_diff < test_comparison_epsilon,
+                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                calculated_derivative={}, emperical_derivative={}",
+                derivative_diff,
+                test_comparison_epsilon,
+                short_proceeds_derivative,
+                empirical_derivative
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_calculate_short_proceeds_down() -> Result<()> {
+        let chain = TestChain::new().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let bond_amount = rng.gen_range(fixed!(0)..=state.bond_reserves());
+            let share_amount = rng.gen_range(fixed!(0)..=bond_amount);
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let actual = panic::catch_unwind(|| {
+                state.calculate_short_proceeds_down(
+                    bond_amount,
+                    share_amount,
+                    open_vault_share_price,
                     state.vault_share_price(),
-                    state.flat_fee(),
                 )
             });
             match chain
