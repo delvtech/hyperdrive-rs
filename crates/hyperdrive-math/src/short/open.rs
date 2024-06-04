@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::{providers::maybe, types::I256};
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
@@ -10,8 +10,8 @@ impl State {
     ///
     /// For some number of bonds being shorted, $\Delta y$, the short deposit is made up of several components:
     /// - The short principal: $P_{\text{lp}}(\Delta y)$
-    /// - The curve fee: $\Phi_{c}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y
-    /// - The flat fee: $\Phi_{f}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )
+    /// - The curve fee: $\Phi_{c}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y$
+    /// - The flat fee: $\Phi_{f}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )$
     /// - The total value in shares that underlies the bonds: $\tfrac{c_1}{c_0 \cdot c} \Delta y$
     ///
     /// The short principal is given by:
@@ -21,21 +21,19 @@ impl State {
     ///   \cdot (\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}))^{\tfrac{1}{1 - t_s}}
     /// $$
     ///
-    /// The short proceeds is given by
+    /// The adjusted value in shares that underlies the bonds is given by:
     ///
     /// $$
-    /// P_{\text{short}}(\Delta y) = \tfrac{\Delta y \cdot c_{1}}{c_{0} \cdot c}
-    ///   + \tfrac{\Delta y}{c} \cdot \Phi_{f}(\Delta y)
+    /// P_\text{adj} = (\frac{c_1}{c_0 \cdot c} + \phi_f) \cdot \frac{\Delta y}{c}
     /// $$
     ///
     /// And finally the short deposit in base is:
     ///
     /// $$
-    ///     D(\Delta y)=
+    /// D(\Delta y) =
     /// \begin{cases}
-    ///     c \cdot \left( P_{\text{short}}(\Delta y) - P_{\text{lp}}(\Delta y)
-    ///       + \Phi_{c}(\Delta y) \right),
-    ///       & \text{if } P_{\text{short}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
+    ///     P_\text{adj} - P_{\text{lp}}(\Delta y) + \Phi_{c}(\Delta y)
+    ///       & \text{if } P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
     ///     0,              & \text{otherwise}
     /// \end{cases}
     /// $$
@@ -88,6 +86,10 @@ impl State {
             )));
         }
 
+        // We are assuming this is used when opening a short,
+        // so we only have to worry about adjustments due to checkpointing.
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+
         // Now we can calculate the proceeds in a way that adjusts for the backdated vault price.
         // $$
         // \text{base_proceeds} = (
@@ -100,7 +102,7 @@ impl State {
                 bond_amount,
                 share_reserves_delta - curve_fee,
                 open_vault_share_price,
-                self.vault_share_price().max(open_vault_share_price),
+                close_vault_share_price,
             )
             .mul_up(self.vault_share_price());
 
@@ -114,20 +116,23 @@ impl State {
     /// Using this, calculating $D'(\Delta y)$ is straightforward:
     ///
     /// $$
-    /// D'(\Delta y) = c \cdot (
-    ///   P^{\prime}_{\text{short}}(\Delta y)
-    ///   - P^{\prime}_{\text{lp}}(\Delta y)
-    ///   + \Phi^{\prime}_{c}(\Delta y)
-    /// )
+    /// D'(\Delta y) = \tfrac{c_{1}}{c_{0}} + \phi_{f}
+    /// - \left(
+    ///    \frac{\mu}{c} \cdot \left( k - (y + \Delta y)^{1 - t_s}
+    /// \right) \right)^{\frac{t_s}{1 - t_s}}
+    /// \cdot (y + \Delta y)^{-t_s}
+    /// + c \cdot \phi_{c} \cdot (1 - p_{0}) \\
     /// $$
     pub fn calculate_open_short_derivative(
         &self,
         bond_amount: FixedPoint,
-        spot_price: FixedPoint,
         open_vault_share_price: FixedPoint,
-        close_vault_share_price: FixedPoint,
-        vault_share_price: FixedPoint,
+        maybe_initial_spot_price: Option<FixedPoint>,
     ) -> Result<FixedPoint> {
+        // We are assuming this is used when opening a short,
+        // so we only have to worry about adjustments due to checkpointing.
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+
         // Short circuit the derivative if the forward function returns 0.
         if self.calculate_short_proceeds_up(
             bond_amount,
@@ -140,13 +145,19 @@ impl State {
             return Ok(fixed!(0));
         }
 
-        let curve_fee_derivative = self.curve_fee() * (fixed!(1e18) - spot_price);
+        let spot_price = match maybe_initial_spot_price {
+            Some(spot_price) => spot_price,
+            None => self.calculate_spot_price()?,
+        };
+        let short_adjustment_derivative =
+            close_vault_share_price / open_vault_share_price + self.flat_fee();
         let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount)?;
-        let short_proceeds_derivative =
-            self.calculate_short_proceeds_up_derivative(bond_amount, open_vault_share_price);
+        let curve_fee_derivative = self.curve_fee() * (fixed!(1e18) - spot_price);
 
-        Ok(vault_share_price
-            * (short_proceeds_derivative - short_principal_derivative + curve_fee_derivative))
+        Ok(
+            short_adjustment_derivative - self.vault_share_price() * short_principal_derivative
+                + self.vault_share_price() * curve_fee_derivative,
+        )
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -302,10 +313,10 @@ impl State {
     /// $$
     /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
     /// \implies \\
-    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu} \cdot (
-    ///   \tfrac{\mu}{c}
-    ///   \cdot (k - (y + \Delta y)^{1 - t_s})
-    /// )^{\tfrac{1}{1 - t_s}}
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
+    /// \cdot \left(
+    ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// \right)^{\tfrac{1}{1 - t_s}}
     /// $$
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
         self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
@@ -317,25 +328,31 @@ impl State {
     /// The derivative is calculated as:
     ///
     /// $$
-    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(
+    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s}
+    /// \cdot \left(
     ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-    ///   \right)^{\tfrac{t_s}{1 - t_s}}
+    /// \right)^{\tfrac{t_s}{1 - t_s}}
     /// $$
     pub fn calculate_short_principal_derivative(
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let lhs = fixed!(1e18)
-            / (self
-                .vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?));
-        let rhs = ((self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()?
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?))
-        .pow(
-            self.time_stretch()
-                .div_up(fixed!(1e18) - self.time_stretch()),
-        )?;
+        let lhs = fixed!(1e18).div_up(
+            self.vault_share_price()
+                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
+        );
+        let rhs = self
+            .initial_vault_share_price()
+            .div_up(self.vault_share_price())
+            .mul_up(
+                self.k_up()?
+                    - (self.bond_reserves() + bond_amount)
+                        .pow(fixed!(1e18) - self.time_stretch())?,
+            )
+            .pow(
+                self.time_stretch()
+                    .div_up(fixed!(1e18) - self.time_stretch()),
+            )?;
         Ok(lhs * rhs)
     }
 }
@@ -526,37 +543,39 @@ mod tests {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
-        let empirical_derivative_epsilon = fixed!(1e12);
-        // TODO pretty big comparison epsilon here
-        let test_comparison_epsilon = fixed!(1e16);
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_comparison_epsilon = fixed!(1e14);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
+            let bond_amount =
+                rng.gen_range(state.minimum_transaction_amount()..=fixed!(10_000_000e18));
 
-            let p1 = match state.calculate_short_principal(amount - empirical_derivative_epsilon) {
+            let f_x = match state.calculate_short_principal(bond_amount) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
+                Ok(result) => result,
                 Err(_) => continue,
             };
 
-            let p2 = match state.calculate_short_principal(amount + empirical_derivative_epsilon) {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
-                Err(_) => continue,
-            };
+            let f_x_plus_delta =
+                match state.calculate_short_principal(bond_amount + empirical_derivative_epsilon) {
+                    // If the amount results in the pool being insolvent, skip this iteration
+                    Ok(result) => result,
+                    Err(_) => continue,
+                };
+
             // Sanity check
-            assert!(p2 > p1);
+            assert!(f_x_plus_delta > f_x);
 
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let short_principal_derivative = state.calculate_short_principal_derivative(amount)?;
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
+            let short_principal_derivative =
+                state.calculate_short_principal_derivative(bond_amount)?;
 
-            let derivative_diff;
-            if short_principal_derivative >= empirical_derivative {
-                derivative_diff = short_principal_derivative - empirical_derivative;
+            let derivative_diff = if short_principal_derivative >= empirical_derivative {
+                short_principal_derivative - empirical_derivative
             } else {
-                derivative_diff = empirical_derivative - short_principal_derivative;
-            }
+                empirical_derivative - short_principal_derivative
+            };
             assert!(
                 derivative_diff < test_comparison_epsilon,
                 "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
@@ -579,62 +598,52 @@ mod tests {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
-        let empirical_derivative_epsilon = fixed!(1e12);
-        // TODO pretty big comparison epsilon here
-        let test_comparison_epsilon = fixed!(1e15);
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_comparison_epsilon = fixed!(1e14);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
+            let bond_amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1 = match panic::catch_unwind(|| {
-                state.calculate_open_short(
-                    amount - empirical_derivative_epsilon,
-                    state.vault_share_price(),
-                )
+            let f_x = match panic::catch_unwind(|| {
+                state.calculate_open_short(bond_amount, state.vault_share_price())
             }) {
-                Ok(p) => match p {
-                    Ok(p) => p,
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
                 Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
-            let p2 = match panic::catch_unwind(|| {
+            let f_x_plus_delta = match panic::catch_unwind(|| {
                 state.calculate_open_short(
-                    amount + empirical_derivative_epsilon,
+                    bond_amount + empirical_derivative_epsilon,
                     state.vault_share_price(),
                 )
             }) {
                 // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => match p {
-                    Ok(p) => p,
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
                 Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
             // Sanity check
-            assert!(p2 > p1);
+            assert!(f_x_plus_delta > f_x);
 
             // Compute the derivative.
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
 
             // Setting open, close, and current vault share price to be equal assumes 0% variable yield.
-            let short_deposit_derivative = state.calculate_open_short_derivative(
-                amount,
-                state.calculate_spot_price()?,
-                state.vault_share_price(),
-                state.vault_share_price(),
-                state.vault_share_price(),
-            )?;
+            let short_deposit_derivative =
+                state.short_deposit_derivative(bond_amount, state.vault_share_price(), None)?;
 
-            let derivative_diff;
-            if short_deposit_derivative >= empirical_derivative {
-                derivative_diff = short_deposit_derivative - empirical_derivative;
+            let derivative_diff = if short_deposit_derivative >= empirical_derivative {
+                short_deposit_derivative - empirical_derivative
             } else {
-                derivative_diff = empirical_derivative - short_deposit_derivative;
-            }
+                empirical_derivative - short_deposit_derivative
+            };
             assert!(
                 derivative_diff < test_comparison_epsilon,
                 "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
@@ -775,7 +784,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_calculate_implied_rate() -> Result<()> {
+    async fn fuzz_calculate_implied_rate() -> Result<()> {
         let tolerance = int256!(1e15);
 
         // Spawn a test chain with two agents.
