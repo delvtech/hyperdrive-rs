@@ -63,7 +63,7 @@ impl State {
     /// short's proceeds in base is given by:
     ///
     /// $$
-    /// proceeds = (\frac{c1}{c_0 \cdot c}
+    /// proceeds = (\frac{c1}{c_0}
     /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
     /// - dz
     /// $$
@@ -107,22 +107,6 @@ impl State {
         } else {
             fixed!(0)
         }
-    }
-
-    /// Returns the derivative of the short proceeds calculation, assuming that the interest is
-    /// less negative than the trading profits and margin released.
-    ///
-    /// $$
-    /// P^{\prime}_{\text{short}}(\Delta y) = \tfrac{c_{1}}{c_{0} \cdot c}
-    /// + \tfrac{\phi_{f}}{c}
-    /// $$
-    pub fn calculate_short_proceeds_up_derivative(
-        &self,
-        open_vault_share_price: FixedPoint,
-        close_vault_share_price: FixedPoint,
-    ) -> FixedPoint {
-        close_vault_share_price.div_up(open_vault_share_price.mul_up(self.vault_share_price()))
-            + self.flat_fee().div_up(self.vault_share_price())
     }
 
     /// Calculates the proceeds in shares of closing a short position. This
@@ -313,73 +297,6 @@ mod tests {
                 Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
                 Err(_) => assert!(actual.is_err()),
             }
-        }
-
-        Ok(())
-    }
-
-    /// This test empirically tests `calculate_short_proceeds_up_derivative` by
-    /// calling `calculate_short_proceeds_up` at two points and comparing the
-    /// empirical result with the output of `short_proceeds_up_derivative`.
-    #[tokio::test]
-    async fn test_calculate_short_proceeds_up_derivative() -> Result<()> {
-        let empirical_derivative_epsilon = fixed!(1e8);
-        let test_comparison_epsilon = fixed!(1e11);
-
-        // Fuzz the Rust and Solidity implementations against each other.
-        let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
-            let bond_amount =
-                rng.gen_range(state.minimum_transaction_amount()..=state.bond_reserves());
-            let share_amount = rng.gen_range(fixed!(0)..=bond_amount);
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-
-            let p1 = state.calculate_short_proceeds_up(
-                bond_amount - empirical_derivative_epsilon,
-                share_amount,
-                open_vault_share_price,
-                state.vault_share_price(),
-            );
-            let p2 = state.calculate_short_proceeds_up(
-                bond_amount + empirical_derivative_epsilon,
-                share_amount,
-                open_vault_share_price,
-                state.vault_share_price(),
-            );
-
-            // If the share amount is sufficiently large, then the fn shortcuts to return 0.
-            // Due to the epsilon, it's possible that p1 returns zero but p2 does not.
-            // If one or both returns zero this test would not be expected to work.
-            if p1 == fixed!(0) {
-                continue;
-            }
-
-            // Sanity check
-            assert!(p2 > p1);
-
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-
-            let short_proceeds_derivative = state.calculate_short_proceeds_up_derivative(
-                open_vault_share_price,
-                state.vault_share_price(),
-            );
-
-            // Compare the empirical result against the calculated result.
-            let derivative_diff = if short_proceeds_derivative >= empirical_derivative {
-                short_proceeds_derivative - empirical_derivative
-            } else {
-                empirical_derivative - short_proceeds_derivative
-            };
-            assert!(
-                derivative_diff < test_comparison_epsilon,
-                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
-                calculated_derivative={}, emperical_derivative={}",
-                derivative_diff,
-                test_comparison_epsilon,
-                short_proceeds_derivative,
-                empirical_derivative
-            );
         }
 
         Ok(())
