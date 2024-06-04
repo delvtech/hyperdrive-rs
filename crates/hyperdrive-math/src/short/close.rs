@@ -59,19 +59,28 @@ impl State {
     /// Calculates the proceeds in shares of closing a short position. This
     /// takes into account the trading profits, the interest that was
     /// earned by the short, the flat fee the short pays, and the amount of
-    /// margin that was released by closing the short. The math for the
-    /// short's proceeds in base is given by:
+    /// margin that was released by closing the short. The adjusted value in
+    /// shares that underlies the bonds is given by:
     ///
     /// $$
-    /// proceeds = (\frac{c1}{c_0}
+    /// P_\text{adj} = (\frac{c1}{c_0 \cdot c}
     /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
-    /// - dz
     /// $$
     ///
-    /// We convert the proceeds to shares by dividing by the current vault
-    /// share price. In the event that the interest is negative and
-    /// outweighs the trading profits and margin released, the short's
-    /// proceeds are marked to zero.
+    /// and the short proceeds are given by:
+    ///
+    /// $$
+    /// proceeds =
+    /// \begin{cases}
+    ///     P_\text{adj} - dz
+    ///       & \text{if } P_{\text{adj}} > dz \\
+    ///     0,              & \text{otherwise}
+    /// \end{cases}
+    /// $$
+    ///
+    /// where $dz$ is the pool share adjustment. In the event that the interest
+    /// is negative and outweighs the trading profits and margin released,
+    /// the short's proceeds are marked to zero.
     pub fn calculate_short_proceeds_up(
         &self,
         bond_amount: FixedPoint,
@@ -112,19 +121,28 @@ impl State {
     /// Calculates the proceeds in shares of closing a short position. This
     /// takes into account the trading profits, the interest that was
     /// earned by the short, the flat fee the short pays, and the amount of
-    /// margin that was released by closing the short. The math for the
-    /// short's proceeds in base is given by:
+    /// margin that was released by closing the short. The adjusted value in
+    /// shares that underlies the bonds is given by:
     ///
     /// $$
-    /// proceeds = (\frac{c1}{c_0 \cdot c}
+    /// P_\text{adj} = (\frac{c1}{c_0 \cdot c}
     /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
-    /// - dz
     /// $$
     ///
-    /// We convert the proceeds to shares by dividing by the current vault
-    /// share price. In the event that the interest is negative and
-    /// outweighs the trading profits and margin released, the short's
-    /// proceeds are marked to zero.
+    /// and the short proceeds are given by:
+    ///
+    /// $$
+    /// proceeds =
+    /// \begin{cases}
+    ///     P_\text{adj} - dz
+    ///       & \text{if } P_{\text{adj}} > dz \\
+    ///     0,              & \text{otherwise}
+    /// \end{cases}
+    /// $$
+    ///
+    /// where $dz$ is the pool share adjustment. In the event that the interest
+    /// is negative and outweighs the trading profits and margin released,
+    /// the short's proceeds are marked to zero.
     fn calculate_short_proceeds_down(
         &self,
         bond_amount: FixedPoint,
