@@ -24,7 +24,7 @@ impl State {
     /// The adjusted value in shares that underlies the bonds is given by:
     ///
     /// $$
-    /// P_\text{adj} = (\frac{c_1}{c_0 \cdot c} + \phi_f) \cdot \frac{\Delta y}{c}
+    /// P_\text{adj} = (\frac{c_1}{c_0} + \phi_f) \cdot \frac{\Delta y}{c}
     /// $$
     ///
     /// And finally the short deposit in base is:
@@ -34,7 +34,7 @@ impl State {
     /// \begin{cases}
     ///     P_\text{adj} - P_{\text{lp}}(\Delta y) + \Phi_{c}(\Delta y)
     ///       & \text{if } P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
-    ///     0,              & \text{otherwise}
+    ///     0, & \text{otherwise}
     /// \end{cases}
     /// $$
     pub fn calculate_open_short(
@@ -113,15 +113,29 @@ impl State {
     /// short amount. This allows us to use Newton's method to approximate the
     /// maximum short that a trader can open.
     ///
-    /// Using this, calculating $D'(\Delta y)$ is straightforward:
+    /// The curve fee dervative is
     ///
     /// $$
-    /// D'(\Delta y) = \tfrac{c_{1}}{c_{0}} + \phi_{f}
-    /// - \left(
-    ///    \frac{\mu}{c} \cdot \left( k - (y + \Delta y)^{1 - t_s}
-    /// \right) \right)^{\frac{t_s}{1 - t_s}}
-    /// \cdot (y + \Delta y)^{-t_s}
-    /// + c \cdot \phi_{c} \cdot (1 - p_{0}) \\
+    /// \Phi^{\prime}_{\text{c}}(\Delta y) = \phi_{c} \cdot (1 - p_0)
+    /// $$
+    ///
+    /// where $p_0$ is the opening (or initial) spot price.
+    ///
+    /// The share adjustment derivative is a constant:
+    ///
+    /// $$
+    /// P^{\prime}_{\text{adj}}(\Delta y) = \tfrac{c_{1}}{c_{0} \cdot c} + \tfrac{\phi_{f}}{c}
+    /// $$
+    ///
+    /// Using these, we can calculate $D^{\prime}(\Delta y)$:
+    ///
+    /// $$
+    /// D^{\prime}(\Delta y) =
+    ///\begin{cases}
+    ///    c \cdot \left( P^{\prime}_{\text{adj}}(\Delta y) - P^{\prime}_{\text{lp}}(\Delta y) + \Phi^{\prime}_{c}(\Delta y) \right),
+    ///    & \text{if } P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
+    ///    0, & \text{otherwise}
+    ///\end{cases}
     /// $$
     pub fn calculate_open_short_derivative(
         &self,
@@ -544,7 +558,7 @@ mod tests {
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e14);
-        let test_comparison_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -577,11 +591,11 @@ mod tests {
                 empirical_derivative - short_principal_derivative
             };
             assert!(
-                derivative_diff < test_comparison_epsilon,
-                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                derivative_diff < test_tolerance,
+                "expected (derivative_diff={}) < (test_tolerance={}), \
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
-                test_comparison_epsilon,
+                test_tolerance,
                 short_principal_derivative,
                 empirical_derivative
             );
@@ -599,7 +613,7 @@ mod tests {
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e14);
-        let test_comparison_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -648,11 +662,11 @@ mod tests {
                 empirical_derivative - short_deposit_derivative
             };
             assert!(
-                derivative_diff < test_comparison_epsilon,
-                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                derivative_diff < test_tolerance,
+                "expected (derivative_diff={}) < (test_tolerance={}), \
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
-                test_comparison_epsilon,
+                test_tolerance,
                 short_deposit_derivative,
                 empirical_derivative
             );
