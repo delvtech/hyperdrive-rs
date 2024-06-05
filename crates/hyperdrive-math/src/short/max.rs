@@ -173,7 +173,7 @@ impl State {
             }
 
             // Iteratively update max_bond_amount via newton's method.
-            let derivative = self.short_deposit_derivative(
+            let derivative = self.calculate_open_short_derivative(
                 max_bond_amount,
                 open_vault_share_price,
                 Some(spot_price),

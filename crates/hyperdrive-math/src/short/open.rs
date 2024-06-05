@@ -1,4 +1,4 @@
-use ethers::{providers::maybe, types::I256};
+use ethers::types::I256;
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
@@ -160,6 +160,58 @@ impl State {
         )
     }
 
+    /// Calculates the amount of short principal that the LPs need to pay to back a
+    /// short before fees are taken into consideration, $P(\Delta y)$.
+    ///
+    /// Let the LP principal that backs $\Delta y$ shorts be given by $P(\Delta y)$. We can
+    /// solve for this in terms of $\Delta y$ using the YieldSpace invariant:
+    ///
+    /// $$
+    /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
+    /// \implies \\
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
+    /// \cdot \left(
+    ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// \right)^{\tfrac{1}{1 - t_s}}
+    /// $$
+    pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
+        self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
+    }
+
+    /// Calculates the derivative of the short principal $P_{\text{lp}}(\Delta y)$
+    /// w.r.t. the amount of bonds that are shorted $\Delta y$.
+    ///
+    /// The derivative is calculated as:
+    ///
+    /// $$
+    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s}
+    /// \cdot \left(
+    ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// \right)^{\tfrac{t_s}{1 - t_s}}
+    /// $$
+    pub fn calculate_short_principal_derivative(
+        &self,
+        bond_amount: FixedPoint,
+    ) -> Result<FixedPoint> {
+        let lhs = fixed!(1e18).div_up(
+            self.vault_share_price()
+                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
+        );
+        let rhs = self
+            .initial_vault_share_price()
+            .div_up(self.vault_share_price())
+            .mul_up(
+                self.k_up()?
+                    - (self.bond_reserves() + bond_amount)
+                        .pow(fixed!(1e18) - self.time_stretch())?,
+            )
+            .pow(
+                self.time_stretch()
+                    .div_up(fixed!(1e18) - self.time_stretch()),
+            )?;
+        Ok(lhs * rhs)
+    }
+
     /// Calculate an updated pool state after opening a short.
     ///
     /// For a given bond amount and share amount,
@@ -302,58 +354,6 @@ impl State {
                 (base_paid - base_proceeds) / (base_paid * self.annualized_position_duration()),
             )?)
         }
-    }
-
-    /// Calculates the amount of short principal that the LPs need to pay to back a
-    /// short before fees are taken into consideration, $P(\Delta y)$.
-    ///
-    /// Let the LP principal that backs $\Delta y$ shorts be given by $P(\Delta y)$. We can
-    /// solve for this in terms of $\Delta y$ using the YieldSpace invariant:
-    ///
-    /// $$
-    /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
-    /// \implies \\
-    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
-    /// \cdot \left(
-    ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-    /// \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
-    pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
-        self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
-    }
-
-    /// Calculates the derivative of the short principal $P_{\text{lp}}(\Delta y)$
-    /// w.r.t. the amount of bonds that are shorted $\Delta y$.
-    ///
-    /// The derivative is calculated as:
-    ///
-    /// $$
-    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s}
-    /// \cdot \left(
-    ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-    /// \right)^{\tfrac{t_s}{1 - t_s}}
-    /// $$
-    pub fn calculate_short_principal_derivative(
-        &self,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
-        let lhs = fixed!(1e18).div_up(
-            self.vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
-        );
-        let rhs = self
-            .initial_vault_share_price()
-            .div_up(self.vault_share_price())
-            .mul_up(
-                self.k_up()?
-                    - (self.bond_reserves() + bond_amount)
-                        .pow(fixed!(1e18) - self.time_stretch())?,
-            )
-            .pow(
-                self.time_stretch()
-                    .div_up(fixed!(1e18) - self.time_stretch()),
-            )?;
-        Ok(lhs * rhs)
     }
 }
 
@@ -636,8 +636,11 @@ mod tests {
             let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
 
             // Setting open, close, and current vault share price to be equal assumes 0% variable yield.
-            let short_deposit_derivative =
-                state.short_deposit_derivative(bond_amount, state.vault_share_price(), None)?;
+            let short_deposit_derivative = state.calculate_open_short_derivative(
+                bond_amount,
+                state.vault_share_price(),
+                None,
+            )?;
 
             let derivative_diff = if short_deposit_derivative >= empirical_derivative {
                 short_deposit_derivative - empirical_derivative
