@@ -962,8 +962,6 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_calc_open_short() -> Result<()> {
-        let tolerance = fixed!(1e9);
-
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
@@ -1003,17 +1001,10 @@ mod tests {
                 let max_short = fixed!(1e26); // 100M max bonds
 
                 // Minimum transaction amount is without units; it's a global min across all transaction types.
-                let min_txn = FixedPoint::from(state.config.minimum_transaction_amount);
-                let bond_amount;
-                if max_short < min_txn {
-                    continue;
-                } else if max_short == min_txn {
-                    bond_amount = min_txn;
-                } else {
-                    bond_amount = rng.gen_range(
-                        FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
-                    );
-                }
+                let bond_amount = rng.gen_range(
+                    FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
+                );
+
                 // Compare the open short call output against calculate_open_short.
                 let actual_base_amount =
                     state.calculate_open_short(bond_amount, open_vault_share_price.into());
@@ -1034,17 +1025,9 @@ mod tests {
                     .await
                 {
                     Ok((_, expected_base_amount)) => {
-                        let actual = actual_base_amount.unwrap();
-                        let error = if actual >= expected_base_amount.into() {
-                            actual - FixedPoint::from(expected_base_amount)
-                        } else {
-                            FixedPoint::from(expected_base_amount) - actual
-                        };
-                        assert!(
-                            error <= tolerance,
-                            "error {} exceeds tolerance of {}",
-                            error,
-                            tolerance
+                        assert_eq!(
+                            actual_base_amount.unwrap(),
+                            FixedPoint::from(expected_base_amount)
                         );
                     }
                     Err(_) => assert!(actual_base_amount.is_err()),
