@@ -13,8 +13,11 @@ impl State {
         active_lp_total_supply: FixedPoint,
         withdrawal_shares_total_supply: FixedPoint,
         lp_shares: FixedPoint,
+        total_vault_shares: FixedPoint,
+        total_vault_assets: FixedPoint,
         min_output_per_share: FixedPoint,
         minimum_transaction_amount: FixedPoint,
+        as_base: bool,
     ) -> Result<(FixedPoint, FixedPoint)> {
         // Ensure that the amount of LP shares to remove is greater than or
         // equal to the minimum transaction amount.
@@ -40,7 +43,10 @@ impl State {
             withdrawal_shares_total_supply,
             lp_shares,
             vault_share_price,
+            total_vault_shares,
+            total_vault_assets,
             min_output_per_share,
+            as_base,
         )?;
         let withdrawal_shares = lp_shares - withdrawal_shares_redeemed;
 
@@ -58,7 +64,10 @@ impl State {
         withdrawal_shares_total_supply: FixedPoint,
         withdrawal_shares: FixedPoint,
         vault_share_price: FixedPoint,
+        total_supply: FixedPoint,
+        total_assets: FixedPoint,
         min_output_per_share: FixedPoint,
+        as_base: bool,
     ) -> Result<(FixedPoint, FixedPoint)> {
         // Distribute the excess idle to the withdrawal pool. If the distribute
         // excess idle calculation fails, we proceed with the calculation since
@@ -92,11 +101,18 @@ impl State {
         // NOTE: Round down to underestimate the share proceeds.
         //
         // The LP gets the pro-rata amount of the collected proceeds.
+        let vault_share_price = self.vault_share_price();
         let share_proceeds =
             withdrawal_shares_redeemed.mul_div_down(withdrawal_share_proceeds, ready_to_withdraw);
 
         // Withdraw the share proceeds to the user
-        let proceeds = self.withdraw(share_proceeds, vault_share_price)?;
+        let proceeds = self.withdraw(
+            share_proceeds,
+            vault_share_price,
+            total_supply,
+            total_assets,
+            as_base,
+        )?;
 
         // NOTE: Round up to make the check more conservative.
         //
@@ -160,13 +176,39 @@ impl State {
 
     fn withdraw(
         &self,
-        share_proceeds: FixedPoint,
-        _vault_share_price: FixedPoint, // unused until we add base support.
+        shares: FixedPoint,
+        vault_share_price: FixedPoint,
+        total_shares: FixedPoint,
+        total_assets: FixedPoint,
+        as_base: bool,
     ) -> Result<FixedPoint> {
         // Withdraw logic here, returning the amount withdrawn
-        // For simplicity, we assume it returns share_proceeds directly for
-        // now.  We can add options for base later.
-        Ok(share_proceeds)
+        let base_amount = shares.mul_down(vault_share_price);
+        let shares = self.convert_to_shares(base_amount, total_shares, total_assets)?;
+
+        if as_base {
+            let amount_withdrawn = self.convert_to_assets(shares, total_shares, total_assets)?;
+            return Ok(amount_withdrawn);
+        }
+        Ok(shares)
+    }
+
+    fn convert_to_shares(
+        &self,
+        base_amount: FixedPoint,
+        total_supply: FixedPoint,
+        total_assets: FixedPoint,
+    ) -> Result<FixedPoint> {
+        Ok(base_amount.mul_div_down(total_supply, total_assets))
+    }
+
+    fn convert_to_assets(
+        &self,
+        share_amount: FixedPoint,
+        total_supply: FixedPoint,
+        total_assets: FixedPoint,
+    ) -> Result<FixedPoint> {
+        Ok(share_amount.mul_div_down(total_assets, total_supply))
     }
 }
 
@@ -176,6 +218,7 @@ mod tests {
 
     use fixed_point::uint256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+    use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng};
 
     use super::*;
@@ -209,6 +252,7 @@ mod tests {
                 .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
                 .await?;
             let rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
+            let timestamp = alice.now().await?;
             alice
                 .advance_time(
                     rate,
@@ -219,15 +263,26 @@ mod tests {
             // Bob adds liquidity
             bob.add_liquidity(budget, None).await?;
 
+            // Get total supply and total assets for the next block to make
+            // sure rust has the same values as the solidity does.
+            let timestamp = alice.now().await?;
+            let total_supply: FixedPoint = bob.vault().total_supply().call().await?.into();
+            let total_assets: FixedPoint = bob
+                .vault()
+                .total_assets_with_timestamp(timestamp + uint256!(1))
+                .call()
+                .await?
+                .into();
+
             // Get the State from solidity before removing liquidity.
             let hd_state = bob.get_state().await?;
-            let state = State {
+            let mut state = State {
                 config: hd_state.config.clone(),
                 info: hd_state.info.clone(),
             };
 
             // active_lp_total_supply and withdrawal_shares_total_supply are
-            // just the token supplies.  Get the from the contract.
+            // just the token supplies.  Get them from the contract.
             let lp_token_asset_id = U256::zero();
             let active_lp_total_supply: FixedPoint = bob
                 .hyperdrive()
@@ -241,10 +296,6 @@ mod tests {
                 .await?
                 .into();
 
-            // Recod bob's shares and withdrawal shares before removing liquidity.
-            let starting_base = bob.wallet.base;
-            let starting_withdrawal_shares = bob.wallet.withdrawal_shares;
-
             // Get the amount to remove, hit the budget 1% of the time to test
             // that case but don't remove more than is possible.
             let remove_budget = min(
@@ -256,15 +307,23 @@ mod tests {
                 remove_budget,
             );
 
-            // Bob removes liquidity
-            let tx_result = bob.remove_liquidity(remove_budget, None).await;
+            // Bob removes liquidity.
+            let as_base = true;
+            let options = Options {
+                destination: bob.client().address(),
+                as_base,
+                extra_data: [].into(),
+            };
+            let tx_result = bob
+                .remove_liquidity(remove_budget, Some(options), None)
+                .await;
 
-            // Recod bob's base and withdrawal shares after removing liquidity.
-            let ending_base = bob.wallet.base;
-            let ending_withdrawal_shares = bob.wallet.withdrawal_shares;
+            // Get values for the block at which solidity code ran.
+            let current_block_timestamp = bob.now().await?;
+            let vault_share_price = bob.get_state().await?.info.vault_share_price;
+            state.info.vault_share_price = vault_share_price;
 
             // Calculate shares and withdrawal shares from the rust function.
-            let current_block_timestamp = bob.now().await?;
             let result = std::panic::catch_unwind(|| {
                 state
                     .calculate_remove_liquidity(
@@ -272,31 +331,24 @@ mod tests {
                         active_lp_total_supply,
                         withdrawal_shares_total_supply,
                         remove_budget,
+                        total_supply,
+                        total_assets,
                         fixed!(0),
                         fixed!(1),
+                        as_base,
                     )
                     .unwrap()
             });
 
             match result {
-                Ok((shares, withdrawal_shares)) => {
-                    // Assert base redeemed results match between rust and solidity
-                    // within a tolerance.
-                    let sol_base_result = I256::try_from(ending_base - starting_base)?;
-                    let vault_share_price = state.vault_share_price();
-                    let rust_base_reesult = I256::try_from(shares * vault_share_price)?;
-                    let base_diff =
-                        FixedPoint::try_from((sol_base_result - rust_base_reesult).abs())? / shares;
-                    assert!(base_diff < fixed!(0.0000001e18));
+                Ok((rust_amount, rust_withdrawal_shares)) => {
+                    let (sol_amount, sol_withdrawal_shares) = tx_result?;
+                    // Assert amounts redeemed match between rust and solidity.
+                    assert!(rust_amount == sol_amount.into());
 
                     // Assert withdrawal shares results match between rust and
-                    // solidity within a tolerance.
-                    let sol_ws_result =
-                        I256::try_from(ending_withdrawal_shares - starting_withdrawal_shares)?;
-                    let rust_ws_result = I256::try_from(withdrawal_shares)?;
-                    let withdrawal_shares_diff =
-                        FixedPoint::try_from((sol_ws_result - rust_ws_result).abs())? / shares;
-                    assert!(withdrawal_shares_diff < fixed!(0.0000001e18));
+                    // solidity
+                    assert!(rust_withdrawal_shares == sol_withdrawal_shares.into());
                 }
                 Err(_) => assert!(tx_result.is_err()),
             }
