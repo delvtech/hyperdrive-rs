@@ -502,6 +502,7 @@ mod tests {
 
     use super::*;
     use crate::{uint256, FixedPoint};
+
     #[test]
     fn test_fixed_macro() {
         // simple cases
