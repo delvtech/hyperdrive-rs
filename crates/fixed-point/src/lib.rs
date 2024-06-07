@@ -1,3 +1,5 @@
+pub mod utils;
+
 use std::{
     fmt,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Shr, Sub, SubAssign},
@@ -12,7 +14,6 @@ use rand::{
     },
     Rng,
 };
-mod macros;
 
 /// A fixed point wrapper around the `U256` type from ethers-rs.
 ///
@@ -21,6 +22,13 @@ mod macros;
 /// ensure that the behavior is identical.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct FixedPoint(U256);
+
+#[macro_export]
+macro_rules! fixed {
+    ($number:expr) => {{
+        $crate::FixedPoint::from($crate::uint256!($number))
+    }};
+}
 
 impl Default for FixedPoint {
     fn default() -> FixedPoint {
@@ -493,7 +501,33 @@ mod tests {
     use test_utils::{chain::Chain, constants::DEPLOYER};
 
     use super::*;
-    use crate::uint256;
+    use crate::{uint256, FixedPoint};
+    #[test]
+    fn test_fixed_macro() {
+        // simple cases
+        assert_eq!(fixed!(1), FixedPoint::from(1));
+        assert_eq!(fixed!(1_000), FixedPoint::from(1_000));
+        assert_eq!(fixed!(5_500_000_000), FixedPoint::from(5_500_000_000_u128));
+
+        // scientific notation
+        assert_eq!(fixed!(1e0), FixedPoint::from(1));
+        assert_eq!(fixed!(1e3), FixedPoint::from(1_000));
+        assert_eq!(
+            fixed!(50_000e18),
+            FixedPoint::from(U256::from(50_000) * U256::from(10).pow(18.into()))
+        );
+
+        // decimal notation
+        assert_eq!(fixed!(1.0e1), FixedPoint::from(10));
+        assert_eq!(
+            fixed!(1.1e18),
+            FixedPoint::from(U256::from(11) * U256::from(10).pow(17.into())),
+        );
+        assert_eq!(
+            fixed!(333_333.555_555e18),
+            FixedPoint::from(U256::from(333_333_555_555_u128) * U256::from(10).pow(12.into()))
+        );
+    }
 
     #[test]
     fn test_fixed_point_fmt() {
