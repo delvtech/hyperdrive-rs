@@ -501,7 +501,7 @@ mod tests {
     use test_utils::{chain::Chain, constants::DEPLOYER};
 
     use super::*;
-    use crate::{uint256, FixedPoint};
+    use crate::uint256;
 
     #[test]
     fn test_fixed_macro() {
