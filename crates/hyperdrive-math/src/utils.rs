@@ -145,10 +145,12 @@ pub fn calculate_rate_given_fixed_price(
 ///
 /// where $t$ is the holding period, in units of years. For example, if the
 /// holding period is 6 months, then $t=0.5$.
-pub fn calculate_hpr_given_apr(apr: FixedPoint, position_duration: FixedPoint) -> FixedPoint {
+pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
-    apr * holding_period_in_years
+    let (sign, apr_abs) = apr.into_sign_and_abs();
+    let hpr = FixedPoint::from(apr_abs) * holding_period_in_years;
+    Ok(I256::checked_from_sign_and_abs(sign, hpr.into()).unwrap())
 }
 
 /// Calculate the holding period return (HPR) given a compounding, annualized rate (APY).
@@ -161,13 +163,13 @@ pub fn calculate_hpr_given_apr(apr: FixedPoint, position_duration: FixedPoint) -
 ///
 /// where $t$ is the holding period, in units of years. For example, if the
 /// holding period is 6 months, then $t=0.5$.
-pub fn calculate_hpr_given_apy(
-    apy: FixedPoint,
-    position_duration: FixedPoint,
-) -> Result<FixedPoint> {
+pub fn calculate_hpr_given_apy(apy: I256, position_duration: FixedPoint) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
-    Ok((fixed!(1e18) + apy).pow(holding_period_in_years)? - fixed!(1e18))
+    let (sign, apy_abs) = apy.into_sign_and_abs();
+    let hpr =
+        (fixed!(1e18) + FixedPoint::from(apy_abs)).pow(holding_period_in_years)? - fixed!(1e18);
+    Ok(I256::checked_from_sign_and_abs(sign, hpr.into()).unwrap())
 }
 
 #[cfg(test)]
