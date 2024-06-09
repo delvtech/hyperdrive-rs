@@ -2,7 +2,7 @@ use ethers::types::I256;
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
-use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
+use crate::{calculate_rate_given_fixed_price, short::open, State, YieldSpace};
 
 impl State {
     /// Calculates the amount of base the trader will need to deposit for a short of
@@ -40,7 +40,7 @@ impl State {
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,
-        mut open_vault_share_price: FixedPoint,
+        open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
         let min_transaction_amount = FixedPoint::from(self.config.minimum_transaction_amount);
         if bond_amount < min_transaction_amount {
@@ -53,9 +53,11 @@ impl State {
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
         // in the next transaction.
-        if open_vault_share_price == fixed!(0) {
-            open_vault_share_price = self.vault_share_price();
-        }
+        let open_vault_share_price = if open_vault_share_price == fixed!(0) {
+            self.vault_share_price()
+        } else {
+            open_vault_share_price
+        };
 
         let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
         // If the base proceeds of selling the bonds is greater than the bond
@@ -175,9 +177,9 @@ impl State {
     }
 
     /// Calculates the amount of short principal that the LPs need to pay to back a
-    /// short before fees are taken into consideration, $P(\Delta y)$.
+    /// short before fees are taken into consideration, $P_\text{lp}(\Delta y)$.
     ///
-    /// Let the LP principal that backs $\Delta y$ shorts be given by $P(\Delta y)$. We can
+    /// Let the LP principal that backs $\Delta y$ shorts be given by $P_{\text{lp}}(\Delta y)$. We can
     /// solve for this in terms of $\Delta y$ using the YieldSpace invariant:
     ///
     /// $$
@@ -257,7 +259,7 @@ impl State {
         let gov_curve_fee = self
             .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
             .div_up(self.vault_share_price());
-        let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
+        let short_principal = self.calculate_short_principal(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
