@@ -920,6 +920,7 @@ impl TestnetDeploy for Chain {
         base.transfer_ownership(config.admin).send().await?;
         vault.transfer_ownership(config.admin).send().await?;
         lido.transfer_ownership(config.admin).send().await?;
+        factory.update_governance(config.admin).send().await?;
 
         Ok(Addresses {
             base_token: base.address(),
