@@ -290,7 +290,6 @@ impl TestnetDeploy for Chain {
     async fn test_deploy<S: Signer + 'static>(&self, signer: S) -> Result<Addresses> {
         // Create a client using the signer.
         let client = self.client(signer).await?;
-        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -348,7 +347,7 @@ impl TestnetDeploy for Chain {
                 governance_zombie: uint256!(0.15e18),
             },
         };
-
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
         let target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
             (config.clone(),),
@@ -415,8 +414,6 @@ impl TestnetDeploy for Chain {
         // Set up a client.
         let address = signer.address();
         let client = self.client(signer).await?;
-
-        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
 
         // Deploy the base token and vault.
         let base = ERC20Mintable::deploy(
@@ -544,6 +541,7 @@ impl TestnetDeploy for Chain {
         };
 
         // Deploy the ERC4626Hyperdrive deployers and add them to the factory.
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
         let erc4626_deployer_coordinator = {
             let core_deployer = ERC4626HyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
@@ -898,18 +896,21 @@ impl TestnetDeploy for Chain {
             logs[0].clone().hyperdrive
         };
 
-        // Add the 4626 Hyperdrive instance and the Lido Hyperdrive instance
-        // to the registry contract.
+        // Add the Hyperdrive factory instance to the registry contract.
         hyperdrive_registry
-            .set_hyperdrive_info(erc4626_hyperdrive, uint256!(1))
+            .set_factory_info(vec![factory.address()], vec![1])
             .send()
             .await?;
         hyperdrive_registry
-            .set_hyperdrive_info(steth_hyperdrive, uint256!(1))
+            .set_instance_info(
+                vec![erc4626_hyperdrive, steth_hyperdrive],
+                vec![1, 1],
+                vec![factory.address(), factory.address()],
+            )
             .send()
             .await?;
         hyperdrive_registry
-            .update_governance(config.admin)
+            .update_admin(config.admin)
             .send()
             .await?;
 
@@ -1033,15 +1034,15 @@ mod tests {
         // Verify that the registry data has been set for each Hyperdrive contract.
         let registry = HyperdriveRegistry::new(addresses.hyperdrive_registry, client.clone());
         let registry_data_4626 = registry
-            .get_hyperdrive_info(addresses.erc4626_hyperdrive)
+            .get_instance_info(vec![addresses.erc4626_hyperdrive])
             .call()
             .await?;
-        assert_ne!(registry_data_4626, uint256!(0));
+        assert_ne!(registry_data_4626[0].data, uint256!(0));
         let registry_data_steth = registry
-            .get_hyperdrive_info(addresses.steth_hyperdrive)
+            .get_instance_info(vec![addresses.steth_hyperdrive])
             .call()
             .await?;
-        assert_ne!(registry_data_steth, uint256!(0));
+        assert_ne!(registry_data_steth[0].data, uint256!(0));
 
         Ok(())
     }
@@ -1146,15 +1147,15 @@ mod tests {
         // Verify that the registry data has been set for each Hyperdrive contract.
         let registry = HyperdriveRegistry::new(addresses.hyperdrive_registry, client.clone());
         let registry_data_4626 = registry
-            .get_hyperdrive_info(addresses.erc4626_hyperdrive)
+            .get_instance_info(vec![addresses.erc4626_hyperdrive])
             .call()
             .await?;
-        assert_ne!(registry_data_4626, uint256!(0));
+        assert_ne!(registry_data_4626[0].data, uint256!(0));
         let registry_data_steth = registry
-            .get_hyperdrive_info(addresses.steth_hyperdrive)
+            .get_instance_info(vec![addresses.steth_hyperdrive])
             .call()
             .await?;
-        assert_ne!(registry_data_steth, uint256!(0));
+        assert_ne!(registry_data_steth[0].data, uint256!(0));
 
         Ok(())
     }

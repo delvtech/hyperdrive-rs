@@ -310,7 +310,7 @@ async fn testnet_deployment(
         .send()
         .await?;
     hyperdrive_registry
-        .update_governance(admin_address)
+        .update_admin(admin_address)
         .send()
         .await?;
 
