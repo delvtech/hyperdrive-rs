@@ -347,7 +347,6 @@ impl TestnetDeploy for Chain {
                 governance_zombie: uint256!(0.15e18),
             },
         };
-
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
         let target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
@@ -541,9 +540,8 @@ impl TestnetDeploy for Chain {
             .await?
         };
 
-        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
-
         // Deploy the ERC4626Hyperdrive deployers and add them to the factory.
+        let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
         let erc4626_deployer_coordinator = {
             let core_deployer = ERC4626HyperdriveCoreDeployer::deploy(client.clone(), ())?
                 .send()
