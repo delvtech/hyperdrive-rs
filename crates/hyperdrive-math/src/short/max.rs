@@ -436,11 +436,10 @@ impl State {
             return Ok(None);
         };
         let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let share_reserves = self.share_reserves()
-            - (principal
-                - (curve_fee_base
-                    - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?)
-                    / self.vault_share_price());
+        let share_reserves = self.share_reserves() - principal
+            + (curve_fee_base
+                - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?)
+                / self.vault_share_price();
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
@@ -520,11 +519,29 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_max_short_no_budget() -> Result<()> {
         let chain = TestChain::new().await?;
+        let mut lowest_rate: Option<FixedPoint> = None;
+        let mut highest_rate: Option<FixedPoint> = None;
+        let mut lowest_rate_mismatch: Option<FixedPoint> = None;
+        let mut highest_rate_mismatch: Option<FixedPoint> = None;
+
+        let mut both_pass_tests = 0;
+        let mut both_fail_tests = 0;
+        let mut mismatched_tests = 0;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
+            let fixed_rate = state
+                .calculate_spot_rate()
+                .expect("Failed to get fixed rate");
+            if lowest_rate.is_none() || fixed_rate < lowest_rate.unwrap() {
+                lowest_rate = Some(fixed_rate);
+            }
+            if highest_rate.is_none() || fixed_rate > highest_rate.unwrap() {
+                highest_rate = Some(fixed_rate);
+            }
+            // println!("Fixed rate: {}", fixed_rate);
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
                 if rng.gen() {
@@ -572,18 +589,56 @@ mod tests {
                     // TODO: remove this tolerance when calculate_open_short
                     // rust implementation matches solidity.
                     // Currently, only about 1 - 4 / 1000 tests aren't
-                    // exact matchces. Related issue:
+                    // exact matches. Related issue:
                     // https://github.com/delvtech/hyperdrive-rs/issues/45
                     assert_eq!(
                         U256::from(actual.unwrap().unwrap()) / uint256!(1e12),
                         expected / uint256!(1e12)
                     );
+                    both_pass_tests += 1;
                 }
-                Err(_) => {
-                    assert!(actual.is_err() || actual.unwrap().is_err());
-                }
+                Err(expected) => match actual {
+                    Err(_) => {
+                        both_fail_tests += 1;
+                        // println!("Both failed: actual: {:?} expected: {:?}", actual, expected);
+                    }
+                    Ok(_) => {
+                        mismatched_tests += 1;
+                        println!("Fixed rate: {}", fixed_rate);
+                        println!("MISMATCHED: actual: {:?} expected: {:?}", actual, expected);
+
+                        let rust_result = actual.unwrap().unwrap();
+                        let solidity_result = expected;
+                        println!("Rust: {:?} Solidity: {:?}", rust_result, solidity_result);
+
+                        if lowest_rate_mismatch.is_none()
+                            || fixed_rate < lowest_rate_mismatch.unwrap()
+                        {
+                            lowest_rate_mismatch = Some(fixed_rate);
+                        }
+                        if highest_rate_mismatch.is_none()
+                            || fixed_rate > highest_rate_mismatch.unwrap()
+                        {
+                            highest_rate_mismatch = Some(fixed_rate);
+                        }
+                    }
+                },
             };
         }
+        let total_tests = both_pass_tests + both_fail_tests + mismatched_tests;
+        let failure_rate = mismatched_tests as f64 / total_tests as f64;
+        println!(
+            "Total tests: {} Both pass: {} Both fail: {} Mismatched: {} Failure rate: {}",
+            total_tests, both_pass_tests, both_fail_tests, mismatched_tests, failure_rate
+        );
+        println!(
+            "Fuzzed over fixed rate from {:?} to {:?}",
+            lowest_rate, highest_rate
+        );
+        println!(
+            "Mismatched  fixed rate from {:?} to {:?}",
+            lowest_rate_mismatch, highest_rate_mismatch
+        );
         Ok(())
     }
 
@@ -606,10 +661,8 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // TODO: We should fuzz over a range of fixed rates.
-            //
             // Fund Alice and Bob.
-            let fixed_rate = fixed!(0.05e18);
+            let fixed_rate = rng.gen_range(fixed!(0.0001e18)..=fixed!(1e18)); // 0.01% to 100%
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 

@@ -226,16 +226,16 @@ impl Default for TestChainConfig {
             factory_max_position_duration: U256::from(60 * 60 * 24 * 365 * 10), // 10 years
             factory_min_circuit_breaker_delta: uint256!(0.15e18),
             factory_max_circuit_breaker_delta: uint256!(2e18),
-            factory_min_fixed_apr: uint256!(0.01e18),
-            factory_max_fixed_apr: uint256!(0.5e18),
-            factory_min_time_stretch_apr: uint256!(0.01e18),
-            factory_max_time_stretch_apr: uint256!(0.5e18),
-            factory_min_curve_fee: uint256!(0.0001e18),
-            factory_min_flat_fee: uint256!(0.0001e18),
+            factory_min_fixed_apr: uint256!(0),            // 0%
+            factory_max_fixed_apr: uint256!(10e18),        // 1000%
+            factory_min_time_stretch_apr: uint256!(0),     // 0%
+            factory_max_time_stretch_apr: uint256!(10e18), // 1000%
+            factory_min_curve_fee: uint256!(0.0001e18),    // 0.01%
+            factory_min_flat_fee: uint256!(0.0001e18),     // 0.01%
             factory_min_governance_lp_fee: uint256!(0.15e18),
             factory_min_governance_zombie_fee: uint256!(0.03e18),
-            factory_max_curve_fee: uint256!(0.1e18),
-            factory_max_flat_fee: uint256!(0.001e18),
+            factory_max_curve_fee: uint256!(0.1e18),  // 10%
+            factory_max_flat_fee: uint256!(0.001e18), // 0.1%
             factory_max_governance_lp_fee: uint256!(0.15e18),
             factory_max_governance_zombie_fee: uint256!(0.03e18),
             // erc4626 hyperdrive configuration
