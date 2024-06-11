@@ -422,14 +422,14 @@ impl State {
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint> {
-        let estimate_price = spot_price;
-        let checkpoint_exposure =
+        let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))? / self.vault_share_price();
-        Ok(
-            (self.vault_share_price() * (self.calculate_solvency() + checkpoint_exposure))
-                / (estimate_price - self.curve_fee() * (fixed!(1e18) - spot_price)
-                    + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)),
-        )
+        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
+        let solvency = self.calculate_solvency();
+        let guess = self.vault_share_price() * (solvency + checkpoint_exposure_shares);
+        let curve_fee = self.curve_fee() * (fixed!(1e18) - spot_price);
+        let gov_fee = self.governance_lp_fee() * curve_fee;
+        Ok(guess / (spot_price - curve_fee + gov_fee))
     }
 
     /// Calculates the pool's solvency after opening a short.
