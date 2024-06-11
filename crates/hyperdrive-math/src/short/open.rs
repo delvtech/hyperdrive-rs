@@ -2,7 +2,7 @@ use ethers::types::I256;
 use eyre::{eyre, Result};
 use fixed_point::{fixed, FixedPoint};
 
-use crate::{calculate_rate_given_fixed_price, short::open, State, YieldSpace};
+use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
 impl State {
     /// Calculates the amount of base the trader will need to deposit for a short of
@@ -42,24 +42,27 @@ impl State {
         bond_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
-        let min_transaction_amount = FixedPoint::from(self.config.minimum_transaction_amount);
-        if bond_amount < min_transaction_amount {
+        // Verify that the bond amount is high enough.
+        // This is checked in Solidity but at a later stage.
+        if bond_amount < self.config.minimum_transaction_amount.into() {
             return Err(eyre!(format!(
                 "MinimumTransactionAmount: bond_amount = {} must be >= {}",
-                bond_amount, min_transaction_amount
+                bond_amount, self.config.minimum_transaction_amount
             )));
         }
 
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
-        // in the next transaction.
+        // in this transaction.
         let open_vault_share_price = if open_vault_share_price == fixed!(0) {
             self.vault_share_price()
         } else {
             open_vault_share_price
         };
 
+        // Calculate the effect that opening the short will have on the pool's reserves.
         let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
+
         // If the base proceeds of selling the bonds is greater than the bond
         // amount, then the trade occurred in the negative interest domain.
         // We revert in these pathological cases.
@@ -76,13 +79,13 @@ impl State {
         // price to equal the open vault share price. This ensures that shorts
         // don't benefit from negative interest that accrued during the current
         // checkpoint.
-        let curve_fee = self.open_short_curve_fee(bond_amount)?;
+        let curve_fee_shares = self.open_short_curve_fee(bond_amount)?;
 
-        if share_reserves_delta < curve_fee {
+        if share_reserves_delta < curve_fee_shares {
             return Err(eyre!(format!(
                 "The transaction curve fee = {}, computed with coefficient = {},
                 is too high. It must be less than share reserves delta = {}",
-                curve_fee,
+                curve_fee_shares,
                 self.curve_fee(),
                 share_reserves_delta
             )));
@@ -102,7 +105,7 @@ impl State {
         let base_deposit = self
             .calculate_short_proceeds_up(
                 bond_amount,
-                share_reserves_delta - curve_fee,
+                share_reserves_delta - curve_fee_shares,
                 open_vault_share_price,
                 close_vault_share_price,
             )
@@ -606,11 +609,11 @@ mod tests {
         Ok(())
     }
 
-    /// This test empirically tests `short_deposit_derivative` by calling
+    /// This test empirically tests `calulate_open_short_derivative` by calling
     /// `calculate_open_short` at two points and comparing the empirical result
     /// with the output of `short_deposit_derivative`.
     #[tokio::test]
-    async fn fuzz_short_deposit_derivative() -> Result<()> {
+    async fn fuzz_calculate_open_short_derivative() -> Result<()> {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
