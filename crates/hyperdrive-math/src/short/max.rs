@@ -61,10 +61,31 @@ impl State {
         let open_vault_share_price = open_vault_share_price.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
-        // If the budget is zero, then we return early.
-        if budget == fixed!(0) {
+        // To avoid the case where Newton's method overshoots and stays on
+        // the invalid side of the optimization equation (i.e., when deposit > budget),
+        // we artificially set the target budget to be less than the actual budget.
+        //
+        // If the budget is less than the minimum allowed, then we return early.
+        let target_budget = if budget < self.minimum_transaction_amount().into() {
             return Ok(fixed!(0));
         }
+        // If the budget equals the minimum allowed, then we check if that's ok and then return.
+        else if budget == self.minimum_transaction_amount().into() {
+            if self
+                .solvency_after_short(
+                    self.minimum_transaction_amount().into(),
+                    checkpoint_exposure,
+                )?
+                .is_some()
+            {
+                return Ok(self.minimum_transaction_amount().into());
+            }
+            return Ok(fixed!(0));
+        }
+        // If it's greater than the minimum allowed then we set the target budget.
+        else {
+            budget - self.minimum_transaction_amount()
+        };
 
         // If the open share price is zero, then we'll use the current share
         // price since the checkpoint hasn't been minted yet.
@@ -86,7 +107,7 @@ impl State {
                 Ok(d) => d,
                 Err(_) => return Ok(max_bond_amount),
             };
-        if absolute_max_deposit <= budget {
+        if absolute_max_deposit <= target_budget {
             return Ok(max_bond_amount);
         }
 
@@ -111,19 +132,13 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         max_bond_amount = self.max_short_guess(
-            budget,
+            target_budget,
             spot_price,
             open_vault_share_price,
             maybe_conservative_price,
         );
         let mut best_valid_max_bond_amount = max_bond_amount;
 
-        // To avoid the case where Newton's method overshoots and stays on
-        // the invalid side of the optimization equation (i.e., when deposit > budget),
-        // we artificially set the target budget to be less than the actual budget.
-        // We use the minimum transaction amount here to avoid the underflow
-        // where budget is less than this bias.
-        let target_budget = budget - self.minimum_transaction_amount();
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             let deposit = match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
                 Ok(d) => d,
@@ -138,7 +153,7 @@ impl State {
 
             // We update the best valid max bond amount if the deposit amount
             // is valid and the current guess is better than the current estimate.
-            if deposit < budget && best_valid_max_bond_amount < max_bond_amount {
+            if deposit < target_budget && best_valid_max_bond_amount < max_bond_amount {
                 best_valid_max_bond_amount = max_bond_amount;
             }
 
@@ -164,7 +179,9 @@ impl State {
         }
 
         // Verify that the max short satisfies the budget.
-        if budget < self.calculate_open_short(best_valid_max_bond_amount, open_vault_share_price)? {
+        if target_budget
+            < self.calculate_open_short(best_valid_max_bond_amount, open_vault_share_price)?
+        {
             return Err(eyre!("max short exceeded budget"));
         }
 
