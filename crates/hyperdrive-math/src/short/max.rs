@@ -17,7 +17,8 @@ impl State {
     /// $$
     /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} + y_{max}^{1 - t_s} \\
     /// \implies \\
-    /// y_{max} = \left( k - \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
+    /// y_{max} = \left( k - \tfrac{c}{\mu}
+    /// \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
     /// $$
     ///
     /// From there, we can calculate the spot price as normal as:
