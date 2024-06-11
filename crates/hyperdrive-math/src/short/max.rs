@@ -468,17 +468,8 @@ impl State {
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Result<Option<FixedPoint>> {
-        let principal = if let Ok(p) = self.calculate_short_principal(bond_amount) {
-            p
-        } else {
-            return Ok(None);
-        };
-        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let share_reserves = self.share_reserves()
-            - (principal
-                - (curve_fee_base
-                    - self.open_short_governance_fee(bond_amount, Some(curve_fee_base))?)
-                    / self.vault_share_price());
+        let share_deltas = self.calculate_pool_deltas_after_open_short(bond_amount)?;
+        let new_share_reserves = self.share_reserves() - share_deltas;
         let exposure = {
             let checkpoint_exposure: FixedPoint =
                 checkpoint_exposure.max(I256::zero()).try_into()?;
@@ -489,9 +480,9 @@ impl State {
                 (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
             }
         };
-        if share_reserves >= exposure + self.minimum_share_reserves() {
+        if new_share_reserves >= exposure + self.minimum_share_reserves() {
             Ok(Some(
-                share_reserves - exposure - self.minimum_share_reserves(),
+                new_share_reserves - exposure - self.minimum_share_reserves(),
             ))
         } else {
             Ok(None)
