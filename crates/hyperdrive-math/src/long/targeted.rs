@@ -539,4 +539,153 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn test_calculate_targeted_long_target_current_rate() -> Result<()> {
+        // Spawn a test chain and create two agents -- Alice and Bob.
+        // Alice is funded with a large amount of capital so that she can initialize
+        // the pool. Bob is funded with a random amount of capital so that we
+        // can test `calculate_targeted_long` when budget is the primary constraint
+        // and when it is not.
+
+        let allowable_solvency_error = fixed!(1e5);
+        let allowable_budget_error = fixed!(1e5);
+        let allowable_rate_error = fixed!(1e11);
+        let num_newton_iters = 7;
+
+        // Initialize a test chain and agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let config = bob.get_config().clone();
+
+        // Fuzz test
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Fund Alice and Bob.
+            // Large budget for initializing the pool.
+            let contribution = fixed!(1_000_000e18);
+            alice.fund(contribution).await?;
+            // Small lower bound on the budget for resource-constrained targeted longs.
+            let budget = rng.gen_range(fixed!(10e18)..=fixed!(500_000_000e18));
+
+            // Alice initializes the pool.
+            let initial_fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
+            alice
+                .initialize(initial_fixed_rate, contribution, None)
+                .await?;
+
+            // fund a random budget amount and do the targeted long.
+            bob.fund(budget).await?;
+
+            // Get a targeted long amount.
+            let target_rate = initial_fixed_rate;
+            let targeted_long_result = bob
+                .calculate_targeted_long(
+                    target_rate,
+                    Some(num_newton_iters),
+                    Some(allowable_rate_error),
+                )
+                .await;
+
+            // Bob opens a targeted long.
+            let current_state = bob.get_state().await?;
+            let max_spot_price_before_long = current_state.calculate_max_spot_price()?;
+            match targeted_long_result {
+                // If the code ran without error, open the long
+                Ok(targeted_long) => {
+                    bob.open_long(targeted_long, None, None).await?;
+                }
+
+                // Else parse the error for a to improve error messaging.
+                Err(e) => {
+                    // If the fn failed it's possible that the target rate would be insolvent.
+                    if e.to_string()
+                        .contains("Unable to find an acceptable loss with max iterations")
+                    {
+                        let max_long = bob.calculate_max_long(None).await?;
+                        let rate_after_max_long =
+                            current_state.calculate_spot_rate_after_long(max_long, None)?;
+                        // If the rate after the max long is at or below the target, then we could have hit it.
+                        if rate_after_max_long <= target_rate {
+                            return Err(eyre!(
+                                "ERROR {}\nA long that hits the target rate exists but was not found.",
+                                e
+                            ));
+                        }
+                        // Otherwise the target would have resulted in insolvency and wasn't possible.
+                        else {
+                            return Err(eyre!(
+                                "ERROR {}\nThe target rate would result in insolvency.",
+                                e
+                            ));
+                        }
+                    }
+                    // If the error is not the one we're looking for, return it, causing the test to fail.
+                    else {
+                        return Err(e);
+                    }
+                }
+            }
+
+            // Three things should be true after opening the long:
+            //
+            // 1. The pool's spot price is under the max spot price prior to
+            //    considering fees
+            // 2. The pool's solvency is above zero.
+            // 3. IF Bob's budget is not consumed; then new rate is close to the target rate
+
+            // Check that our resulting price is under the max
+            let current_state = bob.get_state().await?;
+            let spot_price_after_long = current_state.calculate_spot_price()?;
+            assert!(
+                max_spot_price_before_long > spot_price_after_long,
+                "Resulting price is greater than the max."
+            );
+
+            // Check solvency
+            let is_solvent = { current_state.calculate_solvency() > allowable_solvency_error };
+            assert!(is_solvent, "Resulting pool state is not solvent.");
+
+            let new_rate = current_state.calculate_spot_rate()?;
+            // If the budget was NOT consumed, then we assume the target was hit.
+            if bob.base() > allowable_budget_error {
+                // Actual price might result in long overshooting the target.
+                let abs_error = if target_rate > new_rate {
+                    target_rate - new_rate
+                } else {
+                    new_rate - target_rate
+                };
+                assert!(
+                    abs_error <= allowable_rate_error,
+                    "target_rate was {}, realized rate is {}. abs_error={} was not <= {}.",
+                    target_rate,
+                    new_rate,
+                    abs_error,
+                    allowable_rate_error
+                );
+            }
+            // Else, we should have undershot,
+            // or by some coincidence the budget was the perfect amount
+            // and we hit the rate exactly.
+            else {
+                assert!(
+                    new_rate >= target_rate,
+                    "The new_rate={} should be >= target_rate={} when budget constrained.",
+                    new_rate,
+                    target_rate
+                );
+            }
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+        }
+
+        Ok(())
+    }
 }
