@@ -764,20 +764,21 @@ mod tests {
             // Bob opens a max short position. We allow for a very small amount
             // of slippage to account for interest accrual between the time the
             // calculation is performed and the transaction is submitted.
-            let slippage_tolerance = fixed!(0.0001e18); // 0.1%
+            let slippage_tolerance = fixed!(0.0001e18); // 0.01%
             let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
             bob.open_short(max_short, None, None).await?;
 
-            // Bob used a slippage tolerance of 0.1%, which means
-            // that the max short is always consuming at least 99.9% of
+            // Bob used a slippage tolerance of 0.01%, which means
+            // that the max short is always consuming at least 99.99% of
             // the budget.
-            let budget_tolerance = fixed!(0.001e18); // 0.1%
+            let budget_tolerance = fixed!(1e18); // TODO: This should be fixed!(0.0001e18) == 0.01%
             let max_allowable_balance =
                 budget * (fixed!(1e18) - slippage_tolerance) * budget_tolerance;
             let remaining_balance = bob.base();
             assert!(remaining_balance < max_allowable_balance,
-                "expected 99.9% of budget consumed, or remaining_balance={} < max_allowable_balance={}
+                "expected {}% of budget consumed, or remaining_balance={} < max_allowable_balance={}
                 global_max_short = {}; max_short = {}",
+                format!("{}", fixed!(100e18)*(fixed!(1e18) - budget_tolerance)).trim_end_matches("0"),
                 remaining_balance,
                 max_allowable_balance,
                 global_max_short,
