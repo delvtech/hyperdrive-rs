@@ -52,7 +52,7 @@ impl State {
 
         // Check input args.
         let current_rate = self.calculate_spot_rate()?;
-        if target_rate > current_rate {
+        if target_rate >= current_rate {
             return Err(eyre!(
                 "target_rate = {} argument must be less than the current_rate = {} for a targeted long.",
                 target_rate, current_rate,
