@@ -642,24 +642,22 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // TODO: We should fuzz over a range of fixed rates.
-            //
             // Fund Alice and Bob.
-            let fixed_rate = fixed!(0.05e18);
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 
             // Alice initializes the pool.
+            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Some of the checkpoint passes and variable interest accrues.
             alice
                 .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
                 .await?;
-            let rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
+            let variable_rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
             alice
                 .advance_time(
-                    rate,
+                    variable_rate,
                     FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
                 )
                 .await?;
@@ -716,26 +714,24 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // TODO: We should fuzz over a range of fixed rates.
-            //
             // Fund Alice and Bob.
-            let fixed_rate = fixed!(0.05e18);
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             let budget = rng.gen_range(fixed!(10e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
             bob.fund(budget).await?;
 
             // Alice initializes the pool.
+            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Some of the checkpoint passes and variable interest accrues.
             alice
                 .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
                 .await?;
-            let rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
+            let variable_rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
             alice
                 .advance_time(
-                    rate,
+                    variable_rate,
                     FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
                 )
                 .await?;
