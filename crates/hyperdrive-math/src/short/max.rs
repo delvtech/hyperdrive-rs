@@ -66,10 +66,8 @@ impl State {
             return Ok(fixed!(0));
         }
 
-        // Calculate the spot price and the open share price. If the open share price
-        // is zero, then we'll use the current share price since the checkpoint
-        // hasn't been minted yet.
-        let spot_price = self.calculate_spot_price()?;
+        // If the open share price is zero, then we'll use the current share
+        // price since the checkpoint hasn't been minted yet.
         let open_vault_share_price = if open_vault_share_price != fixed!(0) {
             open_vault_share_price
         } else {
@@ -79,6 +77,7 @@ impl State {
         // Assuming the budget is infinite, find the largest possible short that
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
+        let spot_price = self.calculate_spot_price()?;
         let mut max_bond_amount =
             self.absolute_max_short(spot_price, checkpoint_exposure, maybe_max_iterations)?;
         let absolute_max_bond_amount = max_bond_amount;
