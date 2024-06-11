@@ -786,7 +786,8 @@ mod tests {
             // calculation is performed and the transaction is submitted.
             let slippage_tolerance = fixed!(0.0001e18); // 0.01%
             let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
-            bob.open_short(max_short, None, None).await?;
+            bob.open_short(max_short, Some(fixed!(0.01e18)), None)
+                .await?;
 
             // Bob used a slippage tolerance of 0.01%, which means
             // that the max short is always consuming at least 99.99% of
@@ -805,7 +806,7 @@ mod tests {
                 max_short
             );
 
-            // Revert to the snapshot and reset the agent's wallets.
+            // Revert to the snapshot and reset the agents' wallets.
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
             bob.reset(Default::default()).await?;
