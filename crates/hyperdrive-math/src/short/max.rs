@@ -154,7 +154,7 @@ impl State {
         // we converge to the solution.
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             let deposit = match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
-                Ok(d) => d,
+                Ok(valid_deposit) => valid_deposit,
                 Err(_) => {
                     // The pool is insolvent for the guess at this point.
                     // We use the absolute max bond amount and deposit
@@ -166,8 +166,8 @@ impl State {
             };
 
             // We update the best valid max bond amount if the deposit amount
-            // is valid and the current guess is better than the current estimate.
-            if deposit < target_budget && best_valid_max_bond_amount < max_bond_amount {
+            // is valid and the current guess is bigger than the previous best.
+            if deposit < target_budget && max_bond_amount > best_valid_max_bond_amount {
                 best_valid_max_bond_amount = max_bond_amount;
             }
 
