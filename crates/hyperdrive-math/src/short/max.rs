@@ -99,17 +99,29 @@ impl State {
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
         let spot_price = self.calculate_spot_price()?;
-        let mut max_bond_amount =
+        let absolute_max_bond_amount =
             self.absolute_max_short(spot_price, checkpoint_exposure, maybe_max_iterations)?;
-        let absolute_max_bond_amount = max_bond_amount;
+        // The max bond amount might be below the pool's minimum. If so, no short can be opened.
+        if absolute_max_bond_amount < self.minimum_transaction_amount().into() {
+            return Ok(fixed!(0));
+        }
         let absolute_max_deposit =
-            match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
+            match self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price) {
                 Ok(d) => d,
-                Err(_) => return Ok(max_bond_amount),
+                Err(_) => return Ok(absolute_max_bond_amount),
             };
         if absolute_max_deposit <= target_budget {
-            return Ok(max_bond_amount);
+            return Ok(absolute_max_bond_amount);
         }
+
+        // Make an initial guess to refine.
+        let mut max_bond_amount = self.max_short_guess(
+            target_budget,
+            spot_price,
+            open_vault_share_price,
+            maybe_conservative_price,
+        );
+        let mut best_valid_max_bond_amount = max_bond_amount;
 
         // Use Newton's method to iteratively approach a solution. We use the
         // short deposit in base minus the budget as our objective function,
@@ -131,14 +143,6 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        max_bond_amount = self.max_short_guess(
-            target_budget,
-            spot_price,
-            open_vault_share_price,
-            maybe_conservative_price,
-        );
-        let mut best_valid_max_bond_amount = max_bond_amount;
-
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             let deposit = match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
                 Ok(d) => d,
@@ -168,7 +172,7 @@ impl State {
             } else if deposit > target_budget {
                 max_bond_amount -= (deposit - target_budget) / derivative
             } else {
-                // If we find the exact solution, we set the result and stop
+                // Stop if we find the exact solution
                 best_valid_max_bond_amount = max_bond_amount;
                 break;
             }
@@ -176,6 +180,12 @@ impl State {
             // TODO this always iterates for max_iterations unless
             // it makes the pool insolvent. Likely want to check an
             // epsilon to early break
+        }
+
+        // The max bond amount might be below the pool's minimum.
+        // If so, no short can be opened.
+        if best_valid_max_bond_amount < self.minimum_transaction_amount().into() {
+            return Ok(fixed!(0));
         }
 
         // Verify that the max short satisfies the budget.
