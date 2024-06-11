@@ -70,7 +70,7 @@ impl State {
     /// $$
     /// P'(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}) \right)^{\tfrac{t_s}{1 - t_s}}
     /// $$
-    pub fn short_deposit_derivative(
+    pub fn calculate_open_short_derivative(
         &self,
         bond_amount: FixedPoint,
         spot_price: FixedPoint,
@@ -564,7 +564,7 @@ mod tests {
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
 
             // Setting open, close, and current vault share price to be equal assumes 0% variable yield.
-            let short_deposit_derivative = state.short_deposit_derivative(
+            let short_deposit_derivative = state.calculate_open_short_derivative(
                 amount,
                 state.calculate_spot_price()?,
                 state.vault_share_price(),

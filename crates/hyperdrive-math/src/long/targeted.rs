@@ -297,7 +297,7 @@ impl State {
 
         // b'(x) = -y'(x)
         // -b'(x) = y'(x)
-        let long_amount_derivative = match self.long_amount_derivative(base_amount)? {
+        let long_amount_derivative = match self.calculate_open_long_derivative(base_amount)? {
             Some(derivative) => derivative,
             None => return Err(eyre!("long_amount_derivative failure.")),
         };
