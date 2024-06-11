@@ -105,12 +105,17 @@ impl State {
         if absolute_max_bond_amount < self.minimum_transaction_amount().into() {
             return Ok(fixed!(0));
         }
-        let absolute_max_deposit =
+        // Figure out the base deposit for the absolute max bond amount.
+        // This could fail due to inaccuracies in the absolute max estimate.
+        // If so, ignore it and move on.
+        let maybe_absolute_max_deposit =
             match self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price) {
-                Ok(d) => d,
-                Err(_) => return Ok(absolute_max_bond_amount),
+                Ok(deposit) => Some(deposit),
+                Err(_) => None,
             };
-        if absolute_max_deposit <= target_budget {
+        if maybe_absolute_max_deposit.is_some()
+            && maybe_absolute_max_deposit.unwrap() <= target_budget
+        {
             return Ok(absolute_max_bond_amount);
         }
 
@@ -121,7 +126,11 @@ impl State {
             open_vault_share_price,
             maybe_conservative_price,
         );
-        let mut best_valid_max_bond_amount = max_bond_amount;
+        let mut best_valid_max_bond_amount =
+            match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
+                Some(_) => max_bond_amount,
+                None => fixed!(0),
+            };
 
         // Use Newton's method to iteratively approach a solution. We use the
         // short deposit in base minus the budget as our objective function,
@@ -150,8 +159,9 @@ impl State {
                     // The pool is insolvent for the guess at this point.
                     // We use the absolute max bond amount and deposit
                     // for the next guess iteration
-                    max_bond_amount = absolute_max_bond_amount;
-                    absolute_max_deposit
+                    max_bond_amount = best_valid_max_bond_amount;
+                    // Should work this time.
+                    self.calculate_open_short(max_bond_amount, open_vault_share_price)?
                 }
             };
 
