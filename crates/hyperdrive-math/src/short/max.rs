@@ -284,6 +284,42 @@ impl State {
         }
     }
 
+    /// Calculates the max short that can be opened on the YieldSpace curve
+    /// without considering solvency constraints.
+    fn calculate_max_short_upper_bound(&self) -> Result<FixedPoint> {
+        // We have the twin constraints that $z \geq z_{min}$ and
+        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
+        // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
+        let optimal_share_reserves = self.minimum_share_reserves()
+            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?;
+
+        // We calculate the optimal bond reserves by solving for the bond
+        // reserves that is implied by the optimal share reserves. We can do
+        // this as follows:
+        //
+        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
+        //                              =>
+        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
+        let optimal_effective_share_reserves =
+            calculate_effective_share_reserves(optimal_share_reserves, self.share_adjustment())?;
+        let optimal_bond_reserves = self.k_down()?
+            - self.vault_share_price().mul_div_up(
+                self.initial_vault_share_price()
+                    .mul_up(optimal_effective_share_reserves)
+                    .pow(fixed!(1e18) - self.time_stretch())?,
+                self.initial_vault_share_price(),
+            );
+        let optimal_bond_reserves = if optimal_bond_reserves >= fixed!(1e18) {
+            // Rounding the exponent down results in a smaller outcome.
+            optimal_bond_reserves.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
+        } else {
+            // Rounding the exponent up results in a smaller outcome.
+            optimal_bond_reserves.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
+        };
+
+        Ok(optimal_bond_reserves - self.bond_reserves())
+    }
+
     /// Calculates the absolute max short that can be opened without violating the
     /// pool's solvency constraints.
     fn absolute_max_short(
@@ -294,45 +330,7 @@ impl State {
     ) -> Result<FixedPoint> {
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
-        let absolute_max_bond_amount = {
-            // We have the twin constraints that $z \geq z_{min}$ and
-            // $z - \zeta \geq z_{min}$. Combining these together, we calculate
-            // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
-            let optimal_share_reserves = self.minimum_share_reserves()
-                + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?;
-
-            // We calculate the optimal bond reserves by solving for the bond
-            // reserves that is implied by the optimal share reserves. We can do
-            // this as follows:
-            //
-            // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
-            //                              =>
-            // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
-            let optimal_effective_share_reserves = calculate_effective_share_reserves(
-                optimal_share_reserves,
-                self.share_adjustment(),
-            )?;
-            let optimal_bond_reserves = self.k_down()?
-                - self
-                    .vault_share_price()
-                    .div_up(self.initial_vault_share_price())
-                    .mul_up(
-                        (self
-                            .initial_vault_share_price()
-                            .mul_up(optimal_effective_share_reserves))
-                        .pow(fixed!(1e18) - self.time_stretch())?,
-                    );
-            let optimal_bond_reserves = if optimal_bond_reserves >= fixed!(1e18) {
-                // Rounding the exponent down results in a smaller outcome.
-                optimal_bond_reserves.pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))?
-            } else {
-                // Rounding the exponent up results in a smaller outcome.
-                optimal_bond_reserves
-                    .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
-            };
-
-            optimal_bond_reserves - self.bond_reserves()
-        };
+        let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
         if self
             .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)?
             .is_some()
