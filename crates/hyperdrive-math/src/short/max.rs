@@ -699,7 +699,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_max_short() -> Result<()> {
+    async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         // Spawn a test chain and create two agents -- Alice and Bob. Alice
         // is funded with a large amount of capital so that she can initialize
         // the pool. Bob is funded with a small amount of capital so that we
@@ -716,9 +716,7 @@ mod tests {
 
             // Fund Alice and Bob.
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
-            let budget = rng.gen_range(fixed!(10e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
-            bob.fund(budget).await?;
 
             // Alice initializes the pool.
             let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
@@ -749,37 +747,42 @@ mod tests {
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
             let global_max_short = state.calculate_max_short(
-                U256::MAX,
+                U256::from(U128::MAX),
                 open_vault_share_price,
                 checkpoint_exposure,
                 None,
                 None,
             )?;
 
+            // Bob should always be budget constrained when trying to open the short.
+            let max_base_required =
+                state.calculate_open_short(global_max_short, open_vault_share_price.into())?;
+            let budget = rng
+                .gen_range(state.minimum_transaction_amount() * fixed!(10e18)..=max_base_required);
+            bob.fund(budget).await?;
+
             // Bob opens a max short position. We allow for a very small amount
             // of slippage to account for interest accrual between the time the
             // calculation is performed and the transaction is submitted.
-            let slippage_tolerance = fixed!(0.0001e18);
+            let slippage_tolerance = fixed!(0.0001e18); // 0.1%
             let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
             bob.open_short(max_short, None, None).await?;
 
-            // The max short should either be equal to the global max short in
-            // the case that the trader isn't budget constrained or the budget
-            // should be consumed except for a small epsilon.
-            if max_short != global_max_short {
-                // We currently allow up to a tolerance of 0.1%, which means
-                // that the max short is always consuming at least 99.9% of
-                // the budget.
-                let error_tolerance = fixed!(0.001e18);
-                assert!(
-                    bob.base() < budget * (fixed!(1e18) - slippage_tolerance) * error_tolerance,
-                    "expected (base={}) < (budget={}) * {} = {}",
-                    bob.base(),
-                    budget,
-                    error_tolerance,
-                    budget * error_tolerance
-                );
-            }
+            // Bob used a slippage tolerance of 0.1%, which means
+            // that the max short is always consuming at least 99.9% of
+            // the budget.
+            let budget_tolerance = fixed!(0.001e18); // 0.1%
+            let max_allowable_balance =
+                budget * (fixed!(1e18) - slippage_tolerance) * budget_tolerance;
+            let remaining_balance = bob.base();
+            assert!(remaining_balance < max_allowable_balance,
+                "expected 99.9% of budget consumed, or remaining_balance={} < max_allowable_balance={}
+                global_max_short = {}; max_short = {}",
+                remaining_balance,
+                max_allowable_balance,
+                global_max_short,
+                max_short
+            );
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
