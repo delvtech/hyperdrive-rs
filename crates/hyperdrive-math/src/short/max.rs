@@ -70,7 +70,7 @@ impl State {
         let target_budget = if budget < self.minimum_transaction_amount().into() {
             return Ok(fixed!(0));
         }
-        // If the budget equals the minimum allowed, then we check if that's ok and then return.
+        // If the budget equals the minimum transaction amount, then we check if that's ok and then return.
         else if budget == self.minimum_transaction_amount().into() {
             if self
                 .solvency_after_short(
