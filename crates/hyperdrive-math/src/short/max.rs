@@ -550,7 +550,7 @@ mod tests {
     async fn fuzz_sol_calculte_max_short_without_budget() -> Result<()> {
         // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
         let sol_correctness_tolerance = fixed!(1e17);
-        let reserves_drained_tolerance = fixed!(1e28);
+        let reserves_drained_tolerance = fixed!(1e26);
 
         // Fuzz the rust and solidity implementations against each other.
         let chain = TestChain::new().await?;
@@ -617,17 +617,19 @@ mod tests {
                     );
 
                     // Make sure the pool was drained.
-                    let effective_shares = state.effective_share_reserves()?;
+                    let pool_shares = state
+                        .effective_share_reserves()?
+                        .min(state.share_reserves());
                     let min_shares = state.minimum_share_reserves();
-                    assert!(effective_shares >= min_shares,
+                    assert!(pool_shares >= min_shares,
                         "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
                         state.effective_share_reserves()?,
                         state.minimum_share_reserves()
                     );
-                    let reserve_amount_above_minimum = effective_shares - min_shares;
+                    let reserve_amount_above_minimum = pool_shares - min_shares;
                     assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
-                        "effective_share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
-                        effective_shares,
+                        "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
+                        pool_shares,
                         min_shares,
                         reserve_amount_above_minimum,
                         reserves_drained_tolerance,
