@@ -547,7 +547,7 @@ mod tests {
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
     #[tokio::test]
-    async fn fuzz_calculate_max_short_no_budget() -> Result<()> {
+    async fn fuzz_sol_calculate_max_short_without_budget() -> Result<()> {
         // TODO: We should be able to pass this with a much lower (if not zero) tolerance.
         let tolerance = fixed!(1e17);
 
