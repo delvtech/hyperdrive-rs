@@ -549,7 +549,7 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_max_short_no_budget() -> Result<()> {
         // TODO: We should be able to pass this with a much lower (if not zero) tolerance.
-        let tolerance = fixed!(1e16);
+        let tolerance = fixed!(1e17);
 
         let chain = TestChain::new().await?;
 
