@@ -66,7 +66,7 @@ impl State {
         // the invalid side of the optimization equation (i.e., when deposit > budget),
         // we artificially set the target budget to be less than the actual budget.
         //
-        // If the budget is less than the minimum allowed, then we return early.
+        // If the budget is less than the minimum transaction amount, then we return early.
         let target_budget = if budget < self.minimum_transaction_amount().into() {
             return Ok(fixed!(0));
         }
