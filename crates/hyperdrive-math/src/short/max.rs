@@ -83,7 +83,7 @@ impl State {
             }
             return Ok(fixed!(0));
         }
-        // If it's greater than the minimum allowed then we set the target budget.
+        // If the budget is greater than the minimum transaction amount, then we set the target budget.
         else {
             budget - self.minimum_transaction_amount()
         };
