@@ -547,13 +547,13 @@ mod tests {
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
     #[tokio::test]
-    async fn fuzz_sol_calculate_max_short_without_budget() -> Result<()> {
-        // TODO: We should be able to pass this with a much lower (if not zero) tolerance.
-        let tolerance = fixed!(1e17);
-
-        let chain = TestChain::new().await?;
+    async fn fuzz_sol_calculte_max_short_without_budget() -> Result<()> {
+        // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
+        let sol_correctness_tolerance = fixed!(1e17);
+        let reserves_drained_tolerance = fixed!(1e28);
 
         // Fuzz the rust and solidity implementations against each other.
+        let chain = TestChain::new().await?;
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -601,6 +601,7 @@ mod tests {
                 .await
             {
                 Ok(expected) => {
+                    // Make sure the solidity & rust runctions gave the same value.
                     let actual_unwrapped = actual.unwrap().unwrap();
                     let expected_fp = FixedPoint::from(expected);
                     let error = if expected_fp > actual_unwrapped {
@@ -609,10 +610,27 @@ mod tests {
                         actual_unwrapped - expected_fp
                     };
                     assert!(
-                        error < tolerance,
+                        error < sol_correctness_tolerance,
                         "error {} exceeds tolerance of {}",
                         error,
-                        tolerance,
+                        sol_correctness_tolerance,
+                    );
+
+                    // Make sure the pool was drained.
+                    let effective_shares = state.effective_share_reserves()?;
+                    let min_shares = state.minimum_share_reserves();
+                    assert!(effective_shares >= min_shares,
+                        "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
+                        state.effective_share_reserves()?,
+                        state.minimum_share_reserves()
+                    );
+                    let reserve_amount_above_minimum = effective_shares - min_shares;
+                    assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
+                        "effective_share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
+                        effective_shares,
+                        min_shares,
+                        reserve_amount_above_minimum,
+                        reserves_drained_tolerance,
                     );
                 }
                 Err(_) => {
