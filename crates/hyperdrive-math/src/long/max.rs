@@ -419,7 +419,7 @@ impl State {
         &self,
         base_amount: FixedPoint,
     ) -> Result<Option<FixedPoint>> {
-        let maybe_derivative = self.long_amount_derivative(base_amount)?;
+        let maybe_derivative = self.calculate_open_long_derivative(base_amount)?;
         let spot_price = self.calculate_spot_price()?;
         Ok(maybe_derivative.map(|derivative| {
             (derivative + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
@@ -455,7 +455,7 @@ impl State {
     /// $$
     /// c'(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
     /// $$
-    pub(super) fn long_amount_derivative(
+    pub(super) fn calculate_open_long_derivative(
         &self,
         base_amount: FixedPoint,
     ) -> Result<Option<FixedPoint>> {
@@ -674,7 +674,7 @@ mod tests {
             assert!(p2 > p1);
 
             let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let maybe_open_long_derivative = state.long_amount_derivative(amount)?;
+            let maybe_open_long_derivative = state.calculate_open_long_derivative(amount)?;
             maybe_open_long_derivative.map(|derivative| {
                 let derivative_diff;
                 if derivative >= empirical_derivative {
