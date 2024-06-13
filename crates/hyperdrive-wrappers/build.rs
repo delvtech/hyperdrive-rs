@@ -238,6 +238,11 @@ fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool> {
         })
         .collect();
 
+    // Ensure the build script runs when any Solidity file changes
+    for file in &solidity_files {
+        println!("cargo:rerun-if-changed={}", file.display());
+    }
+
     // Get the most recent update amongst all solidity files.
     let solidity_latest_mod_time = solidity_files
         .iter()
@@ -246,21 +251,27 @@ fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool> {
         .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
 
     // Get the most recent update amongst all wrapper files.
-    let output_latest_mod_time = read_dir(&generated_dir)?
+    let rust_earliest_mod_time = read_dir(&generated_dir)?
         .filter_map(|entry| entry.ok())
         .map(|entry| FileTime::from_last_modification_time(&fs_metadata(entry.path()).unwrap()))
-        .max();
+        .min();
 
     // If the solidity files were updated after the wrapper files, we need to rebuild.
-    let need_to_build = match output_latest_mod_time {
-        Some(output_mod_time) => output_mod_time < solidity_latest_mod_time,
+    let rebuild = match rust_earliest_mod_time {
+        Some(rust_earliest_mod_time) => {
+            rust_earliest_mod_time.seconds() < solidity_latest_mod_time.seconds()
+        }
         None => true,
     };
-    Ok(need_to_build)
+    Ok(rebuild)
 }
 
 fn load_hyperdrive_repo(root: &Path, hyperdrive_dir: &PathBuf) -> Result<()> {
     let version_file = root.join("hyperdrive.version");
+
+    // Ensure the build script runs when the version file changes
+    println!("cargo:rerun-if-changed={}", version_file.display());
+
     let git_ref = read_to_string(version_file)?.trim().to_string();
     let local_development = match env::var("LOCAL_DEVELOPMENT") {
         Ok(local_development) => local_development == "true",
