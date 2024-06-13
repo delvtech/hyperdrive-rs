@@ -729,6 +729,67 @@ def calculate_add_liquidity(
     )
 
 
+def calculate_remove_liquidity(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    current_block_timestamp: str,
+    active_lp_total_supply: str,
+    withdrawal_shares_total_supply: str,
+    lp_shares: str,
+    total_vault_shares: str,
+    total_vault_assets: str,
+    min_output_per_share: str,
+    minimum_transaction_amount: str,
+    as_base: str,
+) -> str:
+    """Calculates the lp_shares for a given contribution when adding liquidity.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    current_block_timestamp: str (FixedPoint)
+        The current block timestamp in seconds.
+    active_lp_total_supply: str (FixedPoint)
+        The lp shares total supply.
+    withdrawal_shares_total_supply: str (FixedPoint)
+        The withdrawal shares total supply.
+    lp_shares: str (FixedPoint)
+        The number of shares to withdraw.
+    total_vault_shares: str (FixedPoint)
+        The total amount of shares in the underlying vault.
+    total_vault_assets: str (FixedPoint)
+        The total amount of base assets in the underlying vault.
+    min_output_per_share: str (FixedPoint)
+        The minimum output per share.
+    minimum_transaction_amount: str (FixedPoint)
+        The minimum transaction amount, lp_shares must be greater than this.
+    as_base: str (bool)
+        The unit of currency for the contribution.
+        If true, then the contribution is in base. Otherwise, it is shares.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The amount of LP shares provided by the pool for the given contribution.
+    """
+    return _get_interface(pool_config, pool_info).calculate_remove_liquidity(
+        current_block_timestamp,
+        active_lp_total_supply,
+        withdrawal_shares_total_supply,
+        lp_shares,
+        total_vault_shares,
+        total_vault_assets,
+        min_output_per_share,
+        minimum_transaction_amount,
+        as_base.lower(),
+    )
+
+
 def calculate_pool_deltas_after_add_liquidity(
     pool_config: types.PoolConfigType, pool_info: types.PoolInfoType, contribution: str, as_base: str
 ) -> str:
