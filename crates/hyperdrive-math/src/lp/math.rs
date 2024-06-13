@@ -6,9 +6,9 @@ use fixed_point::{fixed, int256, FixedPoint};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
-static SHARE_PROCEEDS_MAX_ITERATIONS: u64 = 4;
-static SHARE_PROCEEDS_SHORT_CIRCUIT_TOLERANCE: u128 = 1_000_000_000; // 1e9
-static SHARE_PROCEEDS_TOLERANCE: u128 = 100_000_000_000_000; // 1e14
+pub static SHARE_PROCEEDS_MAX_ITERATIONS: u64 = 4;
+pub static SHARE_PROCEEDS_SHORT_CIRCUIT_TOLERANCE: u128 = 1_000_000_000; // 1e9
+pub static SHARE_PROCEEDS_TOLERANCE: u128 = 100_000_000_000_000; // 1e14
 
 impl State {
     ///      Calculates the initial reserves. We solve for the initial reserves
@@ -68,7 +68,7 @@ impl State {
 
     /// Calculates the resulting share_reserves, share_adjustment, and
     /// bond_reserves when updating liquidity with a share_reserves_delta.
-    pub fn calculate_update_liquidity(
+    pub fn calculate_update_liquidity_safe(
         &self,
         share_reserves: FixedPoint,
         share_adjustment: I256,

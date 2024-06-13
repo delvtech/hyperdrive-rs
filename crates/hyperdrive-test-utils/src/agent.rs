@@ -181,6 +181,10 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         &self.hyperdrive
     }
 
+    pub fn vault(&self) -> &MockERC4626<ChainClient<LocalWallet>> {
+        &self.vault
+    }
+
     /// LPs ///
 
     #[instrument(skip(self))]
@@ -294,8 +298,9 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     pub async fn remove_liquidity(
         &mut self,
         shares: FixedPoint,
+        maybe_options: Option<Options>,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<()> {
+    ) -> Result<(U256, U256)> {
         // Ensure that the agent has a sufficient balance of LP shares.
         if self.wallet.lp_shares < shares {
             return Err(eyre::eyre!(
@@ -304,6 +309,15 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                 shares
             ));
         }
+
+        let options = match maybe_options {
+            Some(options) => options,
+            None => Options {
+                destination: self.client.address(),
+                as_base: true,
+                extra_data: [].into(),
+            },
+        };
 
         // Decrease the wallet's LP share balance.
         self.wallet.lp_shares -= shares;
@@ -314,11 +328,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             let tx = ContractCall(self.hyperdrive.remove_liquidity(
                 shares.into(),
                 uint256!(0),
-                Options {
-                    destination: self.client.address(),
-                    as_base: true,
-                    extra_data: [].into(),
-                },
+                options,
             ))
             .apply(self.pre_process_options(maybe_tx_options));
             let logs =
@@ -340,15 +350,10 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     .collect::<Vec<_>>();
             logs[0].clone()
         };
-        // We ensure trades here are executed as base
-        // Panic here since we pass as_base=True in the call.
-        if !log.as_base {
-            panic!("Trades are expected to be executed as base.")
-        }
         self.wallet.base += log.amount.into();
         self.wallet.withdrawal_shares += log.withdrawal_share_amount.into();
 
-        Ok(())
+        Ok((log.amount, log.withdrawal_share_amount))
     }
 
     #[instrument(skip(self))]
