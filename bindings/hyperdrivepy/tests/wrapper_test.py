@@ -356,6 +356,68 @@ def test_max_short_fail_conversion():
         )
 
 
+def test_calculate_remove_liquidity():
+    """Test calculate_remove_liquidity."""
+
+    current_block_timestamp = str(int(0))
+    active_lp_total_supply = str(int(3_000_000 * 10**18))
+    withdrawal_shares_total_supply = str(int(0))
+    total_vault_shares = str(int(3_000_000 * 10**18))
+    total_vault_assets = str(int(3_000_000 * 10**18))
+    min_output_per_share = str(int(0))
+    minimum_transaction_amount = str(int(0))
+    as_base = str(False)
+
+    remove_lp_shares = str(int(1 * 10**18))
+
+    remove_lp_shares = "asdf"
+    with pytest.raises(ValueError):
+        hyperdrivepy.calculate_remove_liquidity(
+            POOL_CONFIG,
+            POOL_INFO,
+            current_block_timestamp,
+            active_lp_total_supply,
+            withdrawal_shares_total_supply,
+            remove_lp_shares,
+            total_vault_shares,
+            total_vault_assets,
+            min_output_per_share,
+            minimum_transaction_amount,
+            as_base,
+        )
+
+    remove_lp_shares = "1.23"
+    with pytest.raises(ValueError):
+        hyperdrivepy.calculate_remove_liquidity(
+            POOL_CONFIG,
+            POOL_INFO,
+            current_block_timestamp,
+            active_lp_total_supply,
+            withdrawal_shares_total_supply,
+            remove_lp_shares,
+            total_vault_shares,
+            total_vault_assets,
+            min_output_per_share,
+            minimum_transaction_amount,
+            as_base,
+        )
+
+    remove_lp_shares = "10000000000000000000000"  # 10k base
+    hyperdrivepy.calculate_remove_liquidity(
+        POOL_CONFIG,
+        POOL_INFO,
+        current_block_timestamp,
+        active_lp_total_supply,
+        withdrawal_shares_total_supply,
+        remove_lp_shares,
+        total_vault_shares,
+        total_vault_assets,
+        min_output_per_share,
+        minimum_transaction_amount,
+        as_base,
+    )
+
+
 def test_calculate_present_value():
     """Test calculate_present_value."""
     current_block_timestamp = str(1000)

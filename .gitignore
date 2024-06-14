@@ -14,6 +14,7 @@ yarn-error.log
 
 # python build
 *.egg-info
+*.so
 .cache
 .build
 .python-version
@@ -51,3 +52,4 @@ crates/hyperdrive-wrappers/debug/
 
 # Crash Reports
 crash_report.json
+
