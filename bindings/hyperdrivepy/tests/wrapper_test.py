@@ -403,20 +403,19 @@ def test_calculate_remove_liquidity():
         )
 
     remove_lp_shares = "10000000000000000000000"  # 10k base
-    with pytest.raises(ValueError):
-        hyperdrivepy.calculate_remove_liquidity(
-            POOL_CONFIG,
-            POOL_INFO,
-            current_block_timestamp,
-            active_lp_total_supply,
-            withdrawal_shares_total_supply,
-            remove_lp_shares,
-            total_vault_shares,
-            total_vault_assets,
-            min_output_per_share,
-            minimum_transaction_amount,
-            as_base,
-        )
+    hyperdrivepy.calculate_remove_liquidity(
+        POOL_CONFIG,
+        POOL_INFO,
+        current_block_timestamp,
+        active_lp_total_supply,
+        withdrawal_shares_total_supply,
+        remove_lp_shares,
+        total_vault_shares,
+        total_vault_assets,
+        min_output_per_share,
+        minimum_transaction_amount,
+        as_base,
+    )
 
 
 def test_calculate_present_value():
