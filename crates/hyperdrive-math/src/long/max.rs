@@ -29,6 +29,23 @@ impl State {
     /// s = z - \tfrac{exposure}{c} - z_min
     /// $$
     pub fn calculate_solvency(&self) -> FixedPoint {
+        println!(
+            "long::calculate_solvency::share_reserves {:#?}",
+            self.share_reserves()
+        );
+        println!(
+            "long::calculate_solvency::long_exposure {:#?}",
+            self.long_exposure()
+        );
+        println!(
+            "long::calculate_solvency::vault_share_price {:#?}",
+            self.vault_share_price()
+        );
+        println!(
+            "long::calculate_solvency::minimum_share_reserves {:#?}",
+            self.minimum_share_reserves()
+        );
+
         self.share_reserves()
             - self.long_exposure() / self.vault_share_price()
             - self.minimum_share_reserves()

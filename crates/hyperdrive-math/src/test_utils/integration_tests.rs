@@ -1,77 +1,15 @@
 #[cfg(test)]
 mod tests {
 
-    use ethers::{signers::LocalWallet, types::U256};
+    use ethers::types::U256;
     use eyre::Result;
-    use fixed_point::{fixed, uint256, FixedPoint};
-    use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
-        constants::FUZZ_RUNS,
-    };
+    use fixed_point::fixed;
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
-    use crate::test_utils::agent::HyperdriveMathAgent;
-
-    /// Executes random trades throughout a Hyperdrive term.
-    async fn preamble(
-        rng: &mut ChaCha8Rng,
-        alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        bob: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        fixed_rate: FixedPoint,
-    ) -> Result<()> {
-        // Fund the agent accounts and initialize the pool.
-        alice
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        bob.fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        celine
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-
-        // Alice initializes the pool.
-        alice.initialize(fixed_rate, alice.base(), None).await?;
-
-        // Advance the time for over a term and make trades in some of the checkpoints.
-        let mut time_remaining = alice.get_config().position_duration;
-        while time_remaining > uint256!(0) {
-            // Bob opens a long.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let long_amount =
-                rng.gen_range(fixed!(1e12)..=bob.calculate_max_long(None).await? * discount);
-            bob.open_long(long_amount, None, None).await?;
-
-            // Celine opens a short.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let bond_amount =
-                rng.gen_range(fixed!(1e12)..=celine.calculate_max_short(None).await? * discount);
-            celine.open_short(bond_amount, None, None).await?;
-
-            // Advance the time and mint all of the intermediate checkpoints.
-            let multiplier = rng.gen_range(fixed!(5e18)..=fixed!(50e18));
-            let delta = FixedPoint::from(time_remaining)
-                .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
-            time_remaining -= U256::from(delta);
-            alice
-                .advance_time(
-                    fixed!(0), // TODO: Use a real rate.
-                    delta,
-                )
-                .await?;
-        }
-
-        // Mint a checkpoint to close any matured positions from the first checkpoint
-        // of trading.
-        alice
-            .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-            .await?;
-
-        Ok(())
-    }
+    use crate::test_utils::{agent::HyperdriveMathAgent, preamble::preamble};
 
     // TODO: Unignore after we add the logic to apply checkpoints prior to computing
     // the max long.

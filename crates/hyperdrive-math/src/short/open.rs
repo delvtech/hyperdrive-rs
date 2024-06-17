@@ -62,6 +62,10 @@ impl State {
 
         // Calculate the effect that opening the short will have on the pool's reserves.
         let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
+        println!(
+            "calculate_open_short::share_reserves_delta {:#?}",
+            share_reserves_delta
+        );
 
         // If the base proceeds of selling the bonds is greater than the bond
         // amount, then the trade occurred in the negative interest domain.
@@ -73,13 +77,19 @@ impl State {
         // NOTE: Round up to overestimate the base deposit.
         //
         // The trader will need to deposit capital to pay for the fixed rate,
-        // the curve fee, the flat fee, and any back-paid interest that will be
+        // the curve fee, the gov fee, the flat fee, and any back-paid interest that will be
         // received back upon closing the trade. If negative interest has
         // accrued during the current checkpoint, we set the close vault share
         // price to equal the open vault share price. This ensures that shorts
         // don't benefit from negative interest that accrued during the current
         // checkpoint.
-        let curve_fee_shares = self.open_short_curve_fee(bond_amount)?;
+        let curve_fee_shares = self
+            .open_short_curve_fee(bond_amount)?
+            .div_up(self.vault_share_price());
+        println!(
+            "calculate_open_short::curve_fee_shares {:#?}",
+            curve_fee_shares
+        );
 
         if share_reserves_delta < curve_fee_shares {
             return Err(eyre!(format!(
@@ -156,7 +166,9 @@ impl State {
         if self.calculate_short_proceeds_up(
             bond_amount,
             self.calculate_short_principal(bond_amount)?
-                - self.open_short_curve_fee(bond_amount)?,
+                - self
+                    .open_short_curve_fee(bond_amount)?
+                    .div_up(self.vault_share_price()),
             open_vault_share_price,
             close_vault_share_price,
         ) == fixed!(0)
@@ -168,15 +180,16 @@ impl State {
             Some(spot_price) => spot_price,
             None => self.calculate_spot_price()?,
         };
-        let short_adjustment_derivative =
-            close_vault_share_price / open_vault_share_price + self.flat_fee();
-        let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount)?;
-        let curve_fee_derivative = self.curve_fee() * (fixed!(1e18) - spot_price);
 
-        Ok(
-            short_adjustment_derivative - self.vault_share_price() * short_principal_derivative
-                + self.vault_share_price() * curve_fee_derivative,
-        )
+        let share_adjustment_derivative = (close_vault_share_price.div_up(open_vault_share_price)
+            + self.flat_fee())
+        .div_up(self.vault_share_price());
+        let short_principal_derivative = self.calculate_short_principal_derivative(bond_amount)?;
+        let curve_fee_derivative = self.curve_fee().mul_up((fixed!(1e18) - spot_price));
+
+        Ok(self.vault_share_price().mul_up(
+            share_adjustment_derivative - short_principal_derivative + curve_fee_derivative,
+        ))
     }
 
     /// Calculates the amount of short principal that the LPs need to pay to back a
@@ -228,7 +241,7 @@ impl State {
                 self.time_stretch()
                     .div_up(fixed!(1e18) - self.time_stretch()),
             )?;
-        Ok(lhs * rhs)
+        Ok(lhs.mul_up(rhs))
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -258,18 +271,32 @@ impl State {
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
         let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee = curve_fee_base.div_up(self.vault_share_price());
-        let gov_curve_fee = self
+        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
+        println!(
+            "calcualte_pool_deltas_after_open_short::curve_fee_shares {:#?}",
+            curve_fee_shares
+        );
+        let gov_curve_fee_shares = self
             .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
             .div_up(self.vault_share_price());
+        println!(
+            "calcualte_pool_deltas_after_open_short::gov_curve_fee_shares {:#?}",
+            gov_curve_fee_shares
+        );
         let short_principal = self.calculate_short_principal(bond_amount)?;
+        println!(
+            "calcualte_pool_deltas_after_open_short::short_principal {:#?}",
+            short_principal
+        );
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest",));
         }
-        if short_principal < (curve_fee - gov_curve_fee) {
+        // TODO: In sol we see this as curve_fee - gov_fee but then it is subtracted back off,
+        // so is it ok to just check curve_fee like we do in calc_open_short?
+        if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
             return Err(eyre!("Short principal is too low to account for fees",));
         }
-        Ok(short_principal - (curve_fee - gov_curve_fee))
+        Ok(short_principal - (curve_fee_shares - gov_curve_fee_shares))
     }
 
     /// Calculates the spot price after opening a short.
@@ -380,11 +407,10 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point::{fixed, int256, uint256};
+    use ethers::types::U256;
+    use fixed_point::{fixed, int256};
     use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
+        chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
@@ -392,68 +418,7 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::test_utils::agent::HyperdriveMathAgent;
-
-    /// Executes random trades throughout a Hyperdrive term.
-    ///
-    /// This fn initializes a Hyperdrive pool and does random trades
-    /// to force the pool into a random state.
-    async fn preamble(
-        rng: &mut ChaCha8Rng,
-        alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        bob: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        fixed_rate: FixedPoint,
-    ) -> Result<()> {
-        // Fund the agent accounts and initialize the pool.
-        alice
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        bob.fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        celine
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-
-        // Alice initializes the pool.
-        alice.initialize(fixed_rate, alice.base(), None).await?;
-
-        // Advance the time for over a term and make trades in some of the checkpoints.
-        let mut time_remaining = alice.get_config().position_duration;
-        while time_remaining > uint256!(0) {
-            // Bob opens a long.
-            let min_txn =
-                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
-            let max_long = fixed!(1e26); // 100M max
-            let long_amount = rng.gen_range(min_txn..=max_long);
-            bob.open_long(long_amount, None, None).await?;
-
-            // Celine opens a short.
-            let max_short = fixed!(1e26); // 100M max
-            let short_amount = rng.gen_range(min_txn..=max_short);
-            celine.open_short(short_amount, None, None).await?;
-
-            // Advance the time and mint all of the intermediate checkpoints.
-            let multiplier = rng.gen_range(fixed!(5e18)..=fixed!(50e18));
-            let delta = FixedPoint::from(time_remaining)
-                .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
-            time_remaining -= U256::from(delta);
-            alice
-                .advance_time(
-                    fixed!(0), // TODO: Use a real rate.
-                    delta,
-                )
-                .await?;
-        }
-
-        // Mint a checkpoint to close any matured positions from the first checkpoint
-        // of trading.
-        alice
-            .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-            .await?;
-
-        Ok(())
-    }
+    use crate::test_utils::{agent::HyperdriveMathAgent, preamble::preamble};
 
     #[tokio::test]
     async fn test_calculate_pool_deltas_after_open_short() -> Result<()> {
@@ -524,7 +489,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_short_principal() -> Result<()> {
+    async fn test_calculate_short_principal() -> Result<()> {
         // This test is the same as the yield_space.rs `fuzz_calculate_max_buy_shares_in_safe`,
         // but is worth having around in case we ever change how we compute short principal.
         let chain = TestChain::new().await?;
@@ -558,7 +523,7 @@ mod tests {
     /// `short_principal` at two points and comparing the empirical result
     /// with the output of `short_principal_derivative`.
     #[tokio::test]
-    async fn fuzz_short_principal_derivative() -> Result<()> {
+    async fn fuzz_calculate_short_principal_derivative() -> Result<()> {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
@@ -622,8 +587,10 @@ mod tests {
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let bond_amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
+            let bond_amount =
+                rng.gen_range(state.minimum_transaction_amount()..=fixed!(10_000_000e18));
 
+            // If the amount results in the pool being insolvent, skip this iteration
             let f_x = match panic::catch_unwind(|| {
                 state.calculate_open_short(bond_amount, state.vault_share_price())
             }) {
@@ -640,7 +607,6 @@ mod tests {
                     state.vault_share_price(),
                 )
             }) {
-                // If the amount results in the pool being insolvent, skip this iteration
                 Ok(result) => match result {
                     Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
@@ -658,7 +624,7 @@ mod tests {
             let short_deposit_derivative = state.calculate_open_short_derivative(
                 bond_amount,
                 state.vault_share_price(),
-                None,
+                Some(state.calculate_spot_price()?),
             )?;
 
             let derivative_diff = if short_deposit_derivative >= empirical_derivative {
@@ -988,62 +954,61 @@ mod tests {
 
             // Run the preamble, but only test on valid states.
             let fixed_rate = fixed!(0.05e18);
-            if let Ok(_) = preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await {
-                // Get state and trade details.
-                let state = alice.get_state().await?;
+            preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
 
-                // Get the open vault share price.
-                let Checkpoint {
-                    vault_share_price: open_vault_share_price,
-                    weighted_spot_price: _,
-                    last_weighted_spot_price_update_time: _,
-                } = alice
-                    .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                    .await?;
+            // Get state and trade details.
+            let state = alice.get_state().await?;
 
-                // We could use calculate_max_short here, but we don't want to conflate what we are testing.
-                // So instead we will use a big number and only run the test if it is valid.
-                let max_short = fixed!(1e26); // 100M max bonds
+            // Get the open vault share price.
+            let Checkpoint {
+                vault_share_price: open_vault_share_price,
+                weighted_spot_price: _,
+                last_weighted_spot_price_update_time: _,
+            } = alice
+                .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                .await?;
 
-                // Minimum transaction amount is without units; it's a global min across all transaction types.
-                let bond_amount = rng.gen_range(
-                    FixedPoint::from(state.config.minimum_transaction_amount)..=max_short,
-                );
+            // We could use calculate_max_short here, but we don't want to conflate what we are testing.
+            // So instead we will use a big number and only run the test if it is valid.
+            let max_short = fixed!(1e36); // 100M max bonds
 
-                // Compare the open short call output against calculate_open_short.
-                let actual_base_amount =
-                    state.calculate_open_short(bond_amount, open_vault_share_price.into());
+            // Minimum transaction amount is without units; it's a global min across all transaction types.
+            let bond_amount = rng
+                .gen_range(FixedPoint::from(state.config.minimum_transaction_amount)..=max_short);
 
-                match bob
-                    .hyperdrive()
-                    .open_short(
-                        bond_amount.into(),
-                        FixedPoint::from(U256::MAX).into(),
-                        fixed!(0).into(),
-                        Options {
-                            destination: bob.address(),
-                            as_base: true,
-                            extra_data: [].into(),
-                        },
-                    )
-                    .call()
-                    .await
-                {
-                    Ok((_, expected_base_amount)) => {
-                        assert_eq!(
-                            actual_base_amount.unwrap(),
-                            FixedPoint::from(expected_base_amount)
-                        );
-                    }
-                    Err(_) => assert!(actual_base_amount.is_err()),
+            // Compare the open short call output against calculate_open_short.
+            let actual_base_amount =
+                state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+            match bob
+                .hyperdrive()
+                .open_short(
+                    bond_amount.into(),
+                    FixedPoint::from(U256::MAX).into(),
+                    fixed!(0).into(),
+                    Options {
+                        destination: bob.address(),
+                        as_base: true,
+                        extra_data: [].into(),
+                    },
+                )
+                .call()
+                .await
+            {
+                Ok((_, expected_base_amount)) => {
+                    assert_eq!(
+                        actual_base_amount.unwrap(),
+                        FixedPoint::from(expected_base_amount)
+                    );
                 }
-
-                // Revert to the snapshot and reset the agent's wallets.
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                celine.reset(Default::default()).await?;
+                Err(_) => assert!(actual_base_amount.is_err()),
             }
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
         }
         Ok(())
     }

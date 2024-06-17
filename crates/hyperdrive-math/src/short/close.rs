@@ -105,6 +105,10 @@ impl State {
         // We increase the total value by the flat fee amount, because it is
         // included in the total amount of capital underlying the short.
         total_value += bond_amount.mul_div_up(self.flat_fee(), self.vault_share_price());
+        println!(
+            "calculate_short_proceeds_up::total_value {:#?}",
+            total_value
+        );
 
         // If the interest is more negative than the trading profits and margin
         // released, then the short proceeds are marked to zero. Otherwise, we
