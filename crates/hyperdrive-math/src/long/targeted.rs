@@ -79,8 +79,8 @@ impl State {
 
             // If we were still close enough and solvent, return.
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)?
-                .is_some()
+                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .is_ok()
                 && rate_error < allowable_error
             {
                 return Ok(target_base_delta);
@@ -95,8 +95,8 @@ impl State {
             // If solvent & within the allowable error, stop here.
             let rate_error = resulting_rate - target_rate;
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)?
-                .is_some()
+                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .is_ok()
                 && rate_error < allowable_error
             {
                 return Ok(target_base_delta);
@@ -128,14 +128,14 @@ impl State {
             // and has a simple derivative.
             let loss = resulting_rate - target_rate;
 
-            // If we've done it (solvent & within error), then return the value.
+            // If solvent & within error, then return the value.
             if self
                 .solvency_after_long(
                     possible_target_base_delta,
                     possible_target_bond_delta,
                     checkpoint_exposure,
-                )?
-                .is_some()
+                )
+                .is_ok()
                 && loss < allowable_error
             {
                 return Ok(possible_target_base_delta);
@@ -163,8 +163,8 @@ impl State {
                 possible_target_base_delta,
                 self.calculate_open_long(possible_target_base_delta)?,
                 checkpoint_exposure,
-            )?
-            .is_none()
+            )
+            .is_err()
         {
             return Err(eyre!("Guess in `calculate_targeted_long` is insolvent."));
         }
