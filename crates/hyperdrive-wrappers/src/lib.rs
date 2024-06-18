@@ -77,6 +77,7 @@ mod tests {
             governance: Address::zero(),
             fee_collector: Address::zero(),
             sweep_collector: Address::zero(),
+            checkpoint_rewarder: Address::zero(),
             fees: Fees {
                 curve: U256::from(0),
                 flat: U256::from(0),

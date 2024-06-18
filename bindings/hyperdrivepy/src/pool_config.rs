@@ -32,6 +32,7 @@ impl FromPyObject<'_> for PyPoolConfig {
         let governance = extract_address_from_attr(ob, "governance")?;
         let fee_collector = extract_address_from_attr(ob, "feeCollector")?;
         let sweep_collector = extract_address_from_attr(ob, "sweepCollector")?;
+        let checkpoint_rewarder = extract_address_from_attr(ob, "checkpointRewarder")?;
         let fees = extract_fees_from_attr(ob, "fees")?;
 
         let pool_config = PoolConfig {
@@ -49,6 +50,7 @@ impl FromPyObject<'_> for PyPoolConfig {
             governance,
             fee_collector,
             sweep_collector,
+            checkpoint_rewarder,
             fees,
         };
 
