@@ -76,8 +76,8 @@ impl State {
                 .solvency_after_short(
                     self.minimum_transaction_amount().into(),
                     checkpoint_exposure,
-                )?
-                .is_some()
+                )
+                .is_ok()
             {
                 return Ok(self.minimum_transaction_amount().into());
             }
@@ -128,9 +128,9 @@ impl State {
             maybe_conservative_price,
         );
         let mut best_valid_max_bond_amount =
-            match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
-                Some(_) => max_bond_amount,
-                None => fixed!(0),
+            match self.solvency_after_short(max_bond_amount, checkpoint_exposure) {
+                Ok(_) => max_bond_amount,
+                Err(_) => fixed!(0),
             };
 
         // Use Newton's method to iteratively approach a solution. We use the
@@ -332,8 +332,8 @@ impl State {
         // YieldSpace curve.
         let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
         if self
-            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)?
-            .is_some()
+            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
+            .is_ok()
         {
             return Ok(absolute_max_bond_amount);
         }
@@ -356,9 +356,14 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
-        let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
-            Some(solvency) => solvency,
-            None => return Err(eyre!("Initial guess in `absolute_max_short` is insolvent.")),
+        let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure) {
+            Ok(solvency) => solvency,
+            Err(err) => {
+                return Err(eyre!(
+                    "Initial guess in `absolute_max_short` is insolvent with error {:#?}",
+                    err
+                ))
+            }
         };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // TODO: It may be better to gracefully handle crossing over the
@@ -382,12 +387,12 @@ impl State {
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
             solvency =
-                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure)? {
-                    Some(solvency) => {
+                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure) {
+                    Ok(solvency) => {
                         max_bond_amount = possible_max_bond_amount;
                         solvency
                     }
-                    None => break,
+                    Err(_) => break,
                 };
         }
 
@@ -467,25 +472,33 @@ impl State {
         &self,
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> Result<Option<FixedPoint>> {
+    ) -> Result<FixedPoint> {
         let share_deltas = self.calculate_pool_deltas_after_open_short(bond_amount)?;
+        if self.share_reserves() < share_deltas {
+            return Err(eyre!(
+                "expected share_reserves={:#?} >= share_deltas={:#?}",
+                self.share_reserves(),
+                share_deltas
+            ));
+        }
         let new_share_reserves = self.share_reserves() - share_deltas;
         let exposure = {
-            let checkpoint_exposure: FixedPoint =
-                checkpoint_exposure.max(I256::zero()).try_into()?;
+            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             // Check for underflow.
             if self.long_exposure() < checkpoint_exposure {
-                return Ok(None);
+                return Err(eyre!(
+                    "expected checkpoint_exposure={} > long_exposture={}.",
+                    checkpoint_exposure,
+                    self.long_exposure(),
+                ));
             } else {
                 (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
             }
         };
         if new_share_reserves >= exposure + self.minimum_share_reserves() {
-            Ok(Some(
-                new_share_reserves - exposure - self.minimum_share_reserves(),
-            ))
+            Ok(new_share_reserves - exposure - self.minimum_share_reserves())
         } else {
-            Ok(None)
+            return Err(eyre!("Short would result in an insolvent pool."));
         }
     }
 
