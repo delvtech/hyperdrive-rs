@@ -21,4 +21,4 @@ fixed-point = { path = "../../crates/fixed-point" }
 hyperdrive-math = { path = "../../crates/hyperdrive-math" }
 hyperdrive-wrappers = { path = "../../crates/hyperdrive-wrappers" }
 
-pyo3 = { version = "0.19.0", features = ["abi3-py37", "multiple-pymethods"] }
+pyo3 = { version = "0.21.2", features = ["abi3-py37", "multiple-pymethods"] }
