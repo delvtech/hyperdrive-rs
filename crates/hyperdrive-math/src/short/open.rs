@@ -122,19 +122,23 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee = curve_fee_base.div_up(self.vault_share_price());
-        let gov_curve_fee = self
-            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-            .div_up(self.vault_share_price());
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
-            return Err(eyre!("InsufficientLiquidity: Negative Interest",));
+            return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
-        if short_principal < (curve_fee - gov_curve_fee) {
-            return Err(eyre!("Short principal is too low to account for fees",));
+        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
+        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
+        let gov_curve_fee_shares = self
+            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
+            .div_up(self.vault_share_price());
+        if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
+            return Err(eyre!(
+                "short_principal={:#?} is too low to account for fees={:#?}",
+                short_principal,
+                curve_fee_shares - gov_curve_fee_shares
+            ));
         }
-        Ok(short_principal - (curve_fee - gov_curve_fee))
+        Ok(short_principal - (curve_fee_shares - gov_curve_fee_shares))
     }
 
     /// Calculates the spot price after opening a short.
