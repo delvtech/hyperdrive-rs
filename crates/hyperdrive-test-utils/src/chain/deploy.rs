@@ -388,6 +388,7 @@ impl TestnetDeploy for Chain {
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
             (
+                "ERC4626Hyperdrive".to_string(),
                 config,
                 target0.address(),
                 target1.address(),
@@ -491,9 +492,10 @@ impl TestnetDeploy for Chain {
         };
 
         // Deployer the ERC20 forwarder factory.
-        let erc20_forwarder_factory = ERC20ForwarderFactory::deploy(client.clone(), ())?
-            .send()
-            .await?;
+        let erc20_forwarder_factory =
+            ERC20ForwarderFactory::deploy(client.clone(), ("ForwarderFactory".to_string(),))?
+                .send()
+                .await?;
 
         // Deploy the Hyperdrive factory.
         let factory = {
@@ -587,6 +589,7 @@ impl TestnetDeploy for Chain {
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
+                    "ERC4626HyperdriveDeployerCoordinator".to_string(),
                     factory.address(),
                     core_deployer.address(),
                     target0.address(),
@@ -769,6 +772,7 @@ impl TestnetDeploy for Chain {
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
+                    "StETHHyperdriveDeployerCoordinator".to_string(),
                     factory.address(),
                     core_deployer.address(),
                     target0.address(),
