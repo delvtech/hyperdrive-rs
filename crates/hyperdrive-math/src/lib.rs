@@ -36,20 +36,10 @@ impl Distribution<State> for Standard {
             vault_shares_token: Address::zero(),
             linker_factory: Address::zero(),
             linker_code_hash: [0; 32],
-            governance: Address::zero(),
-            fee_collector: Address::zero(),
-            sweep_collector: Address::zero(),
-            fees: Fees {
-                curve: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
-                flat: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
-                governance_lp: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
-                governance_zombie: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
-            },
             initial_vault_share_price: rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18)).into(),
             minimum_share_reserves: rng.gen_range(fixed!(0.1e18)..=fixed!(1e18)).into(),
             minimum_transaction_amount: rng.gen_range(fixed!(0.1e18)..=fixed!(1e18)).into(),
             circuit_breaker_delta: rng.gen_range(fixed!(0.01e18)..=fixed!(10e18)).into(),
-            time_stretch: rng.gen_range(fixed!(0.005e18)..=fixed!(0.5e18)).into(),
             position_duration: rng
                 .gen_range(
                     FixedPoint::from(91 * one_day_in_seconds)
@@ -61,6 +51,17 @@ impl Distribution<State> for Standard {
                     FixedPoint::from(one_hour_in_seconds)..=FixedPoint::from(one_day_in_seconds),
                 )
                 .into(),
+            time_stretch: rng.gen_range(fixed!(0.005e18)..=fixed!(0.5e18)).into(),
+            governance: Address::zero(),
+            fee_collector: Address::zero(),
+            sweep_collector: Address::zero(),
+            checkpoint_rewarder: Address::zero(),
+            fees: Fees {
+                curve: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
+                flat: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
+                governance_lp: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
+                governance_zombie: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
+            },
         };
         // We need the spot price to be less than or equal to 1, so we need to
         // generate the bond reserves so that mu * z <= y

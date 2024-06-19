@@ -39,6 +39,7 @@ class PoolConfig:
     governance: str
     feeCollector: str
     sweepCollector: str
+    checkpointRewarder: str
     fees: Fees
 
 
@@ -112,6 +113,7 @@ class PoolConfigType(Protocol):
     governance: str
     feeCollector: str
     sweepCollector: str
+    checkpointRewarder: str
     # TODO: nested Protocol types do not play well with dataclasses.  use 'or Any' for now.
     fees: FeesType | Any
 

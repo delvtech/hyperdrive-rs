@@ -19,6 +19,7 @@ POOL_CONFIG = PoolConfig(
     governance="0xabcdef1234567890abcdef1234567890abcdef12",
     feeCollector="0xfedcba0987654321fedcba0987654321fedcba09",
     sweepCollector="0xfedcba0987654321fedcba0987654321fedcba09",
+    checkpointRewarder="0xfedcba0987654321fedcba0987654321fedcba09",
     fees=Fees(curve=0, flat=0, governanceLP=0, governanceZombie=0),
 )
 

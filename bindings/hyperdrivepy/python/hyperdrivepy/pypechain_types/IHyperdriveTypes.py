@@ -87,6 +87,7 @@ class PoolConfig:
     governance: str
     feeCollector: str
     sweepCollector: str
+    checkpointRewarder: str
     fees: Fees
 
 
@@ -128,6 +129,7 @@ AddLiquidity = ABIEvent(
         ABIEventParams(indexed=False, name="vaultSharePrice", type="uint256"),
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="lpSharePrice", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="AddLiquidity",
     type="event",
@@ -155,6 +157,15 @@ ApprovalForAll = ABIEvent(
     type="event",
 )
 
+CheckpointRewarderUpdated = ABIEvent(
+    anonymous=False,
+    inputs=[
+        ABIEventParams(indexed=True, name="newCheckpointRewarder", type="address"),
+    ],
+    name="CheckpointRewarderUpdated",
+    type="event",
+)
+
 CloseLong = ABIEvent(
     anonymous=False,
     inputs=[
@@ -166,6 +177,7 @@ CloseLong = ABIEvent(
         ABIEventParams(indexed=False, name="vaultSharePrice", type="uint256"),
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="bondAmount", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="CloseLong",
     type="event",
@@ -183,6 +195,7 @@ CloseShort = ABIEvent(
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="basePayment", type="uint256"),
         ABIEventParams(indexed=False, name="bondAmount", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="CloseShort",
     type="event",
@@ -241,6 +254,7 @@ Initialize = ABIEvent(
         ABIEventParams(indexed=False, name="vaultSharePrice", type="uint256"),
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="apr", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="Initialize",
     type="event",
@@ -256,6 +270,7 @@ OpenLong = ABIEvent(
         ABIEventParams(indexed=False, name="vaultSharePrice", type="uint256"),
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="bondAmount", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="OpenLong",
     type="event",
@@ -272,6 +287,7 @@ OpenShort = ABIEvent(
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="baseProceeds", type="uint256"),
         ABIEventParams(indexed=False, name="bondAmount", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="OpenShort",
     type="event",
@@ -305,6 +321,7 @@ RedeemWithdrawalShares = ABIEvent(
         ABIEventParams(indexed=False, name="amount", type="uint256"),
         ABIEventParams(indexed=False, name="vaultSharePrice", type="uint256"),
         ABIEventParams(indexed=False, name="asBase", type="bool"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="RedeemWithdrawalShares",
     type="event",
@@ -321,6 +338,7 @@ RemoveLiquidity = ABIEvent(
         ABIEventParams(indexed=False, name="asBase", type="bool"),
         ABIEventParams(indexed=False, name="withdrawalShareAmount", type="uint256"),
         ABIEventParams(indexed=False, name="lpSharePrice", type="uint256"),
+        ABIEventParams(indexed=False, name="extraData", type="bytes"),
     ],
     name="RemoveLiquidity",
     type="event",

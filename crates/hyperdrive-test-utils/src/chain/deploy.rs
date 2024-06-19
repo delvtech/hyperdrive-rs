@@ -337,9 +337,10 @@ impl TestnetDeploy for Chain {
                 U256::from(60 * 60 * 24 * 365).into(),
             )?
             .into(), // time stretch for 5% rate
+            governance: client.address(),
             fee_collector: client.address(),
             sweep_collector: client.address(),
-            governance: client.address(),
+            checkpoint_rewarder: client.address(),
             fees: Fees {
                 curve: uint256!(0.05e18),
                 flat: uint256!(0.0005e18),
@@ -387,6 +388,7 @@ impl TestnetDeploy for Chain {
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
             (
+                "ERC4626Hyperdrive".to_string(),
                 config,
                 target0.address(),
                 target1.address(),
@@ -490,9 +492,10 @@ impl TestnetDeploy for Chain {
         };
 
         // Deployer the ERC20 forwarder factory.
-        let erc20_forwarder_factory = ERC20ForwarderFactory::deploy(client.clone(), ())?
-            .send()
-            .await?;
+        let erc20_forwarder_factory =
+            ERC20ForwarderFactory::deploy(client.clone(), ("ForwarderFactory".to_string(),))?
+                .send()
+                .await?;
 
         // Deploy the Hyperdrive factory.
         let factory = {
@@ -506,6 +509,7 @@ impl TestnetDeploy for Chain {
                         default_pausers: vec![config.admin],
                         fee_collector: config.admin,
                         sweep_collector: config.admin,
+                        checkpoint_rewarder: config.admin,
                         checkpoint_duration_resolution: config
                             .factory_checkpoint_duration_resolution,
                         min_checkpoint_duration: config.factory_min_checkpoint_duration,
@@ -585,6 +589,7 @@ impl TestnetDeploy for Chain {
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
+                    "ERC4626HyperdriveDeployerCoordinator".to_string(),
                     factory.address(),
                     core_deployer.address(),
                     target0.address(),
@@ -615,6 +620,7 @@ impl TestnetDeploy for Chain {
             let pool_config = PoolDeployConfig {
                 fee_collector: factory.fee_collector().call().await?,
                 sweep_collector: factory.sweep_collector().call().await?,
+                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
                 governance: factory.hyperdrive_governance().call().await?,
                 linker_factory: factory.linker_factory().call().await?,
                 linker_code_hash: factory.linker_code_hash().call().await?,
@@ -689,6 +695,7 @@ impl TestnetDeploy for Chain {
                 .deploy_and_initialize(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
+                    "Hyperdrive".to_string(),
                     pool_config,
                     Vec::new().into(),
                     config.erc4626_hyperdrive_contribution,
@@ -765,6 +772,7 @@ impl TestnetDeploy for Chain {
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
+                    "StETHHyperdriveDeployerCoordinator".to_string(),
                     factory.address(),
                     core_deployer.address(),
                     target0.address(),
@@ -789,6 +797,7 @@ impl TestnetDeploy for Chain {
             let pool_config = PoolDeployConfig {
                 fee_collector: factory.fee_collector().call().await?,
                 sweep_collector: factory.sweep_collector().call().await?,
+                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
                 governance: factory.hyperdrive_governance().call().await?,
                 linker_factory: factory.linker_factory().call().await?,
                 linker_code_hash: factory.linker_code_hash().call().await?,
@@ -863,6 +872,7 @@ impl TestnetDeploy for Chain {
                 .deploy_and_initialize(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
+                    "Hyperdrive".to_string(),
                     pool_config,
                     Vec::new().into(),
                     config.steth_hyperdrive_contribution,
@@ -985,6 +995,7 @@ mod tests {
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
         assert_eq!(config.sweep_collector, test_chain_config.admin);
+        assert_eq!(config.checkpoint_rewarder, test_chain_config.admin);
         assert_eq!(
             config.fees,
             Fees {
@@ -1034,15 +1045,15 @@ mod tests {
         // Verify that the registry data has been set for each Hyperdrive contract.
         let registry = HyperdriveRegistry::new(addresses.hyperdrive_registry, client.clone());
         let registry_data_4626 = registry
-            .get_instance_info(vec![addresses.erc4626_hyperdrive])
+            .get_instance_info(addresses.erc4626_hyperdrive)
             .call()
             .await?;
-        assert_ne!(registry_data_4626[0].data, uint256!(0));
+        assert_ne!(registry_data_4626.data, uint256!(0));
         let registry_data_steth = registry
-            .get_instance_info(vec![addresses.steth_hyperdrive])
+            .get_instance_info(addresses.steth_hyperdrive)
             .call()
             .await?;
-        assert_ne!(registry_data_steth[0].data, uint256!(0));
+        assert_ne!(registry_data_steth.data, uint256!(0));
 
         Ok(())
     }
@@ -1098,6 +1109,7 @@ mod tests {
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
         assert_eq!(config.sweep_collector, test_chain_config.admin);
+        assert_eq!(config.checkpoint_rewarder, test_chain_config.admin);
         assert_eq!(
             config.fees,
             Fees {
@@ -1147,12 +1159,12 @@ mod tests {
         // Verify that the registry data has been set for each Hyperdrive contract.
         let registry = HyperdriveRegistry::new(addresses.hyperdrive_registry, client.clone());
         let registry_data_4626 = registry
-            .get_instance_info(vec![addresses.erc4626_hyperdrive])
+            .get_instance_info(addresses.erc4626_hyperdrive)
             .call()
             .await?;
-        assert_ne!(registry_data_4626[0].data, uint256!(0));
+        assert_ne!(registry_data_4626.data, uint256!(0));
         let registry_data_steth = registry
-            .get_instance_info(vec![addresses.steth_hyperdrive])
+            .get_instance_infos(vec![addresses.steth_hyperdrive]) // use vec to make sure that still works.
             .call()
             .await?;
         assert_ne!(registry_data_steth[0].data, uint256!(0));
