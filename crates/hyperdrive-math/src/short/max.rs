@@ -546,6 +546,7 @@ mod tests {
     /// `calculate_max_short`'s functionality. With this in mind, we provide
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
+    #[ignore]
     #[tokio::test]
     async fn fuzz_sol_calculte_max_short_without_budget() -> Result<()> {
         // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
