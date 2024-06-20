@@ -64,8 +64,8 @@ impl State {
                 absolute_max_base_amount,
                 absolute_max_bond_amount,
                 checkpoint_exposure,
-            )?
-            .is_some()
+            )
+            .is_ok()
         {
             return Ok(absolute_max_base_amount.min(budget));
         }
@@ -99,9 +99,14 @@ impl State {
             max_base_amount,
             self.calculate_open_long(max_base_amount)?,
             checkpoint_exposure,
-        )? {
-            Some(solvency) => solvency,
-            None => return Err(eyre!("Initial guess in `calculate_max_long` is insolvent.")),
+        ) {
+            Ok(solvency) => solvency,
+            Err(err) => {
+                return Err(eyre!(
+                    "Initial guess in `calculate_max_long` is insolvent with error:\n{:#?}",
+                    err
+                ))
+            }
         };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // If the max base amount is equal to or exceeds the absolute max,
@@ -146,9 +151,9 @@ impl State {
                 possible_max_base_amount,
                 self.calculate_open_long(possible_max_base_amount)?,
                 checkpoint_exposure,
-            )? {
-                Some(s) => s,
-                None => break,
+            ) {
+                Ok(solvency) => solvency,
+                Err(_) => break,
             };
             max_base_amount = possible_max_base_amount;
         }
@@ -380,22 +385,30 @@ impl State {
         base_amount: FixedPoint,
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> Result<Option<FixedPoint>> {
-        let governance_fee = self.open_long_governance_fee(base_amount, None)?;
-        let share_reserves = self.share_reserves() + base_amount / self.vault_share_price()
-            - governance_fee / self.vault_share_price();
+    ) -> Result<FixedPoint> {
+        let governance_fee_shares =
+            self.open_long_governance_fee(base_amount, None)? / self.vault_share_price();
+        let share_amount = base_amount / self.vault_share_price();
+        if self.share_reserves() + share_amount < governance_fee_shares {
+            return Err(eyre!(
+                "expected new_share_amount={:#?} >= governance_fee_shares={:#?}",
+                self.share_reserves() + share_amount,
+                governance_fee_shares
+            ));
+        }
+        let share_reserves = (self.share_reserves() + share_amount) - governance_fee_shares;
         let exposure = self.long_exposure() + bond_amount;
         let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         if share_reserves + checkpoint_exposure / self.vault_share_price()
             >= exposure / self.vault_share_price() + self.minimum_share_reserves()
         {
-            Ok(Some(
+            Ok(
                 share_reserves + checkpoint_exposure / self.vault_share_price()
                     - exposure / self.vault_share_price()
                     - self.minimum_share_reserves(),
-            ))
+            )
         } else {
-            Ok(None)
+            Err(eyre!("Long would result in an insolvent pool."))
         }
     }
 

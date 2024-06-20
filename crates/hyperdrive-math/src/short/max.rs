@@ -76,8 +76,8 @@ impl State {
                 .solvency_after_short(
                     self.minimum_transaction_amount().into(),
                     checkpoint_exposure,
-                )?
-                .is_some()
+                )
+                .is_ok()
             {
                 return Ok(self.minimum_transaction_amount().into());
             }
@@ -100,8 +100,11 @@ impl State {
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
         let spot_price = self.calculate_spot_price()?;
-        let absolute_max_bond_amount =
-            self.absolute_max_short(spot_price, checkpoint_exposure, maybe_max_iterations)?;
+        let absolute_max_bond_amount = self.calculate_absolute_max_short(
+            spot_price,
+            checkpoint_exposure,
+            maybe_max_iterations,
+        )?;
         // The max bond amount might be below the pool's minimum. If so, no short can be opened.
         if absolute_max_bond_amount < self.minimum_transaction_amount().into() {
             return Ok(fixed!(0));
@@ -128,9 +131,9 @@ impl State {
             maybe_conservative_price,
         );
         let mut best_valid_max_bond_amount =
-            match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
-                Some(_) => max_bond_amount,
-                None => fixed!(0),
+            match self.solvency_after_short(max_bond_amount, checkpoint_exposure) {
+                Ok(_) => max_bond_amount,
+                Err(_) => fixed!(0),
             };
 
         // Use Newton's method to iteratively approach a solution. We use the
@@ -322,7 +325,7 @@ impl State {
 
     /// Calculates the absolute max short that can be opened without violating the
     /// pool's solvency constraints.
-    fn absolute_max_short(
+    fn calculate_absolute_max_short(
         &self,
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
@@ -332,8 +335,8 @@ impl State {
         // YieldSpace curve.
         let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
         if self
-            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)?
-            .is_some()
+            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
+            .is_ok()
         {
             return Ok(absolute_max_bond_amount);
         }
@@ -356,9 +359,14 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut max_bond_amount = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
-        let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure)? {
-            Some(solvency) => solvency,
-            None => return Err(eyre!("Initial guess in `absolute_max_short` is insolvent.")),
+        let mut solvency = match self.solvency_after_short(max_bond_amount, checkpoint_exposure) {
+            Ok(solvency) => solvency,
+            Err(err) => {
+                return Err(eyre!(
+                    "Initial guess in `absolute_max_short` is insolvent with error {:#?}",
+                    err
+                ))
+            }
         };
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             // TODO: It may be better to gracefully handle crossing over the
@@ -382,12 +390,12 @@ impl State {
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
             solvency =
-                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure)? {
-                    Some(solvency) => {
+                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure) {
+                    Ok(solvency) => {
                         max_bond_amount = possible_max_bond_amount;
                         solvency
                     }
-                    None => break,
+                    Err(_) => break,
                 };
         }
 
@@ -467,25 +475,32 @@ impl State {
         &self,
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
-    ) -> Result<Option<FixedPoint>> {
+    ) -> Result<FixedPoint> {
         let share_deltas = self.calculate_pool_deltas_after_open_short(bond_amount)?;
+        if self.share_reserves() < share_deltas {
+            return Err(eyre!(
+                "expected share_reserves={:#?} >= share_deltas={:#?}",
+                self.share_reserves(),
+                share_deltas
+            ));
+        }
         let new_share_reserves = self.share_reserves() - share_deltas;
-        let exposure = {
-            let checkpoint_exposure: FixedPoint =
-                checkpoint_exposure.max(I256::zero()).try_into()?;
-            // Check for underflow.
+        let exposure_shares = {
+            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
-                return Ok(None);
+                return Err(eyre!(
+                    "expected long_exposure={:#?} >= checkpoint_exposure={:#?}.",
+                    self.long_exposure(),
+                    checkpoint_exposure
+                ));
             } else {
                 (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
             }
         };
-        if new_share_reserves >= exposure + self.minimum_share_reserves() {
-            Ok(Some(
-                new_share_reserves - exposure - self.minimum_share_reserves(),
-            ))
+        if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
+            Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
-            Ok(None)
+            Err(eyre!("Short would result in an insolvent pool."))
         }
     }
 
@@ -546,7 +561,6 @@ mod tests {
     /// `calculate_max_short`'s functionality. With this in mind, we provide
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
-    #[ignore]
     #[tokio::test]
     async fn fuzz_sol_calculte_max_short_without_budget() -> Result<()> {
         // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
@@ -569,7 +583,8 @@ mod tests {
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of overflows.
-            let actual = panic::catch_unwind(|| {
+            // TODO: This should just call calculate_absolute_max_short since that's the thing we're testing against.
+            let rust_max_short = panic::catch_unwind(|| {
                 state.calculate_max_short(
                     U256::from(U128::MAX),
                     open_vault_share_price,
@@ -601,18 +616,18 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => {
+                Ok(sol_max_short) => {
                     // Make sure the solidity & rust runctions gave the same value.
-                    let actual_unwrapped = actual.unwrap().unwrap();
-                    let expected_fp = FixedPoint::from(expected);
-                    let error = if expected_fp > actual_unwrapped {
-                        expected_fp - actual_unwrapped
+                    let rust_max_short_unwrapped = rust_max_short.unwrap().unwrap();
+                    let sol_max_short_fp = FixedPoint::from(sol_max_short);
+                    let error = if sol_max_short_fp > rust_max_short_unwrapped {
+                        sol_max_short_fp - rust_max_short_unwrapped
                     } else {
-                        actual_unwrapped - expected_fp
+                        rust_max_short_unwrapped - sol_max_short_fp
                     };
                     assert!(
                         error < sol_correctness_tolerance,
-                        "error {} exceeds tolerance of {}",
+                        "expected error={} < tolerance={}",
                         error,
                         sol_correctness_tolerance,
                     );
@@ -622,22 +637,29 @@ mod tests {
                         .effective_share_reserves()?
                         .min(state.share_reserves());
                     let min_shares = state.minimum_share_reserves();
-                    assert!(pool_shares >= min_shares,
-                        "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
+                    assert!(
+                        pool_shares >= min_shares,
+                        "expected effective_share_reserves={} >= minimum_share_reserves={}.",
                         state.effective_share_reserves()?,
                         state.minimum_share_reserves()
                     );
                     let reserve_amount_above_minimum = pool_shares - min_shares;
                     assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
-                        "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
+                        "expected share_reserves={} - minimum_share_reserves={} (diff={}) < tolerance={}",
                         pool_shares,
                         min_shares,
                         reserve_amount_above_minimum,
                         reserves_drained_tolerance,
                     );
                 }
-                Err(_) => {
-                    assert!(actual.is_err() || actual.unwrap().is_err());
+                Err(err) => {
+                    assert!(
+                        rust_max_short.is_err()
+                            || rust_max_short.as_ref().map(|s| s.is_err()).unwrap_or(false),
+                        "expected rust_max_short={:#?} to have an error.\nsolidity error={:#?}",
+                        rust_max_short,
+                        err
+                    );
                 }
             };
         }
@@ -696,6 +718,7 @@ mod tests {
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
 
+            // TODO: This should call calculate_absolute_max_short since that is what we are testing.
             // Get the global max short & execute a trade for that amount.
             let global_max_short = state.calculate_max_short(
                 U256::from(U128::MAX),

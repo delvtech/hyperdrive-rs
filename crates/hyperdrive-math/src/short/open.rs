@@ -122,19 +122,23 @@ impl State {
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee = curve_fee_base.div_up(self.vault_share_price());
-        let gov_curve_fee = self
-            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-            .div_up(self.vault_share_price());
         let short_principal = self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
-            return Err(eyre!("InsufficientLiquidity: Negative Interest",));
+            return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
-        if short_principal < (curve_fee - gov_curve_fee) {
-            return Err(eyre!("Short principal is too low to account for fees",));
+        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
+        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
+        let gov_curve_fee_shares = self
+            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
+            .div_up(self.vault_share_price());
+        if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
+            return Err(eyre!(
+                "short_principal={:#?} is too low to account for fees={:#?}",
+                short_principal,
+                curve_fee_shares - gov_curve_fee_shares
+            ));
         }
-        Ok(short_principal - (curve_fee - gov_curve_fee))
+        Ok(short_principal - (curve_fee_shares - gov_curve_fee_shares))
     }
 
     /// Calculates the spot price after opening a short.
@@ -817,6 +821,12 @@ mod tests {
     // Tests open short with an amount larger than the maximum.
     #[tokio::test]
     async fn fuzz_error_open_short_max_txn_amount() -> Result<()> {
+        // This amount gets added to the max trade to cause a failure.
+        // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
+        // calc_open_short or calc_max_short must be incorrect for the additional
+        // amount to have to be so large.
+        let max_bond_delta = fixed!(1_000_000_000e18);
+
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -830,6 +840,7 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // TODO: We should use calculate_absolute_max_short here because that is what we are testing.
             // We need to catch panics because of FixedPoint overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_max_short(
@@ -845,13 +856,11 @@ mod tests {
             match max_trade {
                 Ok(max_trade) => match max_trade {
                     Ok(max_trade) => {
-                        // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
-                        // calc_open_short must be incorrect for the additional amount to have to be so large.
-                        let bond_amount = max_trade + fixed!(100_000_000e18);
-                        let result = panic::catch_unwind(|| {
+                        let bond_amount = max_trade + max_bond_delta;
+                        let base_amount = panic::catch_unwind(|| {
                             state.calculate_open_short(bond_amount, open_vault_share_price)
                         });
-                        match result {
+                        match base_amount {
                             Ok(result) => match result {
                                 Ok(_) => {
                                     return Err(eyre!(
