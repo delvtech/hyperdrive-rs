@@ -500,7 +500,7 @@ impl State {
         if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
             Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
-            return Err(eyre!("Short would result in an insolvent pool."));
+            Err(eyre!("Short would result in an insolvent pool."))
         }
     }
 

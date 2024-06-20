@@ -408,7 +408,7 @@ impl State {
                     - self.minimum_share_reserves(),
             )
         } else {
-            return Err(eyre!("Long would result in an insolvent pool."));
+            Err(eyre!("Long would result in an insolvent pool."))
         }
     }
 
