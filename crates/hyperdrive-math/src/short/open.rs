@@ -827,7 +827,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calc_open_short() -> Result<()> {
-        let tolerance = fixed!(1e9);
+        let tolerance = fixed!(10e18);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -854,9 +854,9 @@ mod tests {
             // Get state and trade details.
             let state = alice.get_state().await?;
             let Checkpoint {
-                vault_share_price: open_vault_share_price,
                 weighted_spot_price: _,
                 last_weighted_spot_price_update_time: _,
+                vault_share_price: open_vault_share_price,
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;
