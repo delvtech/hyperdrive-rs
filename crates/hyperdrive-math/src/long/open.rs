@@ -328,10 +328,64 @@ mod tests {
         Ok(())
     }
 
-    // TODO ideally we would test calculate open long with an amount larger than the maximum size.
-    // However, `calculate_max_long` requires a `checkpoint_exposure` argument, which requires
-    // implementing checkpointing in the rust sdk.
-    // https://github.com/delvtech/hyperdrive/issues/862
+    // Tests open long with an amount larger than the maximum.
+    #[tokio::test]
+    async fn fuzz_error_open_long_max_txn_amount() -> Result<()> {
+        // This amount gets added to the max trade to cause a failure.
+        // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
+        // calc_open_long or calc_max_long must be incorrect for the additional
+        // amount to have to be so large.
+        let max_base_delta = fixed!(1_000_000_000e18);
+
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            let max_iterations = 7;
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // TODO: We should use calculate_absolute_max_short here because that is what we are testing.
+            // We need to catch panics because of FixedPoint overflows & underflows.
+            let max_trade = panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, Some(max_iterations))
+            });
+            // Since we're fuzzing it's possible that the max can fail.
+            // We're only going to use it in this test if it succeeded.
+            match max_trade {
+                Ok(max_trade) => match max_trade {
+                    Ok(max_trade) => {
+                        let base_amount = max_trade + max_base_delta;
+                        let bond_amount =
+                            panic::catch_unwind(|| state.calculate_open_long(base_amount));
+                        match bond_amount {
+                            Ok(result) => match result {
+                                Ok(_) => {
+                                    return Err(eyre!(
+                                        format!(
+                                            "calculate_open_long for {} base should have failed but succeeded.",
+                                            base_amount,
+                                        )
+                                    ));
+                                }
+                                Err(_) => continue, // Open threw an Err.
+                            },
+                            Err(_) => continue, // Open threw a panic, likely due to FixedPoint under/over flow.
+                        }
+                    }
+                    Err(_) => continue, // Max threw an Err.
+                },
+                Err(_) => continue, // Max thew an panic, likely due to FixedPoint under/over flow.
+            }
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
     pub async fn fuzz_sol_calc_open_long() -> Result<()> {

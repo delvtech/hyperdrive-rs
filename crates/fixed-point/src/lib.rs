@@ -521,6 +521,12 @@ mod tests {
     }
 
     #[test]
+    fn test_sub_failure() {
+        // Ensure that subtraction producing negative numbers fails.
+        assert!(panic::catch_unwind(|| fixed!(1e18) - fixed!(2e18)).is_err());
+    }
+
+    #[test]
     fn test_mul_div_down_failure() {
         // Ensure that division by zero fails.
         assert!(panic::catch_unwind(|| fixed!(1e18).mul_div_down(fixed!(1e18), 0.into())).is_err());
