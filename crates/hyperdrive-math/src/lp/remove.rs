@@ -25,9 +25,6 @@ impl State {
             return Err(eyre!("Minimum transaction amount not met"));
         }
 
-        // Get vault share price and proceed without checkpoint.
-        let vault_share_price = self.vault_share_price();
-
         // Burn the LP's shares.
         let mut state = self.clone();
         state.info.lp_total_supply -= lp_shares.into();

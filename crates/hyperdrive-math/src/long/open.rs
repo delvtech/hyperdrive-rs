@@ -120,13 +120,11 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point::{fixed, uint256};
-    use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
-        constants::FUZZ_RUNS,
-    };
+    use std::panic;
+
+    use ethers::types::{I256, U256};
+    use fixed_point::fixed;
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
@@ -291,8 +289,7 @@ mod tests {
                 }
             };
             let max_iterations = 7;
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            // TODO: We should use calculate_absolute_max_short here because that is what we are testing.
+            // TODO: We should use calculate_absolute_max_long here because that is what we are testing.
             // We need to catch panics because of FixedPoint overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_max_long(U256::MAX, checkpoint_exposure, Some(max_iterations))

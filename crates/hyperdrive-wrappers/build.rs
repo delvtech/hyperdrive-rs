@@ -1,10 +1,7 @@
 use std::{
     collections::HashMap,
     env,
-    fs::{
-        create_dir_all, metadata as fs_metadata, read_dir, read_to_string, remove_dir_all,
-        OpenOptions,
-    },
+    fs::{create_dir_all, read_dir, read_to_string, remove_dir_all, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
     process::Command,
@@ -13,10 +10,8 @@ use std::{
 use dotenv::dotenv;
 use ethers::prelude::Abigen;
 use eyre::Result;
-use filetime::FileTime;
 use heck::ToSnakeCase;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 const HYPERDRIVE_URL: &str = "https://github.com/delvtech/hyperdrive.git";
 

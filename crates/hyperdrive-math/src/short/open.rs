@@ -292,11 +292,10 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point::{fixed, int256, uint256};
+    use ethers::types::U256;
+    use fixed_point::{fixed, int256};
     use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
+        chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};

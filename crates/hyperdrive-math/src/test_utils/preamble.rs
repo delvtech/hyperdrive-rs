@@ -7,7 +7,6 @@ use ethers::{
 use eyre::{eyre, Result};
 use fixed_point::{fixed, uint256, FixedPoint};
 use hyperdrive_test_utils::{agent::Agent, chain::ChainClient};
-use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
 
@@ -49,13 +48,6 @@ pub async fn initialize_pool_with_random_state(
         state = alice.get_state().await?;
 
         // Get the current checkpoint exposure.
-        let Checkpoint {
-            vault_share_price: open_vault_share_price,
-            weighted_spot_price: _,
-            last_weighted_spot_price_update_time: _,
-        } = alice
-            .get_checkpoint(state.to_checkpoint(alice.now().await?))
-            .await?;
         let checkpoint_exposure = alice
             .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
             .await?;
@@ -155,7 +147,6 @@ fn get_max_short(
         let min_price = state.calculate_min_price()?;
 
         // Calculate the linear interpolation.
-        let base_reserves = state.vault_share_price() * state.share_reserves();
         let weight = fixed!(1e18).pow(fixed!(1e18) - state.time_stretch())?;
         spot_price * (fixed!(1e18) - weight) + min_price * weight
     };

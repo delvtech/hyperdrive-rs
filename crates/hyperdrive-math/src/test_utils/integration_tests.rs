@@ -1,14 +1,10 @@
 #[cfg(test)]
 mod tests {
 
-    use ethers::{signers::LocalWallet, types::U256};
+    use ethers::types::U256;
     use eyre::Result;
-    use fixed_point::{fixed, uint256, FixedPoint};
-    use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
-        constants::FUZZ_RUNS,
-    };
+    use fixed_point::fixed;
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
