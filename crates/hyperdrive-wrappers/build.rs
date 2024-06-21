@@ -75,6 +75,16 @@ fn main() -> Result<()> {
     // Load dotenv file in the environment.
     dotenv().ok();
 
+    // See if the build has been disabled and abort early if so.
+    let build_disabled = match env::var("BUILD_DISABLED") {
+        Ok(value) => value == "true",
+        _ => false,
+    };
+
+    if build_disabled {
+        return Ok(());
+    }
+
     // Get the root directory of the project.
     let root = Path::new(env!("CARGO_MANIFEST_DIR"));
 
@@ -82,12 +92,6 @@ fn main() -> Result<()> {
 
     // Conditionally reload the hyperdrive repo.
     load_hyperdrive_repo(root, &hyperdrive_dir)?;
-
-    // Only rebuild if solidity files have changed.
-    if !need_to_build(&hyperdrive_dir, root)? {
-        println!("No changes detected in Solidity files, skipping build process.");
-        return Ok(());
-    }
 
     // Compile the contracts and exit early if there are no changes.
     Command::new("forge")
@@ -215,55 +219,6 @@ impl<M: ::ethers::providers::Middleware> {name}<M> {{
     }
 
     Ok(())
-}
-
-fn need_to_build(hyperdrive_dir: &PathBuf, root: &Path) -> Result<bool> {
-    // First check if we've never built wrappers before.
-    let generated_dir = root.join("src/wrappers");
-    if !generated_dir.exists() {
-        return Ok(true);
-    }
-
-    // Get the solidity files to check modifications times on.
-    let solidity_dir = hyperdrive_dir.join("contracts");
-    let solidity_files: Vec<PathBuf> = WalkDir::new(&solidity_dir)
-        .into_iter()
-        .filter_map(|entry| {
-            let entry = entry.ok()?;
-            if entry.path().extension()? == "sol" {
-                Some(entry.path().to_path_buf())
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // Ensure the build script runs when any Solidity file changes
-    for file in &solidity_files {
-        println!("cargo:rerun-if-changed={}", file.display());
-    }
-
-    // Get the most recent update amongst all solidity files.
-    let solidity_latest_mod_time = solidity_files
-        .iter()
-        .map(|path| FileTime::from_last_modification_time(&fs_metadata(path).unwrap()))
-        .max()
-        .unwrap_or_else(|| FileTime::from_system_time(std::time::SystemTime::UNIX_EPOCH));
-
-    // Get the most recent update amongst all wrapper files.
-    let rust_earliest_mod_time = read_dir(&generated_dir)?
-        .filter_map(|entry| entry.ok())
-        .map(|entry| FileTime::from_last_modification_time(&fs_metadata(entry.path()).unwrap()))
-        .min();
-
-    // If the solidity files were updated after the wrapper files, we need to rebuild.
-    let rebuild = match rust_earliest_mod_time {
-        Some(rust_earliest_mod_time) => {
-            rust_earliest_mod_time.seconds() < solidity_latest_mod_time.seconds()
-        }
-        None => true,
-    };
-    Ok(rebuild)
 }
 
 fn load_hyperdrive_repo(root: &Path, hyperdrive_dir: &PathBuf) -> Result<()> {
