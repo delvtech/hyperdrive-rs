@@ -84,6 +84,14 @@ And then in the .env file in hyperdrive-wrappers, add:
 LOCAL_DEVELOPMENT=true
 ```
 
+To prevent hyperdrive-wrappers from rebuilding automatically, add the following to the same .env:
+
+```sh
+BUILD_DISABLED=true
+```
+
+This is useful during development since running tests in hyperdrive-math will retrigger builds, which slows down development and testing considerably. Also, certain IDE's like vscode will over-eagerly rebuild the wrappers so turning off the build can be useful when there are no changes to the solidity files in hyperdrive.
+
 ## Test
 
 ```sh
