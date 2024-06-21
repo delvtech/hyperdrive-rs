@@ -26,7 +26,7 @@ impl State {
     pub fn calculate_open_long<F: Into<FixedPoint>>(&self, base_amount: F) -> Result<FixedPoint> {
         let base_amount = base_amount.into();
 
-        if base_amount < self.config.minimum_transaction_amount.into() {
+        if base_amount < self.minimum_transaction_amount() {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
@@ -334,7 +334,7 @@ mod tests {
     // https://github.com/delvtech/hyperdrive/issues/862
 
     #[tokio::test]
-    pub async fn fuzz_calc_open_long() -> Result<()> {
+    pub async fn fuzz_sol_calc_open_long() -> Result<()> {
         let tolerance = fixed!(1e10);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -362,18 +362,17 @@ mod tests {
 
             // Get state and trade details.
             let state = alice.get_state().await?;
+            let min_txn_amount = state.minimum_transaction_amount();
             let max_long = bob.calculate_max_long(None).await?;
-            let min_base_amount = FixedPoint::from(state.config.minimum_transaction_amount)
-                * FixedPoint::from(state.info.vault_share_price);
-            let long_amount = rng.gen_range(min_base_amount..=max_long);
+            let base_amount = rng.gen_range(min_txn_amount..=max_long);
 
             // Compare the open short call output against calculate_open_long.
-            let bonds_purchased = state.calculate_open_long(long_amount);
+            let rust_bonds = state.calculate_open_long(base_amount);
 
             match bob
                 .hyperdrive()
                 .open_long(
-                    long_amount.into(),
+                    base_amount.into(),
                     fixed!(0).into(),
                     fixed!(0).into(),
                     Options {
@@ -385,12 +384,12 @@ mod tests {
                 .call()
                 .await
             {
-                Ok((_, expected_bonds_purchased)) => {
-                    let actual = bonds_purchased.unwrap();
-                    let error = if actual >= expected_bonds_purchased.into() {
-                        actual - FixedPoint::from(expected_bonds_purchased)
+                Ok((_, sol_bonds)) => {
+                    let rust_bonds_unwrapped = rust_bonds.unwrap();
+                    let error = if rust_bonds_unwrapped >= sol_bonds.into() {
+                        rust_bonds_unwrapped - FixedPoint::from(sol_bonds)
                     } else {
-                        FixedPoint::from(expected_bonds_purchased) - actual
+                        FixedPoint::from(sol_bonds) - rust_bonds_unwrapped
                     };
                     assert!(
                         error <= tolerance,
@@ -399,8 +398,13 @@ mod tests {
                         tolerance
                     );
                 }
-                Err(_) => {
-                    assert!(bonds_purchased.is_err());
+                Err(sol_err) => {
+                    assert!(
+                        rust_bonds.is_err(),
+                        "sol_err={:#?}, but rust_bonds={:#?} did not error",
+                        sol_err,
+                        rust_bonds
+                    );
                 }
             }
 
