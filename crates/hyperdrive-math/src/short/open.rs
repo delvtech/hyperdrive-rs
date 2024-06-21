@@ -870,6 +870,8 @@ mod tests {
             // Compare the open short call output against calculate_open_short.
             let rust_base = state.calculate_open_short(bond_amount, open_vault_share_price.into());
 
+            // The base required should always be less than the short amount.
+            celine.fund(bond_amount).await?;
             match celine
                 .hyperdrive()
                 .open_short(
