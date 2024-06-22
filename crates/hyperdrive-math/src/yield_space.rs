@@ -33,6 +33,9 @@ pub trait YieldSpace {
     /// Core ///
 
     fn calculate_spot_price(&self) -> Result<FixedPoint> {
+        if self.y() <= fixed!(0) {
+            return Err(eyre!("expected y={} > 0", self.y()));
+        }
         ((self.mu() * self.ze()?) / self.y()).pow(self.t())
     }
 
@@ -55,6 +58,9 @@ pub trait YieldSpace {
         // NOTE: We round _y up to make the rhs of the equation larger.
         //
         // k - (c / µ) * (µ * (ze + dz))^(1 - t))^(1 / (1 - t)))
+        if k < ze {
+            return Err(eyre!("expected k={} >= ze={}", k, ze));
+        }
         let mut y = k - ze;
         if y >= fixed!(1e18) {
             // Rounding up the exponent results in a larger result.
@@ -65,6 +71,9 @@ pub trait YieldSpace {
         }
 
         // Δy = y - (k - (c / µ) * (µ * (z + dz))^(1 - t))^(1 / (1 - t)))
+        if self.y() < y {
+            return Err(eyre!("expected y={} >= delta_y={}", self.y(), y));
+        }
         Ok(self.y() - y)
     }
 

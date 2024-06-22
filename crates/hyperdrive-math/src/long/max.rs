@@ -66,6 +66,7 @@ impl State {
                 checkpoint_exposure,
             )
             .is_ok()
+            && absolute_max_base_amount >= self.minimum_transaction_amount()
         {
             return Ok(absolute_max_base_amount.min(budget));
         }

@@ -292,11 +292,10 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point::{fixed, int256, uint256};
+    use ethers::types::U256;
+    use fixed_point::{fixed, int256};
     use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
+        chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
@@ -304,67 +303,9 @@ mod tests {
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::test_utils::agent::HyperdriveMathAgent;
-
-    /// Executes random trades throughout a Hyperdrive term.
-    async fn preamble(
-        rng: &mut ChaCha8Rng,
-        alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        bob: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        fixed_rate: FixedPoint,
-    ) -> Result<()> {
-        // Fund the agent accounts and initialize the pool.
-        alice
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        bob.fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        celine
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-
-        // Alice initializes the pool.
-        alice.initialize(fixed_rate, alice.base(), None).await?;
-
-        // Advance the time for over a term and make trades in some of the checkpoints.
-        let mut time_remaining = alice.get_config().position_duration;
-        while time_remaining > uint256!(0) {
-            // Bob opens a long.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let long_amount =
-                rng.gen_range(fixed!(1e12)..=bob.calculate_max_long(None).await? * discount);
-            bob.open_long(long_amount, None, None).await?;
-
-            // Celine opens a short.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let min_short =
-                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
-            let max_short = celine.calculate_max_short(None).await? * discount;
-            let short_amount = rng.gen_range(min_short..=max_short);
-            celine.open_short(short_amount, None, None).await?;
-
-            // Advance the time and mint all of the intermediate checkpoints.
-            let multiplier = rng.gen_range(fixed!(5e18)..=fixed!(50e18));
-            let delta = FixedPoint::from(time_remaining)
-                .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
-            time_remaining -= U256::from(delta);
-            alice
-                .advance_time(
-                    fixed!(0), // TODO: Use a real rate.
-                    delta,
-                )
-                .await?;
-        }
-
-        // Mint a checkpoint to close any matured positions from the first checkpoint
-        // of trading.
-        alice
-            .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-            .await?;
-
-        Ok(())
-    }
+    use crate::test_utils::{
+        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+    };
 
     #[tokio::test]
     async fn test_calculate_pool_deltas_after_open_short() -> Result<()> {
@@ -465,17 +406,17 @@ mod tests {
         Ok(())
     }
 
-    /// This test empirically tests `short_principal_derivative` by calling
-    /// `short_principal` at two points and comparing the empirical result
-    /// with the output of `short_principal_derivative`.
+    /// This test empirically tests `calculate_short_principal_derivative` by calling
+    /// `calculate_short_principal` at two points and comparing the empirical result
+    /// with the output of `calculate_short_principal_derivative`.
     #[tokio::test]
-    async fn fuzz_short_principal_derivative() -> Result<()> {
+    async fn fuzz_calculate_short_principal_derivative() -> Result<()> {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e12);
         // TODO pretty big comparison epsilon here
-        let test_comparison_epsilon = fixed!(1e16);
+        let test_tolerance = fixed!(1e16);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -505,11 +446,11 @@ mod tests {
                 derivative_diff = empirical_derivative - short_principal_derivative;
             }
             assert!(
-                derivative_diff < test_comparison_epsilon,
-                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                derivative_diff < test_tolerance,
+                "expected (derivative_diff={}) < (test_tolerance={}), \
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
-                test_comparison_epsilon,
+                test_tolerance,
                 short_principal_derivative,
                 empirical_derivative
             );
@@ -518,17 +459,17 @@ mod tests {
         Ok(())
     }
 
-    /// This test empirically tests `short_deposit_derivative` by calling
+    /// This test empirically tests `calculate_open_short_derivative` by calling
     /// `calculate_open_short` at two points and comparing the empirical result
-    /// with the output of `short_deposit_derivative`.
+    /// with the output of `calculate_open_short_derivative`.
     #[tokio::test]
-    async fn fuzz_short_deposit_derivative() -> Result<()> {
+    async fn fuzz_calculate_open_short_derivative() -> Result<()> {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e12);
         // TODO pretty big comparison epsilon here
-        let test_comparison_epsilon = fixed!(1e15);
+        let test_tolerance = fixed!(1e15);
 
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -581,11 +522,11 @@ mod tests {
                 derivative_diff = empirical_derivative - short_deposit_derivative;
             }
             assert!(
-                derivative_diff < test_comparison_epsilon,
+                derivative_diff < test_tolerance,
                 "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
-                test_comparison_epsilon,
+                test_tolerance,
                 short_deposit_derivative,
                 empirical_derivative
             );
@@ -720,7 +661,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_calculate_implied_rate() -> Result<()> {
+    async fn fuzz_calculate_implied_rate() -> Result<()> {
         let tolerance = int256!(1e15);
 
         // Spawn a test chain with two agents.
@@ -885,8 +826,8 @@ mod tests {
     }
 
     #[tokio::test]
-    pub async fn fuzz_calc_open_short() -> Result<()> {
-        let tolerance = fixed!(1e9);
+    pub async fn fuzz_sol_calc_open_short() -> Result<()> {
+        let tolerance = fixed!(10e18);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -908,36 +849,36 @@ mod tests {
             let id = chain.snapshot().await?;
 
             // Run the preamble.
-            let fixed_rate = fixed!(0.05e18);
-            preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get state and trade details.
             let state = alice.get_state().await?;
             let Checkpoint {
-                vault_share_price: open_vault_share_price,
                 weighted_spot_price: _,
                 last_weighted_spot_price_update_time: _,
+                vault_share_price: open_vault_share_price,
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;
             let slippage_tolerance = fixed!(0.001e18);
-            let max_short = bob.calculate_max_short(Some(slippage_tolerance)).await?;
+            let max_short = celine.calculate_max_short(Some(slippage_tolerance)).await?;
             let min_bond_amount = FixedPoint::from(state.config.minimum_transaction_amount)
                 * FixedPoint::from(state.info.vault_share_price);
-            let short_amount = rng.gen_range(min_bond_amount..=max_short);
+            let bond_amount = rng.gen_range(min_bond_amount..=max_short);
 
             // Compare the open short call output against calculate_open_short.
-            let actual_base_amount =
-                state.calculate_open_short(short_amount, open_vault_share_price.into());
+            let rust_base = state.calculate_open_short(bond_amount, open_vault_share_price.into());
 
-            match bob
+            // The base required should always be less than the short amount.
+            celine.fund(bond_amount).await?;
+            match celine
                 .hyperdrive()
                 .open_short(
-                    short_amount.into(),
+                    bond_amount.into(),
                     FixedPoint::from(U256::MAX).into(),
                     fixed!(0).into(),
                     Options {
-                        destination: bob.address(),
+                        destination: celine.address(),
                         as_base: true,
                         extra_data: [].into(),
                     },
@@ -945,12 +886,12 @@ mod tests {
                 .call()
                 .await
             {
-                Ok((_, expected_base_amount)) => {
-                    let actual = actual_base_amount.unwrap();
-                    let error = if actual >= expected_base_amount.into() {
-                        actual - FixedPoint::from(expected_base_amount)
+                Ok((_, sol_base)) => {
+                    let rust_base_unwrapped = rust_base.unwrap();
+                    let error = if rust_base_unwrapped >= sol_base.into() {
+                        rust_base_unwrapped - FixedPoint::from(sol_base)
                     } else {
-                        FixedPoint::from(expected_base_amount) - actual
+                        FixedPoint::from(sol_base) - rust_base_unwrapped
                     };
                     assert!(
                         error <= tolerance,
@@ -959,7 +900,14 @@ mod tests {
                         tolerance
                     );
                 }
-                Err(_) => assert!(actual_base_amount.is_err()),
+                Err(sol_err) => {
+                    assert!(
+                        rust_base.is_err(),
+                        "sol_err={:#?}, but rust_base={:#?} did not error",
+                        sol_err,
+                        rust_base,
+                    );
+                }
             }
 
             // Revert to the snapshot and reset the agent's wallets.

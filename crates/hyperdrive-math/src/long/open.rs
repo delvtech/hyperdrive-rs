@@ -26,7 +26,7 @@ impl State {
     pub fn calculate_open_long<F: Into<FixedPoint>>(&self, base_amount: F) -> Result<FixedPoint> {
         let base_amount = base_amount.into();
 
-        if base_amount < self.config.minimum_transaction_amount.into() {
+        if base_amount < self.minimum_transaction_amount() {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low",));
         }
 
@@ -120,79 +120,19 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use ethers::{signers::LocalWallet, types::U256};
-    use fixed_point::{fixed, uint256};
-    use hyperdrive_test_utils::{
-        agent::Agent,
-        chain::{ChainClient, TestChain},
-        constants::FUZZ_RUNS,
-    };
+    use std::panic;
+
+    use ethers::types::{I256, U256};
+    use fixed_point::fixed;
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
-    use crate::test_utils::agent::HyperdriveMathAgent;
-
-    /// Executes random trades throughout a Hyperdrive term.
-    async fn preamble(
-        rng: &mut ChaCha8Rng,
-        alice: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        bob: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
-        fixed_rate: FixedPoint,
-    ) -> Result<()> {
-        // Fund the agent accounts and initialize the pool.
-        alice
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        bob.fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-        celine
-            .fund(rng.gen_range(fixed!(1_000e18)..=fixed!(500_000_000e18)))
-            .await?;
-
-        // Alice initializes the pool.
-        alice.initialize(fixed_rate, alice.base(), None).await?;
-
-        // Advance the time for over a term and make trades in some of the checkpoints.
-        let mut time_remaining = alice.get_config().position_duration;
-        while time_remaining > uint256!(0) {
-            // Bob opens a long.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let long_amount =
-                rng.gen_range(fixed!(1e12)..=bob.calculate_max_long(None).await? * discount);
-            bob.open_long(long_amount, None, None).await?;
-
-            // Celine opens a short.
-            let discount = rng.gen_range(fixed!(0.1e18)..=fixed!(0.5e18));
-            let min_short =
-                FixedPoint::from(alice.get_state().await?.config.minimum_transaction_amount);
-            let max_short = celine.calculate_max_short(None).await? * discount;
-            let short_amount = rng.gen_range(min_short..=max_short);
-            celine.open_short(short_amount, None, None).await?;
-
-            // Advance the time and mint all of the intermediate checkpoints.
-            let multiplier = rng.gen_range(fixed!(5e18)..=fixed!(50e18));
-            let delta = FixedPoint::from(time_remaining)
-                .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
-            time_remaining -= U256::from(delta);
-            alice
-                .advance_time(
-                    fixed!(0), // TODO: Use a real rate.
-                    delta,
-                )
-                .await?;
-        }
-
-        // Mint a checkpoint to close any matured positions from the first checkpoint
-        // of trading.
-        alice
-            .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-            .await?;
-
-        Ok(())
-    }
+    use crate::test_utils::{
+        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+    };
 
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_long() -> Result<()> {
@@ -328,13 +268,66 @@ mod tests {
         Ok(())
     }
 
-    // TODO ideally we would test calculate open long with an amount larger than the maximum size.
-    // However, `calculate_max_long` requires a `checkpoint_exposure` argument, which requires
-    // implementing checkpointing in the rust sdk.
-    // https://github.com/delvtech/hyperdrive/issues/862
+    // Tests open long with an amount larger than the maximum.
+    #[tokio::test]
+    async fn fuzz_error_open_long_max_txn_amount() -> Result<()> {
+        // This amount gets added to the max trade to cause a failure.
+        // TODO: You should be able to add a small amount (e.g. 1e18) to max to fail.
+        // calc_open_long or calc_max_long must be incorrect for the additional
+        // amount to have to be so large.
+        let max_base_delta = fixed!(1_000_000_000e18);
+
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            let max_iterations = 7;
+            // TODO: We should use calculate_absolute_max_long here because that is what we are testing.
+            // We need to catch panics because of FixedPoint overflows & underflows.
+            let max_trade = panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, Some(max_iterations))
+            });
+            // Since we're fuzzing it's possible that the max can fail.
+            // We're only going to use it in this test if it succeeded.
+            match max_trade {
+                Ok(max_trade) => match max_trade {
+                    Ok(max_trade) => {
+                        let base_amount = max_trade + max_base_delta;
+                        let bond_amount =
+                            panic::catch_unwind(|| state.calculate_open_long(base_amount));
+                        match bond_amount {
+                            Ok(result) => match result {
+                                Ok(_) => {
+                                    return Err(eyre!(
+                                        format!(
+                                            "calculate_open_long for {} base should have failed but succeeded.",
+                                            base_amount,
+                                        )
+                                    ));
+                                }
+                                Err(_) => continue, // Open threw an Err.
+                            },
+                            Err(_) => continue, // Open threw a panic, likely due to FixedPoint under/over flow.
+                        }
+                    }
+                    Err(_) => continue, // Max threw an Err.
+                },
+                Err(_) => continue, // Max thew an panic, likely due to FixedPoint under/over flow.
+            }
+        }
+
+        Ok(())
+    }
 
     #[tokio::test]
-    pub async fn fuzz_calc_open_long() -> Result<()> {
+    pub async fn fuzz_sol_calc_open_long() -> Result<()> {
         let tolerance = fixed!(1e10);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -357,23 +350,24 @@ mod tests {
             let id = chain.snapshot().await?;
 
             // Run the preamble.
-            let fixed_rate = fixed!(0.05e18);
-            preamble(&mut rng, &mut alice, &mut bob, &mut celine, fixed_rate).await?;
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get state and trade details.
             let state = alice.get_state().await?;
+            let min_txn_amount = state.minimum_transaction_amount();
             let max_long = bob.calculate_max_long(None).await?;
-            let min_base_amount = FixedPoint::from(state.config.minimum_transaction_amount)
-                * FixedPoint::from(state.info.vault_share_price);
-            let long_amount = rng.gen_range(min_base_amount..=max_long);
+            let base_amount = rng.gen_range(min_txn_amount..=max_long);
 
             // Compare the open short call output against calculate_open_long.
-            let bonds_purchased = state.calculate_open_long(long_amount);
+            let rust_bonds = state.calculate_open_long(base_amount);
 
+            // Fund a little extra to allow for of slippage.
+            bob.fund(base_amount + base_amount * fixed!(0.001e18))
+                .await?;
             match bob
                 .hyperdrive()
                 .open_long(
-                    long_amount.into(),
+                    base_amount.into(),
                     fixed!(0).into(),
                     fixed!(0).into(),
                     Options {
@@ -385,12 +379,12 @@ mod tests {
                 .call()
                 .await
             {
-                Ok((_, expected_bonds_purchased)) => {
-                    let actual = bonds_purchased.unwrap();
-                    let error = if actual >= expected_bonds_purchased.into() {
-                        actual - FixedPoint::from(expected_bonds_purchased)
+                Ok((_, sol_bonds)) => {
+                    let rust_bonds_unwrapped = rust_bonds.unwrap();
+                    let error = if rust_bonds_unwrapped >= sol_bonds.into() {
+                        rust_bonds_unwrapped - FixedPoint::from(sol_bonds)
                     } else {
-                        FixedPoint::from(expected_bonds_purchased) - actual
+                        FixedPoint::from(sol_bonds) - rust_bonds_unwrapped
                     };
                     assert!(
                         error <= tolerance,
@@ -399,8 +393,13 @@ mod tests {
                         tolerance
                     );
                 }
-                Err(_) => {
-                    assert!(bonds_purchased.is_err());
+                Err(sol_err) => {
+                    assert!(
+                        rust_bonds.is_err(),
+                        "sol_err={:#?}, but rust_bonds={:#?} did not error",
+                        sol_err,
+                        rust_bonds
+                    );
                 }
             }
 
