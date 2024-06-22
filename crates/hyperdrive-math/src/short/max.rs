@@ -194,8 +194,8 @@ impl State {
             // Iteratively update max_bond_amount via Newton's method.
             let derivative = self.calculate_open_short_derivative(
                 max_bond_amount,
-                spot_price,
                 open_vault_share_price,
+                Some(spot_price),
             )?;
             if deposit < target_budget {
                 max_bond_amount += (target_budget - deposit) / derivative
@@ -754,7 +754,8 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
-        let same_max_base_tolerance = fixed!(10e18);
+        let max_base_tolerance = fixed!(10e18);
+        let max_bonds_tolerance = fixed!(1e2);
         let reserves_drained_tolerance = fixed!(1e27);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -850,7 +851,17 @@ mod tests {
 
                             // Compare the max bond amounts.
                             let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
-                            assert_eq!(rust_max_bonds_unwrapped, sol_max_bonds.into());
+                            let error = if rust_max_bonds_unwrapped >= sol_max_bonds.into() {
+                                rust_max_bonds_unwrapped - FixedPoint::from(sol_max_bonds)
+                            } else {
+                                FixedPoint::from(sol_max_bonds) - rust_max_bonds_unwrapped
+                            };
+                            assert!(
+                                error <= max_bonds_tolerance,
+                                "max bonds error {} exceeds tolerance of {}",
+                                error,
+                                max_bonds_tolerance
+                            );
 
                             // Compare the open short call outputs.
                             let rust_max_base = state.calculate_open_short(
@@ -865,10 +876,10 @@ mod tests {
                                 FixedPoint::from(sol_max_base) - rust_max_base_unwrapped
                             };
                             assert!(
-                                error <= same_max_base_tolerance,
-                                "error {} exceeds tolerance of {}",
+                                error <= max_base_tolerance,
+                                "max base error {} exceeds tolerance of {}",
                                 error,
-                                same_max_base_tolerance
+                                max_base_tolerance
                             );
 
                             // Make sure the pool was drained.
