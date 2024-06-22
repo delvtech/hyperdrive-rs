@@ -362,7 +362,8 @@ mod tests {
             let rust_bonds = state.calculate_open_long(base_amount);
 
             // Fund a little extra to allow for of slippage.
-            bob.fund(base_amount + fixed!(10e18)).await?;
+            bob.fund(base_amount + base_amount * fixed!(0.001e18))
+                .await?;
             match bob
                 .hyperdrive()
                 .open_long(
