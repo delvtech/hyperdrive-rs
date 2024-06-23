@@ -333,7 +333,7 @@ impl State {
 
     /// Calculates the absolute max short that can be opened without violating the
     /// pool's solvency constraints.
-    fn calculate_absolute_max_short(
+    pub fn calculate_absolute_max_short(
         &self,
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
