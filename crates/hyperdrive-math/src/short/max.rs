@@ -117,17 +117,9 @@ impl State {
         }
 
         // Figure out the base deposit for the absolute max bond amount.
-        // This could fail due to inaccuracies in the absolute max estimate.
-        // If so, ignore it and move on.
-        // FIXME: This should not fail; we should be able to use ? operator and move on.
-        let maybe_absolute_max_deposit =
-            match self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price) {
-                Ok(deposit) => Some(deposit),
-                Err(_) => None,
-            };
-        if maybe_absolute_max_deposit.is_some()
-            && maybe_absolute_max_deposit.unwrap() <= target_budget
-        {
+        let absolute_max_deposit =
+            self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price)?;
+        if absolute_max_deposit <= target_budget {
             return Ok(absolute_max_bond_amount);
         }
 
@@ -433,13 +425,14 @@ impl State {
     ) -> Result<FixedPoint> {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))? / self.vault_share_price();
-        // FIXME: Check this against solidity; should we be using solvency here or just share reserves?
-        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
-        let solvency = self.calculate_solvency();
-        let guess = self.vault_share_price() * (solvency + checkpoint_exposure_shares);
+        let guess = self.vault_share_price().mul_down(
+            self.share_reserves() + checkpoint_exposure_shares
+                - self.long_exposure().div_down(self.vault_share_price())
+                - self.minimum_share_reserves(),
+        );
         let curve_fee = self.curve_fee() * (fixed!(1e18) - spot_price);
         let gov_curve_fee = self.governance_lp_fee() * curve_fee;
-        Ok(guess / (spot_price - curve_fee + gov_curve_fee))
+        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
     }
 
     /// Calculates the pool's solvency after opening a short.
@@ -888,18 +881,18 @@ mod tests {
                                 .min(state.share_reserves());
                             let min_share_reserves = state.minimum_share_reserves();
                             assert!(pool_shares >= min_share_reserves,
-                                    "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
-                                    state.effective_share_reserves()?,
-                                    min_share_reserves,
-                                );
+                                "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
+                                state.effective_share_reserves()?,
+                                min_share_reserves,
+                            );
                             let reserve_amount_above_minimum = pool_shares - min_share_reserves;
                             assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
-                                    "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
-                                    pool_shares,
-                                    min_share_reserves,
-                                    reserve_amount_above_minimum,
-                                    reserves_drained_tolerance,
-                                );
+                                "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
+                                pool_shares,
+                                min_share_reserves,
+                                reserve_amount_above_minimum,
+                                reserves_drained_tolerance,
+                            );
                         }
 
                         // Solidity calculate_max_short worked, but passing that bond amount to open_short failed.
