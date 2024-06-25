@@ -839,8 +839,8 @@ mod tests {
     }
 
     #[tokio::test]
-    pub async fn fuzz_sol_calc_open_short() -> Result<()> {
-        let tolerance = fixed!(10e18);
+    pub async fn fuzz_sol_calculate_open_short() -> Result<()> {
+        let tolerance = fixed!(1e10);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -864,8 +864,21 @@ mod tests {
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
+            // Set the variable rate to 0.
+            // This is required so that no interest is accrued between the
+            // estimate and actual open_short call.
+            alice.advance_time(fixed!(0), fixed!(1)).await?;
+
             // Get state and trade details.
             let state = alice.get_state().await?;
+            let min_txn_amount = state.minimum_transaction_amount();
+            let max_short = celine.calculate_max_short(None).await?;
+            let bond_amount = rng.gen_range(min_txn_amount..=max_short);
+
+            // The base required should always be less than the short amount.
+            celine.fund(bond_amount).await?;
+
+            // Get the open vault share price.
             let Checkpoint {
                 weighted_spot_price: _,
                 last_weighted_spot_price_update_time: _,
@@ -873,17 +886,9 @@ mod tests {
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;
-            let slippage_tolerance = fixed!(0.001e18);
-            let max_short = celine.calculate_max_short(Some(slippage_tolerance)).await?;
-            let min_bond_amount = FixedPoint::from(state.config.minimum_transaction_amount)
-                * FixedPoint::from(state.info.vault_share_price);
-            let bond_amount = rng.gen_range(min_bond_amount..=max_short);
 
             // Compare the open short call output against calculate_open_short.
             let rust_base = state.calculate_open_short(bond_amount, open_vault_share_price.into());
-
-            // The base required should always be less than the short amount.
-            celine.fund(bond_amount).await?;
             match celine
                 .hyperdrive()
                 .open_short(
