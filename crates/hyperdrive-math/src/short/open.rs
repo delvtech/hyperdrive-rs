@@ -555,9 +555,6 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_short() -> Result<()> {
-        // TODO: Why can't this pass with a tolerance of 1e9?
-        let tolerance = fixed!(1e11);
-
         // Spawn a test chain and create two agents -- Alice and Bob. Alice is
         // funded with a large amount of capital so that she can initialize the
         // pool. Bob is funded with a small amount of capital so that we can
@@ -582,6 +579,11 @@ mod tests {
             // Alice initializes the pool.
             alice.initialize(fixed_rate, contribution, None).await?;
 
+            // Set the variable rate to 0.
+            // This is required so that no interest is accrued between the
+            // estimate and actual open_short call.
+            alice.advance_time(fixed!(0), fixed!(1)).await?;
+
             // Attempt to predict the spot price after opening a short.
             let bond_amount = rng.gen_range(fixed!(0.01e18)..=bob.calculate_max_short(None).await?);
             let current_state = bob.get_state().await?;
@@ -595,19 +597,11 @@ mod tests {
             // price. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the short.
             let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
-            let error = if actual_spot_price > expected_spot_price {
-                actual_spot_price - expected_spot_price
-            } else {
-                expected_spot_price - actual_spot_price
-            };
-
-            assert!(
-                error < tolerance,
-                "error {} exceeds tolerance of {}",
-                error,
-                tolerance
+            assert_eq!(
+                actual_spot_price, expected_spot_price,
+                "expected actual_spot_price={} == expected_spot_price={}",
+                actual_spot_price, expected_spot_price,
             );
-
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
