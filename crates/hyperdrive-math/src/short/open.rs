@@ -431,7 +431,9 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_calculate_pool_deltas_after_open_short() -> Result<()> {
+    async fn test_sol_calculate_pool_deltas_after_open_short() -> Result<()> {
+        let test_tolerance = fixed!(10);
+
         let chain = TestChain::new().await?;
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -447,11 +449,9 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price()?,
                     checkpoint_exposure,
-                    None,
                     None,
                 )
             }) {
@@ -465,11 +465,12 @@ mod tests {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
-            let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
+            let rust_pool_deltas = state.calculate_pool_deltas_after_open_short(bond_amount);
             let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
-            let gov_fee = state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
+            let gov_fee_base =
+                state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
             let fees = curve_fee_base.div_up(state.vault_share_price())
-                - gov_fee.div_up(state.vault_share_price());
+                - gov_fee_base.div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
@@ -483,15 +484,16 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => {
-                    let expected_with_fees = FixedPoint::from(expected) - fees;
-                    let actual_with_fees = actual.unwrap();
-                    let result_equal = expected_with_fees <= actual_with_fees + fixed!(10)
-                        && expected_with_fees >= actual_with_fees - fixed!(10);
+                Ok(sol_pool_deltas) => {
+                    let sol_pool_deltas_with_fees = FixedPoint::from(sol_pool_deltas) - fees;
+                    let actual_with_fees = rust_pool_deltas.unwrap();
+                    let result_equal = sol_pool_deltas_with_fees
+                        <= actual_with_fees + test_tolerance
+                        && sol_pool_deltas_with_fees >= actual_with_fees - test_tolerance;
                     assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => {
-                    assert!(actual.is_err())
+                    assert!(rust_pool_deltas.is_err())
                 }
             };
         }
