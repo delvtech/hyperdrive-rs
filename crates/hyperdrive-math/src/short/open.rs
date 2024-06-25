@@ -815,13 +815,14 @@ mod tests {
                         });
                         match base_amount {
                             Ok(result) => match result {
-                                Ok(_) => {
-                                    return Err(eyre!(
-                                        format!(
-                                            "calculate_open_short for {} bonds should have failed but succeeded.",
-                                            bond_amount,
-                                        )
-                                    ));
+                                Ok(base_amount) => {
+                                    return Err(eyre!(format!(
+                                        "calculate_open_short on bond_amount={:#?} > max_bond_amount={:#?} \
+                                        returned base_amount={:#?}, but should have failed.",
+                                        bond_amount,
+                                        max_trade,
+                                        base_amount,
+                                    )));
                                 }
                                 Err(_) => continue, // Open threw an Err.
                             },
