@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_calculate_short_principal() -> Result<()> {
+    async fn test_sol_calculate_short_principal() -> Result<()> {
         // This test is the same as the yield_space.rs `fuzz_calculate_max_buy_shares_in_safe`,
         // but is worth having around in case we ever change how we compute short principal.
         let chain = TestChain::new().await?;
@@ -429,13 +429,13 @@ mod tests {
     /// with the output of `calculate_short_principal_derivative`.
     #[tokio::test]
     async fn fuzz_calculate_short_principal_derivative() -> Result<()> {
-        let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e12);
         // TODO pretty big comparison epsilon here
         let test_tolerance = fixed!(1e16);
 
+        let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
@@ -482,13 +482,13 @@ mod tests {
     /// with the output of `calculate_open_short_derivative`.
     #[tokio::test]
     async fn fuzz_calculate_open_short_derivative() -> Result<()> {
-        let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
         let empirical_derivative_epsilon = fixed!(1e12);
         // TODO pretty big comparison epsilon here
         let test_tolerance = fixed!(1e15);
 
+        let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
