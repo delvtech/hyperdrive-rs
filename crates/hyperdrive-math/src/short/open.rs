@@ -574,7 +574,7 @@ mod tests {
             let short_principal_derivative =
                 state.calculate_short_principal_derivative(bond_amount)?;
 
-            // Enxure that the empirical and analytical derivatives match.
+            // Ensure that the empirical and analytical derivatives match.
             let derivative_diff = if short_principal_derivative >= empirical_derivative {
                 short_principal_derivative - empirical_derivative
             } else {
@@ -645,7 +645,7 @@ mod tests {
                 Some(state.calculate_spot_price()?),
             )?;
 
-            // Enxure that the empirical and analytical derivatives match.
+            // Ensure that the empirical and analytical derivatives match.
             let derivative_diff = if short_deposit_derivative >= empirical_derivative {
                 short_deposit_derivative - empirical_derivative
             } else {
@@ -667,6 +667,8 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_short() -> Result<()> {
+        let test_tolerance = fixed!(10);
+
         // Spawn a test chain and create two agents -- Alice and Bob. Alice is
         // funded with a large amount of capital so that she can initialize the
         // pool. Bob is funded with a small amount of capital so that we can
@@ -691,29 +693,40 @@ mod tests {
             // Alice initializes the pool.
             alice.initialize(fixed_rate, contribution, None).await?;
 
-            // Set the variable rate to 0.
-            // This is required so that no interest is accrued between the
-            // estimate and actual open_short call.
-            // FIXME: We should not have to do this for the test to pass.
-            alice.advance_time(fixed!(0), fixed!(1)).await?;
-
             // Attempt to predict the spot price after opening a short.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
             let bond_amount = rng.gen_range(
                 state.minimum_transaction_amount()..=bob.calculate_max_short(None).await?,
             );
-            let expected_spot_price = state.calculate_spot_price_after_short(bond_amount, None)?;
 
             // Open the short.
             bob.open_short(bond_amount, None, None).await?;
 
+            // Calling the solidity OpenShort causes the mock yield
+            // source to accrue some interest. We want to use the state
+            // before the Solidity OpenShort, but with the vault share
+            // price after the block tick.
+            let new_state = alice.get_state().await?;
+            let new_vault_share_price = new_state.vault_share_price();
+            state.info.vault_share_price = new_vault_share_price.into();
+
             // Verify that the predicted spot price is equal to the ending spot
             // price.
-            let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
-            assert_eq!(
-                actual_spot_price, expected_spot_price,
-                "expected actual_spot_price={} == expected_spot_price={}",
-                actual_spot_price, expected_spot_price,
+            let expected_spot_price = state.calculate_spot_price_after_short(bond_amount, None)?;
+            let actual_spot_price = new_state.calculate_spot_price()?;
+            let abs_spot_price_diff = if actual_spot_price >= expected_spot_price {
+                actual_spot_price - expected_spot_price
+            } else {
+                expected_spot_price - actual_spot_price
+            };
+            assert!(
+                abs_spot_price_diff <= test_tolerance,
+                "expected abs(spot_price_diff={}) <= test_tolerance={};
+                calculated_spot_price={}, actual_spot_price={}",
+                abs_spot_price_diff,
+                test_tolerance,
+                expected_spot_price,
+                actual_spot_price,
             );
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
@@ -973,14 +986,8 @@ mod tests {
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
-            // Set the variable rate to 0.
-            // This is required so that no interest is accrued between the
-            // estimate and actual open_short call.
-            // FIXME: We should not have to do this for the test to pass.
-            alice.advance_time(fixed!(0), fixed!(1)).await?;
-
             // Get state and trade details.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
             let max_short = celine.calculate_max_short(None).await?;
             let bond_amount = rng.gen_range(min_txn_amount..=max_short);
@@ -988,17 +995,7 @@ mod tests {
             // The base required should always be less than the short amount.
             celine.fund(bond_amount).await?;
 
-            // Get the open vault share price.
-            let Checkpoint {
-                weighted_spot_price: _,
-                last_weighted_spot_price_update_time: _,
-                vault_share_price: open_vault_share_price,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
-
             // Compare the open short call output against calculate_open_short.
-            let rust_base = state.calculate_open_short(bond_amount, open_vault_share_price.into());
             match celine
                 .hyperdrive()
                 .open_short(
@@ -1015,6 +1012,29 @@ mod tests {
                 .await
             {
                 Ok((_, sol_base)) => {
+                    // Calling the solidity OpenShort causes the mock yield
+                    // source to accrue some interest. We want to use the state
+                    // before the Solidity OpenShort, but with the vault share
+                    // price after the block tick.
+
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the open vault share price.
+                    let Checkpoint {
+                        weighted_spot_price: _,
+                        last_weighted_spot_price_update_time: _,
+                        vault_share_price: open_vault_share_price,
+                    } = alice
+                        .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Run the Rust function.
+                    let rust_base =
+                        state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+                    // Compare the results.
                     let rust_base_unwrapped = rust_base.unwrap();
                     let sol_base_fp = FixedPoint::from(sol_base);
                     assert_eq!(
@@ -1024,6 +1044,24 @@ mod tests {
                     );
                 }
                 Err(sol_err) => {
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the open vault share price.
+                    let Checkpoint {
+                        weighted_spot_price: _,
+                        last_weighted_spot_price_update_time: _,
+                        vault_share_price: open_vault_share_price,
+                    } = alice
+                        .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Run the Rust function.
+                    let rust_base =
+                        state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+                    // Make sure Rust failed.
                     assert!(
                         rust_base.is_err(),
                         "sol_err={:#?}, but rust_base={:#?} did not error",
