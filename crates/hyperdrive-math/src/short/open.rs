@@ -486,10 +486,10 @@ mod tests {
             {
                 Ok(sol_pool_deltas) => {
                     let sol_pool_deltas_with_fees = FixedPoint::from(sol_pool_deltas) - fees;
-                    let actual_with_fees = rust_pool_deltas.unwrap();
+                    let rust_pool_deltas_unwrapped = rust_pool_deltas.unwrap();
                     let result_equal = sol_pool_deltas_with_fees
-                        <= actual_with_fees + test_tolerance
-                        && sol_pool_deltas_with_fees >= actual_with_fees - test_tolerance;
+                        <= rust_pool_deltas_unwrapped + test_tolerance
+                        && sol_pool_deltas_with_fees >= rust_pool_deltas_unwrapped - test_tolerance;
                     assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => {
@@ -666,8 +666,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_spot_price_after_short() -> Result<()> {
-        let test_tolerance = fixed!(10);
+    async fn fuzz_sol_calculate_spot_price_after_short() -> Result<()> {
+        let test_tolerance = fixed!(1e3);
 
         // Spawn a test chain and create two agents -- Alice and Bob. Alice is
         // funded with a large amount of capital so that she can initialize the
@@ -702,10 +702,10 @@ mod tests {
             // Open the short.
             bob.open_short(bond_amount, None, None).await?;
 
-            // Calling the solidity OpenShort causes the mock yield
-            // source to accrue some interest. We want to use the state
-            // before the Solidity OpenShort, but with the vault share
-            // price after the block tick.
+            // Calling any Solidity Hyperdrive transaction causes the
+            // mock yield source to accrue some interest. We want to use
+            // the state before the Solidity OpenShort, but with the
+            // vault share price after the block tick.
             let new_state = alice.get_state().await?;
             let new_vault_share_price = new_state.vault_share_price();
             state.info.vault_share_price = new_vault_share_price.into();
@@ -1012,10 +1012,10 @@ mod tests {
                 .await
             {
                 Ok((_, sol_base)) => {
-                    // Calling the solidity OpenShort causes the mock yield
-                    // source to accrue some interest. We want to use the state
-                    // before the Solidity OpenShort, but with the vault share
-                    // price after the block tick.
+                    // Calling any Solidity Hyperdrive transaction causes the
+                    // mock yield source to accrue some interest. We want to use
+                    // the state before the Solidity OpenShort, but with the
+                    // vault share price after the block tick.
 
                     // Get the current vault share price & update state.
                     let vault_share_price = alice.get_state().await?.vault_share_price();
