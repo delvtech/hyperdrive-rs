@@ -874,10 +874,12 @@ mod tests {
     // Tests open short with an amount smaller than the minimum.
     #[tokio::test]
     async fn test_error_open_short_min_txn_amount() -> Result<()> {
+        let min_bond_delta = fixed!(1);
+
         let mut rng = thread_rng();
         let state = rng.gen::<State>();
         let result = state.calculate_open_short(
-            (state.config.minimum_transaction_amount - 10).into(),
+            state.minimum_transaction_amount() - min_bond_delta,
             state.vault_share_price(),
         );
         assert!(result.is_err());
