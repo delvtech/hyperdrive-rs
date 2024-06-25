@@ -708,8 +708,7 @@ mod tests {
             bob.open_short(bond_amount, None, None).await?;
 
             // Verify that the predicted spot price is equal to the ending spot
-            // price. These won't be exactly equal because the vault share price
-            // increases between the prediction and opening the short.
+            // price.
             let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
             assert_eq!(
                 actual_spot_price, expected_spot_price,
@@ -787,7 +786,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_implied_rate() -> Result<()> {
-        let tolerance = int256!(1e15);
+        let tolerance = int256!(1e12);
 
         // Spawn a test chain with two agents.
         let mut rng = thread_rng();
@@ -952,8 +951,6 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calculate_open_short() -> Result<()> {
-        let tolerance = fixed!(1e10);
-
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
@@ -1019,16 +1016,11 @@ mod tests {
             {
                 Ok((_, sol_base)) => {
                     let rust_base_unwrapped = rust_base.unwrap();
-                    let error = if rust_base_unwrapped >= sol_base.into() {
-                        rust_base_unwrapped - FixedPoint::from(sol_base)
-                    } else {
-                        FixedPoint::from(sol_base) - rust_base_unwrapped
-                    };
-                    assert!(
-                        error <= tolerance,
-                        "error {} exceeds tolerance of {}",
-                        error,
-                        tolerance
+                    let sol_base_fp = FixedPoint::from(sol_base);
+                    assert_eq!(
+                        rust_base_unwrapped, sol_base_fp,
+                        "expected rust_base={:#?} == sol_base={:#?}",
+                        rust_base_unwrapped, sol_base_fp
                     );
                 }
                 Err(sol_err) => {
