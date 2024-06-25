@@ -747,8 +747,6 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
-        let max_base_tolerance = fixed!(1e16);
-        let max_bonds_tolerance = fixed!(1e8);
         let reserves_drained_tolerance = fixed!(1e27);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -772,19 +770,11 @@ mod tests {
 
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
-            alice.advance_time(fixed!(0), fixed!(1)).await?;
 
             // Get the current state from solidity.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
 
-            // Get the open vault share price.
-            let Checkpoint {
-                weighted_spot_price: _,
-                last_weighted_spot_price_update_time: _,
-                vault_share_price: open_vault_share_price,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
+            // Get the current checkpoint exposure.
             let checkpoint_exposure = alice
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
@@ -815,9 +805,30 @@ mod tests {
                 .await
             {
                 Ok(sol_max_bonds) => {
+                    // Calling any Solidity Hyperdrive transaction causes the
+                    // mock yield source to accrue some interest. We want to use
+                    // the state before the Solidity OpenShort, but with the
+                    // vault share price after the block tick.
+
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Solidity reports everything is good, so we run the Rust fns.
+                    let rust_max_bonds = panic::catch_unwind(|| {
+                        state.calculate_absolute_max_short(
+                            state.calculate_spot_price()?,
+                            checkpoint_exposure,
+                            Some(max_iterations),
+                        )
+                    });
+
+                    // Compare the max bond amounts.
+                    let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
+                    assert_eq!(rust_max_bonds_unwrapped, FixedPoint::from(sol_max_bonds));
+
                     // The amount Celine has to pay will always be less than the bond amount.
                     celine.fund(sol_max_bonds.into()).await?;
-
                     match celine
                         .hyperdrive()
                         .open_short(
@@ -834,28 +845,18 @@ mod tests {
                         .await
                     {
                         Ok((_, sol_max_base)) => {
-                            // Solidity reports everything is good, so we run the Rust fns.
-                            let rust_max_bonds = panic::catch_unwind(|| {
-                                state.calculate_absolute_max_short(
-                                    state.calculate_spot_price()?,
-                                    checkpoint_exposure,
-                                    Some(max_iterations),
-                                )
-                            });
+                            // Get the current vault share price & update state.
+                            let vault_share_price = alice.get_state().await?.vault_share_price();
+                            state.info.vault_share_price = vault_share_price.into();
 
-                            // Compare the max bond amounts.
-                            let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
-                            let error = if rust_max_bonds_unwrapped >= sol_max_bonds.into() {
-                                rust_max_bonds_unwrapped - FixedPoint::from(sol_max_bonds)
-                            } else {
-                                FixedPoint::from(sol_max_bonds) - rust_max_bonds_unwrapped
-                            };
-                            assert!(
-                                error <= max_bonds_tolerance,
-                                "max bonds error {} exceeds tolerance of {}",
-                                error,
-                                max_bonds_tolerance
-                            );
+                            // Get the open vault share price.
+                            let Checkpoint {
+                                weighted_spot_price: _,
+                                last_weighted_spot_price_update_time: _,
+                                vault_share_price: open_vault_share_price,
+                            } = alice
+                                .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                                .await?;
 
                             // Compare the open short call outputs.
                             let rust_max_base = state.calculate_open_short(
@@ -864,17 +865,7 @@ mod tests {
                             );
 
                             let rust_max_base_unwrapped = rust_max_base.unwrap();
-                            let error = if rust_max_base_unwrapped >= sol_max_base.into() {
-                                rust_max_base_unwrapped - FixedPoint::from(sol_max_base)
-                            } else {
-                                FixedPoint::from(sol_max_base) - rust_max_base_unwrapped
-                            };
-                            assert!(
-                                error <= max_base_tolerance,
-                                "max base error {} exceeds tolerance of {}",
-                                error,
-                                max_base_tolerance
-                            );
+                            assert_eq!(rust_max_base_unwrapped, FixedPoint::from(sol_max_base));
 
                             // Make sure the pool was drained.
                             let pool_shares = state
@@ -906,18 +897,25 @@ mod tests {
 
                 // Solidity calculate_max_short failed; verify that rust calculate_max_short fails.
                 Err(_) => {
-                    let rust_calc_max_output = panic::catch_unwind(|| {
-                        state.calculate_max_short(
-                            U256::from(U128::MAX),
-                            open_vault_share_price,
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the current checkpoint exposure.
+                    let checkpoint_exposure = alice
+                        .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Solidity reports everything is good, so we run the Rust fns.
+                    let rust_max_bonds = panic::catch_unwind(|| {
+                        state.calculate_absolute_max_short(
+                            state.calculate_spot_price()?,
                             checkpoint_exposure,
-                            None,
                             Some(max_iterations),
                         )
                     });
-                    assert!(
-                        rust_calc_max_output.is_err() || rust_calc_max_output.unwrap().is_err()
-                    );
+
+                    assert!(rust_max_bonds.is_err() || rust_max_bonds.unwrap().is_err());
                 }
             }
 
