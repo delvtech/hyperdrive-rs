@@ -582,6 +582,7 @@ mod tests {
             // Set the variable rate to 0.
             // This is required so that no interest is accrued between the
             // estimate and actual open_short call.
+            // FIXME: We should not have to do this for the test to pass.
             alice.advance_time(fixed!(0), fixed!(1)).await?;
 
             // Attempt to predict the spot price after opening a short.
@@ -867,6 +868,7 @@ mod tests {
             // Set the variable rate to 0.
             // This is required so that no interest is accrued between the
             // estimate and actual open_short call.
+            // FIXME: We should not have to do this for the test to pass.
             alice.advance_time(fixed!(0), fixed!(1)).await?;
 
             // Get state and trade details.
