@@ -53,6 +53,54 @@ impl State {
 
         Ok(flat + curve)
     }
+
+    /// Calculates the market value of a long position using the equation:
+    /// market_estimate = trading_proceeds - flat_fees_paid - curve_fees_paid
+    ///
+    /// trading_proceeds = flat_value + curve_value
+    ///                  = dy * (1 - t) + dy * t * p
+    ///                  = dy * ((1 - t) + (t * p))
+    /// flat_value       = dy * (1 - t)
+    /// curve_bonds      = dy * t
+    /// curve_value      = curve_bonds * p
+    ///                  = dy * t * p
+    /// flat_fees_paid   = flat_value * flat_fee
+    ///                  = dy * (1 - t) * flat_fee
+    /// curve_fees_paid  = (curve_bonds - curve_value) * curve_fee
+    ///                  = dy * t * (1 - p) * curve_fee
+    ///
+    /// dy = bond_amount
+    /// p  = spot_price
+    /// t  = time_remaining
+    pub fn calculate_value_long<F: Into<FixedPoint>>(
+        &self,
+        bond_amount: F,
+        maturity_time: U256,
+        current_time: U256,
+    ) -> Result<FixedPoint> {
+        let bond_amount = bond_amount.into();
+
+        let spot_price = self.calculate_spot_price()?;
+
+        // get the time remaining = (maturity_time - latest_checkpoint) / position_duration
+        let latest_checkpoint = self.to_checkpoint(current_time.into());
+        let time_remaining = if maturity_time > latest_checkpoint {
+            // NOTE: Round down to underestimate the time remaining.
+            FixedPoint::from((maturity_time - latest_checkpoint) / self.position_duration())
+        } else {
+            fixed!(0)
+        };
+
+        let flat_value = bond_amount * (fixed!(1e18) - time_remaining);
+        let curve_bonds = bond_amount * time_remaining;
+        let curve_value = curve_bonds * spot_price;
+
+        let trading_proceeds = flat_value + curve_value;
+        let flat_fees_paid = flat_value * self.config.fees.flat.into();
+        let curve_fees_paid = (curve_bonds - curve_value) * self.config.fees.curve.into();
+
+        Ok(trading_proceeds - flat_fees_paid - curve_fees_paid)
+    }
 }
 
 #[cfg(test)]

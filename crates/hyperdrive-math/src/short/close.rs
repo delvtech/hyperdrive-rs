@@ -269,6 +269,57 @@ impl State {
             close_vault_share_price,
         ))
     }
+
+    /// Calculates the market value of a short position using the equation:
+    /// market_value = yield_accrued + trading_proceeds - curve_fees_paid + flat_fees_returned
+    ///
+    /// yield_accrued      = dy * (c-c0)/c0
+    /// trading_proceeds   = dy * (1 - p) * t
+    /// curve_fees_paid    = trading_proceeds * curve_fee
+    /// flat_fees_returned = dy * t * flat_fee
+    ///
+    /// dy = bond_amount
+    /// c  = close_vault_share_price (current if non-matured, or checkpoint's if matured)
+    /// c0 = open_vault_share_price
+    /// p  = spot_price
+    /// t  = time_remaining
+    pub fn calculate_value_short<F: Into<FixedPoint>>(
+        &self,
+        bond_amount: F,
+        open_vault_share_price: F,
+        close_vault_share_price: F,
+        maturity_time: U256,
+        current_time: U256,
+    ) -> Result<FixedPoint> {
+        let bond_amount = bond_amount.into();
+        let open_vault_share_price = open_vault_share_price.into();
+        let close_vault_share_price = close_vault_share_price.into();
+
+        let spot_price = self.calculate_spot_price()?;
+
+        // get the time remaining = (maturity_time - latest_checkpoint) / position_duration
+        let latest_checkpoint = self.to_checkpoint(current_time.into());
+        let time_remaining = if maturity_time > latest_checkpoint {
+            // NOTE: Round down to underestimate the time remaining.
+            FixedPoint::from((maturity_time - latest_checkpoint) / self.position_duration())
+        } else {
+            fixed!(0)
+        };
+
+        let yield_accrued = bond_amount * (close_vault_share_price - open_vault_share_price)
+            / open_vault_share_price;
+
+        // trading_proceeds = dy * (1 - p) * t
+        let trading_proceeds = bond_amount * (fixed!(1e18) - spot_price) * (time_remaining);
+
+        // curve_fees_paid = trading_proceeds * curve_fee
+        let curve_fees_paid = trading_proceeds * self.config.fees.curve.into();
+
+        // flat_fees_returned = dy * t * flat_fee
+        let flat_fees_returned = bond_amount * time_remaining * self.config.fees.flat.into();
+
+        Ok(yield_accrued + trading_proceeds - curve_fees_paid + flat_fees_returned)
+    }
 }
 
 #[cfg(test)]
