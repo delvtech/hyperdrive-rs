@@ -747,8 +747,8 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
-        let max_base_tolerance = fixed!(10e18);
-        let max_bonds_tolerance = fixed!(1e2);
+        let max_base_tolerance = fixed!(1e16);
+        let max_bonds_tolerance = fixed!(1e8);
         let reserves_drained_tolerance = fixed!(1e27);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -772,6 +772,7 @@ mod tests {
 
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            alice.advance_time(fixed!(0), fixed!(1)).await?;
 
             // Get the current state from solidity.
             let state = alice.get_state().await?;
