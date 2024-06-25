@@ -175,7 +175,7 @@ impl State {
 
             // We update the best valid max bond amount if the deposit amount
             // is valid and the current guess is bigger than the previous best.
-            if deposit <= target_budget && max_bond_amount > best_valid_max_bond_amount {
+            if deposit <= target_budget && max_bond_amount >= best_valid_max_bond_amount {
                 best_valid_max_bond_amount = max_bond_amount;
                 // Stop if we found the exact solution.
                 if deposit == target_budget {
