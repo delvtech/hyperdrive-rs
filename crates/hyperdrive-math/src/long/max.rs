@@ -510,14 +510,14 @@ mod tests {
     /// This test differentially fuzzes the `absolute_max_long` function against
     /// the Solidity analogue `calculateAbsoluteMaxLong`.
     #[tokio::test]
-    async fn fuzz_absolute_max_long() -> Result<()> {
+    async fn fuzz_sol_absolute_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = panic::catch_unwind(|| state.absolute_max_long());
+            let rust_absolute_max_long = panic::catch_unwind(|| state.absolute_max_long());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_absolute_max_long(
@@ -545,12 +545,15 @@ mod tests {
                 .call()
                 .await
             {
-                Ok((expected_base_amount, expected_bond_amount)) => {
-                    let (actual_base_amount, actual_bond_amount) = actual.unwrap().unwrap();
-                    assert_eq!(actual_base_amount, FixedPoint::from(expected_base_amount));
-                    assert_eq!(actual_bond_amount, FixedPoint::from(expected_bond_amount));
+                Ok((sol_base_amount, sol_bond_amount)) => {
+                    let (rust_base_amount, rust_bond_amount) =
+                        rust_absolute_max_long.unwrap().unwrap();
+                    assert_eq!(rust_base_amount, FixedPoint::from(sol_base_amount));
+                    assert_eq!(rust_bond_amount, FixedPoint::from(sol_bond_amount));
                 }
-                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
+                Err(_) => assert!(
+                    rust_absolute_max_long.is_err() || rust_absolute_max_long.unwrap().is_err()
+                ),
             }
         }
 
@@ -564,7 +567,7 @@ mod tests {
     /// `calculate_max_long` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
     #[tokio::test]
-    async fn fuzz_calculate_max_long() -> Result<()> {
+    async fn fuzz_sol_calculate_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -640,7 +643,7 @@ mod tests {
     /// by calling `calculate_open_long` at two points and comparing the empirical
     /// result with the output of `long_amount_derivative`.
     #[tokio::test]
-    async fn test_max_long_derivative() -> Result<()> {
+    async fn fuzz_max_long_derivative() -> Result<()> {
         let mut rng = thread_rng();
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
@@ -653,30 +656,28 @@ mod tests {
             let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
             // We need to catch panics here because FixedPoint panics on overflow or underflow.
-            let p1 = match panic::catch_unwind(|| {
-                state.calculate_open_long(amount - empirical_derivative_epsilon)
-            }) {
-                Ok(p) => match p {
-                    Ok(p) => p,
+            let f_x = match panic::catch_unwind(|| state.calculate_open_long(amount)) {
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue, // Err; the amount results in the pool being insolvent.
                 },
                 Err(_) => continue, // panic; likely in FixedPoint
             };
 
-            let p2 = match panic::catch_unwind(|| {
+            let f_x_plus_delta = match panic::catch_unwind(|| {
                 state.calculate_open_long(amount + empirical_derivative_epsilon)
             }) {
-                Ok(p) => match p {
-                    Ok(p) => p,
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue,
                 },
                 // If the amount results in the pool being insolvent, skip this iteration.
                 Err(_) => continue,
             };
             // Sanity check.
-            assert!(p2 > p1);
+            assert!(f_x_plus_delta > f_x);
 
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
             let maybe_open_long_derivative = state.calculate_open_long_derivative(amount)?;
             maybe_open_long_derivative.map(|derivative| {
                 let derivative_diff;
