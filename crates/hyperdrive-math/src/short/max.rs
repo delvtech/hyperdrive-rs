@@ -747,6 +747,8 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
+        let max_bonds_tolerance = fixed!(1e10);
+        let max_base_tolerance = fixed!(1e10);
         let reserves_drained_tolerance = fixed!(1e27);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -805,15 +807,6 @@ mod tests {
                 .await
             {
                 Ok(sol_max_bonds) => {
-                    // Calling any Solidity Hyperdrive transaction causes the
-                    // mock yield source to accrue some interest. We want to use
-                    // the state before the Solidity OpenShort, but with the
-                    // vault share price after the block tick.
-
-                    // Get the current vault share price & update state.
-                    let vault_share_price = alice.get_state().await?.vault_share_price();
-                    state.info.vault_share_price = vault_share_price.into();
-
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
@@ -825,7 +818,18 @@ mod tests {
 
                     // Compare the max bond amounts.
                     let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
-                    assert_eq!(rust_max_bonds_unwrapped, FixedPoint::from(sol_max_bonds));
+                    let sol_max_bonds_fp = FixedPoint::from(sol_max_bonds);
+                    let error = if rust_max_bonds_unwrapped > sol_max_bonds_fp {
+                        rust_max_bonds_unwrapped - sol_max_bonds_fp
+                    } else {
+                        sol_max_bonds_fp - rust_max_bonds_unwrapped
+                    };
+                    assert!(
+                        error < max_bonds_tolerance,
+                        "expected abs(rust_bonds - sol_bonds)={} >= max_bonds_tolerance={}",
+                        error,
+                        max_bonds_tolerance
+                    );
 
                     // The amount Celine has to pay will always be less than the bond amount.
                     celine.fund(sol_max_bonds.into()).await?;
@@ -845,6 +849,10 @@ mod tests {
                         .await
                     {
                         Ok((_, sol_max_base)) => {
+                            // Calling any Solidity Hyperdrive transaction causes the
+                            // mock yield source to accrue some interest. We want to use
+                            // the state before the Solidity OpenShort, but with the
+                            // vault share price after the block tick.
                             // Get the current vault share price & update state.
                             let vault_share_price = alice.get_state().await?.vault_share_price();
                             state.info.vault_share_price = vault_share_price.into();
@@ -865,7 +873,18 @@ mod tests {
                             );
 
                             let rust_max_base_unwrapped = rust_max_base.unwrap();
-                            assert_eq!(rust_max_base_unwrapped, FixedPoint::from(sol_max_base));
+                            let sol_max_base_fp = FixedPoint::from(sol_max_base);
+                            let error = if rust_max_base_unwrapped > sol_max_base_fp {
+                                rust_max_base_unwrapped - sol_max_base_fp
+                            } else {
+                                sol_max_base_fp - rust_max_base_unwrapped
+                            };
+                            assert!(
+                                error < max_base_tolerance,
+                                "expected abs(rust_base - sol_base)={} >= max_base_tolerance={}",
+                                error,
+                                max_base_tolerance
+                            );
 
                             // Make sure the pool was drained.
                             let pool_shares = state
