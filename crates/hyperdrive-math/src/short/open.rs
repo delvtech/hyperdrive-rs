@@ -96,7 +96,6 @@ impl State {
         let curve_fee_shares = self
             .open_short_curve_fee(bond_amount)?
             .div_up(self.vault_share_price());
-
         if share_reserves_delta < curve_fee_shares {
             return Err(eyre!(format!(
                 "The transaction curve fee = {}, computed with coefficient = {},
@@ -179,7 +178,7 @@ impl State {
         // reimbursed upon closing.
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
 
-        // Short circuit the derivative if the forward function returns 0.
+        // Short circuit the derivative if the function returns 0.
         if self.calculate_short_proceeds_up(
             bond_amount,
             self.calculate_short_principal(bond_amount)?
@@ -198,7 +197,7 @@ impl State {
             None => self.calculate_spot_price()?,
         };
 
-        // All of these are in base
+        // All of these are in base.
         let share_adjustment_derivative =
             close_vault_share_price.div_up(open_vault_share_price) + self.flat_fee();
         let short_principal_derivative = self
