@@ -223,7 +223,10 @@ mod tests {
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Attempt to predict the spot price after opening a long.
-            let base_paid = rng.gen_range(fixed!(0.1e18)..=bob.calculate_max_long(None).await?);
+            let base_paid = rng.gen_range(
+                alice.get_state().await?.minimum_transaction_amount()
+                    ..=bob.calculate_max_long(None).await?,
+            );
             let expected_spot_rate = bob
                 .get_state()
                 .await?
@@ -328,7 +331,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calc_open_long() -> Result<()> {
-        let tolerance = fixed!(1e10);
+        let tolerance = fixed!(1e3);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -353,13 +356,10 @@ mod tests {
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get state and trade details.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
             let max_long = bob.calculate_max_long(None).await?;
             let base_amount = rng.gen_range(min_txn_amount..=max_long);
-
-            // Compare the open short call output against calculate_open_long.
-            let rust_bonds = state.calculate_open_long(base_amount);
 
             // Fund a little extra to allow for of slippage.
             bob.fund(base_amount + base_amount * fixed!(0.001e18))
@@ -380,6 +380,12 @@ mod tests {
                 .await
             {
                 Ok((_, sol_bonds)) => {
+                    // Anvil ticks the block before applying solidity fn; update state with new price.
+                    let new_vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = new_vault_share_price.into();
+                    let rust_bonds = state.calculate_open_long(base_amount);
+
+                    // Compare the Rust open long call output against calculate_open_long.
                     let rust_bonds_unwrapped = rust_bonds.unwrap();
                     let error = if rust_bonds_unwrapped >= sol_bonds.into() {
                         rust_bonds_unwrapped - FixedPoint::from(sol_bonds)
@@ -394,6 +400,10 @@ mod tests {
                     );
                 }
                 Err(sol_err) => {
+                    // Anvil ticks the block before applying solidity fn; update state with new price.
+                    let new_vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = new_vault_share_price.into();
+                    let rust_bonds = state.calculate_open_long(base_amount);
                     assert!(
                         rust_bonds.is_err(),
                         "sol_err={:#?}, but rust_bonds={:#?} did not error",

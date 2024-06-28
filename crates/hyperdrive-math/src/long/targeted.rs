@@ -405,7 +405,7 @@ mod tests {
                 bob.open_long(long_amount, None, None).await?;
                 // Advance time to just after maturity.
                 let variable_rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
-                let time_amount = FixedPoint::from(config.position_duration) * fixed!(105e17); // 1.05 * position_duraiton
+                let time_amount = FixedPoint::from(config.position_duration) * fixed!(1.05e18); // 1.05 * position_duraiton
                 alice.advance_time(variable_rate, time_amount).await?;
                 // Checkpoint to auto-close the position.
                 alice

@@ -327,7 +327,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn fuzz_calculate_short_proceeds_up() -> Result<()> {
+    async fn fuzz_sol_calculate_short_proceeds_up() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -367,7 +367,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_short_proceeds_down() -> Result<()> {
+    async fn fuzz_sol_calculate_short_proceeds_down() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -407,7 +407,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_close_short_flat_plus_curve() -> Result<()> {
+    async fn fuzz_sol_calculate_close_short_flat_plus_curve() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.

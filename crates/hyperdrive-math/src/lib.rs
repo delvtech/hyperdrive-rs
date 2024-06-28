@@ -141,7 +141,7 @@ impl State {
         time - time % self.config.checkpoint_duration
     }
 
-    /// Calculates the normalized time remaining
+    /// Calculates the normalized time remaining.
     fn calculate_normalized_time_remaining(
         &self,
         maturity_time: U256,

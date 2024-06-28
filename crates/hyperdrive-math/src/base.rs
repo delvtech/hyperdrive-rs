@@ -14,6 +14,17 @@ impl State {
         }
     }
 
+    /// Calculates the pool's solvency.
+    ///
+    /// $$
+    /// s = z - \tfrac{exposure}{c} - z_min
+    /// $$
+    pub fn calculate_solvency(&self) -> FixedPoint {
+        self.share_reserves()
+            - self.long_exposure() / self.vault_share_price()
+            - self.minimum_share_reserves()
+    }
+
     /// Calculates the number of base that are not reserved by open positions.
     pub fn calculate_idle_share_reserves_in_base(&self) -> FixedPoint {
         // NOTE: Round up to underestimate the pool's idle.
