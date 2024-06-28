@@ -23,17 +23,6 @@ impl State {
             .mul_up(fixed!(1e18) - self.flat_fee()))
     }
 
-    /// Calculates the pool's solvency.
-    ///
-    /// $$
-    /// s = z - \tfrac{exposure}{c} - z_min
-    /// $$
-    pub fn calculate_solvency(&self) -> FixedPoint {
-        self.share_reserves()
-            - self.long_exposure() / self.vault_share_price()
-            - self.minimum_share_reserves()
-    }
-
     /// Calculates the max long that can be opened given a budget.
     ///
     /// We start by calculating the long that brings the pool's spot price to 1.

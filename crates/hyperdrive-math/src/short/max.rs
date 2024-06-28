@@ -426,11 +426,11 @@ impl State {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
                 .div_down(self.vault_share_price());
-        let guess = self.vault_share_price().mul_down(
-            self.share_reserves() + checkpoint_exposure_shares
-                - self.long_exposure().div_down(self.vault_share_price())
-                - self.minimum_share_reserves(),
-        );
+        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
+        let solvency = self.calculate_solvency();
+        let guess = self
+            .vault_share_price()
+            .mul_down(solvency + checkpoint_exposure_shares);
         let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
         let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
         Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
