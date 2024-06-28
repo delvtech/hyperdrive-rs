@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 name="hyperdrive-rs"
-version="0.16.0"
+version="0.16.1"
 authors = [
     "Alex Towle <alex@delv.tech>",
     "Dylan Paiton <dylan@delv.tech>",
