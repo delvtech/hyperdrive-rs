@@ -16,9 +16,9 @@ impl State {
 
     /// Calculates the pool's solvency.
     ///
-    /// $$
-    /// s = z - \tfrac{exposure}{c} - z_min
-    /// $$
+    /// ```math
+    /// s = z - \tfrac{\text{exposure}}{c} - z_{\text{min}}
+    /// ```
     pub fn calculate_solvency(&self) -> FixedPoint {
         self.share_reserves()
             - self.long_exposure() / self.vault_share_price()

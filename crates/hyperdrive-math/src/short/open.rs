@@ -8,44 +8,44 @@ impl State {
     /// Calculates the amount of base the trader will need to deposit for a
     /// short of a given size.
     ///
-    /// For some number of bonds being shorted, $\Delta y$, the short deposit,
-    /// $D(\Delta y)$, is made up of several components:
+    /// For some number of bonds being shorted, `$\Delta y$`, the short deposit,
+    /// `$D(\Delta y)$`, is made up of several components:
     ///
     /// - The short principal:
-    ///   $P_{\text{lp}}(\Delta y)$
+    ///   `$P_{\text{lp}}(\Delta y)$`
     /// - The curve fee:
-    ///   $\Phi_{c,os}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y$
+    ///   `$\Phi_{c,os}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y$`
     /// - The governance-curve fee:
-    ///   $\Phi_{g,os}(\Delta y) = \phi_{g} \Phi_{c,os}(\Delta y)$
+    ///   `$\Phi_{g,os}(\Delta y) = \phi_{g} \Phi_{c,os}(\Delta y)$`
     /// - The flat fee:
-    ///   $\Phi_{f,os}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )$
+    ///   `$\Phi_{f,os}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )$`
     /// - The total value in shares that underlies the bonds:
-    ///   $\tfrac{c_1}{c_0 \cdot c} \Delta y$
+    ///   `$\tfrac{c_1}{c_0 \cdot c} \Delta y$`
     ///
     /// The short principal is given by:
     ///
-    /// $$
+    /// ```math
     /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu} \cdot (
     ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     /// )^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// ```
     ///
     /// The adjusted value in shares that underlies the bonds is given by:
     ///
-    /// $$
-    /// P_\text{adj} = (\frac{c_1}{c_0} + \phi_f) \cdot \frac{\Delta y}{c}
-    /// $$
+    /// ```math
+    /// P_\text{adj} = \left( \frac{c_1}{c_0} + \phi_f \right) \cdot \frac{\Delta y}{c}
+    /// ```
     ///
     /// And finally the short deposit in base is:
     ///
-    /// $$
+    /// ```math
     /// D(\Delta y) =
     /// \begin{cases}
-    ///     P_\text{adj} - P_{\text{lp}}(\Delta y) + \Phi_{c}(\Delta y)
+    ///     P_\text{adj} - P_{\text{lp}}(\Delta y) + \Phi_{c}(\Delta y),
     ///       & \text{if } P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
     ///     0, & \text{otherwise}
     /// \end{cases}
-    /// $$
+    /// ```
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,

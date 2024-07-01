@@ -6,23 +6,23 @@ use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 impl State {
     /// Calculates the long amount that will be opened for a given base amount.
     ///
-    /// The long amount $y(x)$ that a trader will receive is given by:
+    /// The long amount `$y(x)$` that a trader will receive is given by:
     ///
-    /// $$
+    /// ```math
     /// y(x) = y_{*}(x) - c(x)
-    /// $$
+    /// ```
     ///
-    /// Where $y_{*}(x)$ is the amount of long that would be opened if there was
-    /// no curve fee and [$c(x)$](long_curve_fee) is the curve fee. $y_{*}(x)$
-    /// is given by:
+    /// Where `$y_{*}(x)$` is the amount of long that would be opened if there was
+    /// no curve fee and $c(x)$ is the [curve fee](State::long_curve_fee).
+    /// `$y_{*}(x)$` is given by:
     ///
-    /// $$
+    /// ```math
     /// y_{*}(x) = y - \left(
     ///                k - \tfrac{c}{\mu} \cdot \left(
     ///                    \mu \cdot \left( z + \tfrac{x}{c}
     ///                \right) \right)^{1 - t_s}
     ///            \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// ```
     pub fn calculate_open_long<F: Into<FixedPoint>>(&self, base_amount: F) -> Result<FixedPoint> {
         let base_amount = base_amount.into();
 
