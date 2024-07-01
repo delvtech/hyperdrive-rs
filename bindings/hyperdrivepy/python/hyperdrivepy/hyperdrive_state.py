@@ -657,7 +657,7 @@ def calculate_present_value(
     Returns
     -------
     str (FixedPoint)
-        The present value of all LP capital in the pool.
+        The present value of all LP capital in the pool, in shares.
     """
     return _get_interface(pool_config, pool_info).calculate_present_value(current_block_timestamp)
 

@@ -265,9 +265,11 @@ impl State {
     /// Given these, we can write out intermediate derivatives:
     ///
     /// ```math
+    /// \begin{aligned}
     /// a'(\Delta x) &= \frac{\mu}{c} (1 - \Phi_{g,ol}'(\Delta x)) \\
     /// b'(\Delta x) &= -y'(\Delta x) \\
     /// v'(\Delta x) &= \frac{b(\Delta x) \cdot a'(\Delta x) - a(\Delta x) \cdotb'(\Delta x)}{b(\Delta x)^2}
+    /// \end{aligned}
     /// ```
     ///
     /// And finally, the price after long derivative is:
@@ -303,10 +305,7 @@ impl State {
 
         // b'(x) = -y'(x)
         // -b'(x) = y'(x)
-        let long_amount_derivative = match self.calculate_open_long_derivative(base_amount)? {
-            Some(derivative) => derivative,
-            None => return Err(eyre!("long_amount_derivative failure.")),
-        };
+        let long_amount_derivative = self.calculate_open_long_derivative(base_amount)?;
 
         // v(x) = a(x) / b(x)
         // v'(x) = ( b(x) * a'(x) - a(x) * b'(x) ) / b(x)^2
