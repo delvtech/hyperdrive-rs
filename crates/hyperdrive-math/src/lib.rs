@@ -169,23 +169,23 @@ impl State {
     ///
     /// For some target rate, $r_t$, the pool share reserves, $z_t$, must be:
     ///
-    /// $$
+    /// ```math
     /// z_t = \frac{1}{\mu} \left(
     ///   \frac{k}{\frac{c}{\mu} + \left(
     ///     (r_t \cdot t + 1)^{\frac{1}{t_{s}}}
     ///   \right)^{1 - t_{s}}}
     /// \right)^{\frac{1}{1 - t_{s}}}
-    /// $$
+    /// ```
     ///
     /// and the pool bond reserves, $y_t$, must be:
     ///
-    /// $$
+    /// ```math
     /// y_t = \left(
     ///   \frac{k}{ \frac{c}{\mu} +  \left(
     ///     \left( r_t \cdot t + 1 \right)^{\frac{1}{t_{s}}}
     ///   \right)^{1 - t_{s}}}
     /// \right)^{1 - t_{s}} \left( r_t t + 1 \right)^{\frac{1}{t_{s}}}
-    /// $$
+    /// ```
     fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint>>(
         &self,
         target_rate: F,
@@ -208,8 +208,6 @@ impl State {
 
         Ok((target_share_reserves, target_bond_reserves))
     }
-
-    /// Config ///
 
     fn position_duration(&self) -> FixedPoint {
         self.config.position_duration.into()
@@ -250,8 +248,6 @@ impl State {
     fn governance_lp_fee(&self) -> FixedPoint {
         self.config.fees.governance_lp.into()
     }
-
-    /// Info ///
 
     pub fn vault_share_price(&self) -> FixedPoint {
         self.info.vault_share_price.into()

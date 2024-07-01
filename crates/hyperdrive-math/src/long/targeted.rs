@@ -5,11 +5,14 @@ use fixed_point::{fixed, FixedPoint};
 use crate::{State, YieldSpace};
 
 impl State {
-    /// Gets a target long that can be opened given a budget to achieve a desired fixed rate.
+    /// Gets a target long that can be opened given a budget to achieve a
+    /// desired fixed rate.
     ///
-    /// If the long amount to reach the target is greater than the budget, the budget is returned.
-    /// If the long amount to reach the target is invalid (i.e. it would produce an insolvent pool), then
-    /// an error is thrown, and the user is advised to use [calculate_max_long](long::max::calculate_max_long).
+    /// If the long amount to reach the target is greater than the budget,
+    /// the budget is returned.
+    /// If the long amount to reach the target is invalid (i.e. it would produce
+    /// an insolvent pool), then an error is thrown, and the user is advised to
+    /// use [calculate_max_long](State::calculate_max_long).
     pub fn calculate_targeted_long_with_budget<
         F1: Into<FixedPoint>,
         F2: Into<FixedPoint>,
@@ -193,16 +196,17 @@ impl State {
 
     /// The derivative of the equation for calculating the rate after a long.
     ///
-    /// For some $r = (1 - p(x)) / (p(x) \cdot t)$, where $p(x)$
-    /// is the spot price after a long of `delta_base`$= x$ was opened and $t$
-    /// is the annualized position duration, the rate derivative is:
+    /// For some `$r = \frac{(1 - p(x))}{(p(x) \cdot t)}$`, where $p(x)$
+    /// is the spot price after a long of `delta_base``$= x$` was opened and
+    /// `$t$` is the annualized position duration, the rate derivative is:
     ///
-    /// $$
-    /// r'(x) = \frac{(-p'(x) \cdot p(x) t - (1 - p(x)) (p'(x) \cdot t))}{(p(x) \cdot t)^2} //
+    /// ```math
+    /// r'(x) = \frac{(-p'(x) \cdot p(x) t
+    /// - (1 - p(x)) (p'(x) \cdot t))}{(p(x) \cdot t)^2} //
     /// r'(x) = \frac{-p'(x)}{t \cdot p(x)^2}
-    /// $$
+    /// ```
     ///
-    /// We return $-r'(x)$ because negative numbers cannot be represented by FixedPoint.
+    /// We return `$-r'(x)$` because negative numbers cannot be represented by FixedPoint.
     fn rate_after_long_derivative_negation(
         &self,
         base_amount: FixedPoint,
@@ -220,55 +224,57 @@ impl State {
 
     /// The derivative of the price after a long.
     ///
-    /// The price after a long that moves shares by $\Delta z$ and bonds by $\Delta y$
-    /// is equal to
+    /// The price after a long that moves shares by $\Delta z$ and bonds by
+    /// `$\Delta y$` is equal to:
     ///
-    /// $$
+    /// ```math
     /// p(\Delta z) = \left( \frac{\mu \cdot
     ///     (z_{0} + \Delta z - (\zeta_{0} + \Delta \zeta))}
     ///     {y - \Delta y} \right)^{t_{s}}
-    /// $$
+    /// ```
     ///
-    /// where $t_{s}$ is the time stretch constant and $z_{e,0}$ is the initial
-    /// effective share reserves, and $\zeta$ is the zeta adjustment.
+    /// where `$t_s$` is the time stretch constant and `$z_{e,0}$` is the
+    /// initial effective share reserves, and `$\zeta$` is the zeta adjustment.
     /// The zeta adjustment is constant when opening a long, i.e.
-    /// $\Delta \zeta = 0$, so we drop the subscript. Equivalently, for some
-    /// amount of `delta_base`$= \Delta x$ provided to open a long, we can write:
+    /// `$\Delta \zeta = 0$`, so we drop the subscript. Equivalently, for some
+    /// amount of `delta_base` `$= \Delta x$` provided to open a long,
+    /// we can write:
     ///
-    /// $$
+    /// ```math
     /// p(\Delta x) = \left(
     ///     \frac{\mu (z_{0} + \frac{1}{c}
     ///     \cdot \left( \Delta x - \Phi_{g,ol}(\Delta x) \right) - \zeta)}
     ///     {y_0 - y(\Delta x)}
     /// \right)^{t_{s}}
-    /// $$
+    /// ```
     ///
-    /// where $\Phi_{g,ol}(\Delta x)$ is the [open_long_governance_fee](long::fees::open_long_governance_fee),
-    /// $y(\Delta x)$ is the [bond_amount](long::open::calculate_open_long),
+    /// where `$\Phi_{g,ol}(\Delta x)$` is the
+    /// [open_long_governance_fee](State::open_long_governance_fee),
+    /// `$y(\Delta x)$` is the [bond_amount](State::calculate_open_long),
     ///
     /// To compute the derivative, we first define some auxiliary variables:
     ///
-    /// $$
+    /// ```math
     /// a(\Delta x) &= \mu (z_{0} + \frac{\Delta x}{c} - \frac{\Phi_{g,ol}(\Delta x)}{c} - \zeta) \\
     ///     &= \mu \left( z_{e,0} + \frac{\Delta x}{c} - \frac{\Phi_{g,ol}(\Delta x)}{c} \right) \\
     /// b(\Delta x) &= y_0 - y(\Delta x) \\
     /// v(\Delta x) &= \frac{a(\Delta x)}{b(\Delta x)}
-    /// $$
+    /// ```
     ///
-    /// and thus $p(\Delta x) = v(\Delta x)^{t_{s}}$.
+    /// and thus `$p(\Delta x) = v(\Delta x)^{t_{s}}$`.
     /// Given these, we can write out intermediate derivatives:
     ///
-    /// $$
+    /// ```math
     /// a'(\Delta x) &= \frac{\mu}{c} (1 - \Phi_{g,ol}'(\Delta x)) \\
     /// b'(\Delta x) &= -y'(\Delta x) \\
     /// v'(\Delta x) &= \frac{b(\Delta x) \cdot a'(\Delta x) - a(\Delta x) \cdotb'(\Delta x)}{b(\Delta x)^2}
-    /// $$
+    /// ```
     ///
     /// And finally, the price after long derivative is:
     ///
-    /// $$
+    /// ```math
     /// p'(\Delta x) = v'(\Delta x) \cdot t_{s} \cdot v(\Delta x)^{(t_{s} - 1)}
-    /// $$
+    /// ```
     ///
     fn price_after_long_derivative(
         &self,
@@ -321,16 +327,16 @@ impl State {
     /// Calculate the base & bond deltas for a long trade that moves the current
     /// state to the given desired ending reserve levels.
     ///
-    /// Given a target ending pool share reserves, $z_t$, and bond reserves, $y_t$,
-    /// the trade deltas to achieve that state would be:
+    /// Given a target ending pool share reserves, `$z_t$`, and bond reserves,
+    /// `$y_t$`, the trade deltas to achieve that state would be:
     ///
-    /// $$
+    /// ```math
     /// \Delta x = c \cdot (z_t - z_{e,0}) \\
     /// \Delta y = y - y_t - c(\Delta x)
-    /// $$
+    /// ```
     ///
-    /// where $c$ is the vault share price and
-    /// $c(\Delta x)$ is the (open_long_curve_fee)[long::fees::open_long_curve_fees].
+    /// where `$c$` is the vault share price and
+    /// `$c(\Delta x)$` is the (open_long_curve_fee)[State::open_long_curve_fee].
     fn long_trade_deltas_from_reserves(
         &self,
         ending_share_reserves: FixedPoint,

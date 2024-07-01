@@ -11,9 +11,10 @@ impl State {
     /// negative interest rates. The maximum spot price that longs can push the
     /// market to is given by:
     ///
-    /// $$
-    /// p_max = \frac{1 - \phi_f}{1 + \phi_c * \left( p_0^{-1} - 1 \right) * \left( \phi_f - 1 \right)}
-    /// $$
+    /// ```math
+    /// p_{\text{max}} = \frac{1 - \phi_f}{1 + \phi_c \cdot
+    /// \left( p_0^{-1} - 1 \right) \cdot \left( \phi_f - 1 \right)}
+    /// ```
     pub fn calculate_max_spot_price(&self) -> Result<FixedPoint> {
         Ok((fixed!(1e18) - self.flat_fee())
             / (fixed!(1e18)
@@ -61,19 +62,19 @@ impl State {
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
-        // solvency $S(x)$ as our objective function, which will converge to the
+        // solvency `$S(x)$` as our objective function, which will converge to the
         // amount of base that needs to be paid to open the maximum long. The
-        // derivative of $S(x)$ is negative (since solvency decreases as more
+        // derivative of `$S(x)$` is negative (since solvency decreases as more
         // longs are opened). The fixed point library doesn't support negative
         // numbers, so we use the negation of the derivative to side-step the
         // issue.
         //
-        // Given the current guess of $x_n$, Newton's method gives us an updated
-        // guess of $x_{n+1}$:
+        // Given the current guess of `$x_n$`, Newton's method gives us an updated
+        // guess of `$x_{n+1}$`:
         //
-        // $$
+        // ```math
         // x_{n+1} = x_n - \tfrac{S(x_n)}{S'(x_n)} = x_n + \tfrac{S(x_n)}{-S'(x_n)}
-        // $$
+        // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
@@ -284,40 +285,42 @@ impl State {
     }
 
     /// Estimates the max long based on the pool's current solvency and a
-    /// conservative price estimate, $p_r$.
+    /// conservative price estimate, `$p_r$`.
     ///
-    /// We can use our estimate price $p_r$ to approximate $y(x)$ as
-    /// $y(x) \approx p_r^{-1} \cdot x - c(x)$. Plugging this into our
+    /// We can use our estimate price `$p_r$` to approximate `$y(x)$` as
+    /// `$y(x) \approx p_r^{-1} \cdot x - c(x)$`. Plugging this into our
     /// solvency function $s(x)$, we can calculate the share reserves and
-    /// exposure after opening a long with $x$ base as:
+    /// exposure after opening a long with `$x$` base as:
     ///
+    /// ```math
     /// \begin{aligned}
     /// z(x) &= z_0 + \tfrac{x - g(x)}{c} \\
-    /// e(x) &= e_0 + min(exposure_{c}, 0) + 2 \cdot y(x) - x + g(x) \\
-    ///      &= e_0 + min(exposure_{c}, 0) + 2 \cdot p_r^{-1} \cdot x -
+    /// e(x) &= e_0 + min(\text{exposure}_{c}, 0) + 2 \cdot y(x) - x + g(x) \\
+    ///      &= e_0 + min(\text{exposure}_{c}, 0) + 2 \cdot p_r^{-1} \cdot x -
     ///             2 \cdot c(x) - x + g(x)
     /// \end{aligned}
+    /// ```
     ///
     /// We debit and negative checkpoint exposure from $e_0$ since the
     /// global exposure doesn't take into account the negative exposure
     /// from non-netted shorts in the checkpoint. These forumulas allow us
     /// to calculate the approximate ending solvency of:
     ///
-    /// $$
+    /// ```math
     /// s(x) \approx z(x) - \tfrac{e(x) - min(exposure_{c}, 0)}{c} - z_{min}
-    /// $$
+    /// ```
     ///
-    /// If we let the initial solvency be given by $s_0$, we can solve for
-    /// $x$ as:
+    /// If we let the initial solvency be given by `$s_0$`, we can solve for
+    /// `$x$` as:
     ///
-    /// $$
+    /// ```math
     /// x = \frac{c}{2} \cdot \frac{s_0 + min(exposure_{c}, 0)}{
     ///         p_r^{-1} +
     ///         \phi_{g} \cdot \phi_{c} \cdot \left( 1 - p \right) -
     ///         1 -
     ///         \phi_{c} \cdot \left( p^{-1} - 1 \right)
     ///     }
-    /// $$
+    /// ```
     fn max_long_estimate(
         &self,
         estimate_price: FixedPoint,
@@ -335,37 +338,37 @@ impl State {
         Ok(estimate)
     }
 
-    /// Calculates the solvency of the pool $S(x)$ after a long is opened with a base
-    /// amount $x$.
+    /// Calculates the solvency of the pool `$S(x)$` after a long is opened with a base
+    /// amount `$x$`.
     ///
     /// Since longs can net out with shorts in this checkpoint, we decrease
     /// the global exposure variable by any negative exposure we have
     /// in the checkpoint. The pool's solvency is calculated as:
     ///
-    /// $$
-    /// s = z - \tfrac{exposure + min(exposure_{checkpoint}, 0)}{c} - z_{min}
-    /// $$
+    /// ```math
+    /// s = z - \tfrac{exposure + min(\text{exposure}_{c}, 0)}{c} - z_{min}
+    /// ```
     ///
-    /// When a long is opened, the share reserves $z$ increase by:
+    /// When a long is opened, the share reserves `$z$` increase by:
     ///
-    /// $$
+    /// ```math
     /// \Delta z = \tfrac{x - g(x)}{c}
-    /// $$
+    /// ```
     ///
     /// Opening the long increases the non-netted longs by the bond amount. From
     /// this, the change in the exposure is given by:
     ///
-    /// $$
+    /// ```math
     /// \Delta exposure = y(x)
-    /// $$
+    /// ```
     ///
-    /// From this, we can calculate $S(x)$ as:
+    /// From this, we can calculate `$S(x)$` as:
     ///
-    /// $$
+    /// ```math
     /// S(x) = \left( z + \Delta z \right) - \left(
     ///            \tfrac{exposure + min(exposure_{checkpoint}, 0) + \Delta exposure}{c}
     ///        \right) - z_{min}
-    /// $$
+    /// ```
     ///
     /// It's possible that the pool is insolvent after opening a long. In this
     /// case, we return `None` since the fixed point library can't represent
@@ -405,15 +408,15 @@ impl State {
     /// Calculates the negation of the derivative of the pool's solvency with respect
     /// to the base amount that the long pays.
     ///
-    /// The derivative of the pool's solvency $S(x)$ with respect to the base
+    /// The derivative of the pool's solvency `$S(x)$` with respect to the base
     /// amount that the long pays is given by:
     ///
-    /// $$
+    /// ```math
     /// S'(x) = \tfrac{1}{c} \cdot \left( 1 - y'(x) - \phi_{g} \cdot p \cdot c'(x) \right) \\
     ///       = \tfrac{1}{c} \cdot \left(
     ///             1 - y'(x) - \phi_{g} \cdot \phi_{c} \cdot \left( 1 - p \right)
     ///         \right)
-    /// $$
+    /// ```
     ///
     /// This derivative is negative since solvency decreases as more longs are
     /// opened. We use the negation of the derivative to stay in the positive
@@ -431,19 +434,21 @@ impl State {
         }))
     }
 
-    /// Calculates the derivative of [long_amount](long_amount) with respect to the
+    /// Calculates the derivative of
+    /// [calculate open long](State::calculate_open_long) with respect to the
     /// base amount.
     ///
-    /// We calculate the derivative of the long amount $y(x)$ as:
+    /// We calculate the derivative of the long amount `$y(x)$` as:
     ///
-    /// $$
+    /// ```math
     /// y'(x) = y_{*}'(x) - c'(x)
-    /// $$
+    /// ```
     ///
-    /// Where $y_{*}'(x)$ is the derivative of $y_{*}(x)$ and $c'(x)$ is the
-    /// derivative of [$c(x)$](long_curve_fee). $y_{*}'(x)$ is given by:
+    /// Where `$y_{*}'(x)$` is the derivative of `$y_{*}(x)$` and `$c^{\prime}(x)$`
+    /// is the derivative of `$c(x)$`, the [long curve fee](State::open_long_curve_fee).
+    /// `$y_{*}^{\prime}(x)$` is given by:
     ///
-    /// $$
+    /// ```math
     /// y_{*}'(x) = \left( \mu \cdot (z + \tfrac{x}{c}) \right)^{-t_s}
     ///             \left(
     ///                 k - \tfrac{c}{\mu} \cdot
@@ -451,13 +456,13 @@ impl State {
     ///                     \mu \cdot (z + \tfrac{x}{c}
     ///                 \right)^{1 - t_s}
     ///             \right)^{\tfrac{t_s}{1 - t_s}}
-    /// $$
+    /// ```
     ///
-    /// and $c'(x)$ is given by:
+    /// and `$c^{\prime}(x)$` is given by:
     ///
-    /// $$
-    /// c'(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
-    /// $$
+    /// ```math
+    /// c^{\prime}(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
+    /// ```
     pub(super) fn calculate_open_long_derivative(
         &self,
         base_amount: FixedPoint,
