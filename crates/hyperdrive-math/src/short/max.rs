@@ -11,21 +11,22 @@ impl State {
     /// minimum price that the pool can support. This is the price at which the
     /// share reserves are equal to the minimum share reserves.
     ///
-    /// We can solve for the bond reserves $y_{max}$ implied by the share reserves
-    /// being equal to $z_{min}$ using the current k value:
+    /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the share reserves
+    /// being equal to `$z_{\text{min}}$` using the current k value:
     ///
-    /// $$
-    /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} + y_{max}^{1 - t_s} \\
+    /// ```math
+    /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s}
+    /// + y_{max}^{1 - t_s} \\
     /// \implies \\
-    /// y_{max} = \left( k - \tfrac{c}{\mu}
-    /// \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// y_{max} = \left( k - \tfrac{c}{\mu} \cdot \left(
+    /// \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
+    /// ```
     ///
     /// From there, we can calculate the spot price as normal as:
     ///
-    /// $$
+    /// ```math
     /// p = \left( \tfrac{\mu \cdot z_{min}}{y_{max}} \right)^{t_s}
-    /// $$
+    /// ```
     pub fn calculate_min_price(&self) -> Result<FixedPoint> {
         let y_max = (self.k_up()?
             - (self.vault_share_price() / self.initial_vault_share_price())
@@ -145,16 +146,19 @@ impl State {
         // notation from the function comments, we can write our objective
         // function as:
         //
-        // $$
+        // ```math
         // F(x) = B - D(x)
-        // $$
+        // ```
         //
-        // Since $B$ is just a constant, $F'(x) = -D'(x)$. Given the current guess
-        // of $x_n$, Newton's method gives us an updated guess of $x_{n+1}$:
+        // Since `$B$` is just a constant, `$F'(x) = -D'(x)$`. Given the current guess
+        // of `$x_n$`, Newton's method gives us an updated guess of `$x_{n+1}$`:
         //
-        // $$
-        // x_{n+1} = x_n - \tfrac{F(x_n)}{F'(x_n)} = x_n + \tfrac{B - D(x_n)}{D'(x_n)}
-        // $$
+        // ```math
+        // \begin{aligned}
+        // x_{n+1} &= x_n - \tfrac{F(x_n)}{F'(x_n)} \\
+        // &= x_n + \tfrac{B - D(x_n)}{D'(x_n)}
+        // \end{aligned}
+        // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
@@ -236,22 +240,23 @@ impl State {
         // is an overestimate or if a conservative price isn't given, we revert
         // to using the theoretical worst case scenario as our guess.
         if let Some(conservative_price) = maybe_conservative_price {
-            // Given our conservative price $p_c$, we can write the short deposit
+            // Given our conservative price `$p_c$`, we can write the short deposit
             // function as:
             //
-            // $$
+            // ```math
             // D(x) = \left( \tfrac{c}{c_0} - $p_c$ \right) \cdot x
             //        + \phi_{flat} \cdot x + \phi_{curve} \cdot (1 - p) \cdot x
-            // $$
+            // ```
             //
             // We then solve for $x^*$ such that $D(x^*) = B$, which gives us a
             // guess of:
             //
-            // $$
-            // x^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat} + \phi_{curve} \cdot (1 - p)}
-            // $$
+            // ```math
+            // x^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat}
+            // + \phi_{curve} \cdot (1 - p)}
+            // ```
             //
-            // If the budget can cover the actual short deposit on $x^*$ , we
+            // If the budget can cover the actual short deposit on `$x^*$`, we
             // return it as our guess. Otherwise, we revert to the worst case
             // scenario.
             let guess = budget
@@ -352,9 +357,12 @@ impl State {
         // Given the current guess of $x_n$, Newton's method gives us an updated
         // guess of $x_{n+1}$:
         //
-        // $$
-        // x_{n+1} = x_n - \tfrac{S(x_n)}{S'(x_n)} = x_n + \tfrac{S(x_n)}{-S'(x_n)}
-        // $$
+        // ```math
+        // \begin{aligned}
+        // x_{n+1} &= x_n - \tfrac{S(x_n)}{S'(x_n)} \\
+        // &= x_n + \tfrac{S(x_n)}{-S'(x_n)}
+        // \end{aligned}
+        // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
@@ -400,24 +408,24 @@ impl State {
     /// we need to start Newton's method.
     ///
     /// To calculate our guess, we assume an unrealistically good realized
-    /// price $p_r$ for opening the short. This allows us to approximate
-    /// $P(x) \approx \tfrac{1}{c} \cdot p_r \cdot x$. Plugging this
-    /// into our solvency function $s(x)$, we get an approximation of our
+    /// price `$p_r$` for opening the short. This allows us to approximate
+    /// `$P(x) \approx \tfrac{1}{c} \cdot p_r \cdot x$`. Plugging this
+    /// into our solvency function `$S(x)$`, we get an approximation of our
     /// solvency as:
     ///
-    /// $$
+    /// ```math
     /// S(x) \approx (z_0 - \tfrac{1}{c} \cdot (
     ///                  p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
     ///              )) - \tfrac{e_0 - max(e_{c}, 0)}{c} - z_{min}
-    /// $$
+    /// ```
     ///
     /// Setting this equal to zero, we can solve for our initial guess:
     ///
-    /// $$
+    /// ```math
     /// x = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
     ///         p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
     ///     }
-    /// $$
+    /// ```
     fn absolute_max_short_guess(
         &self,
         spot_price: FixedPoint,
@@ -438,35 +446,38 @@ impl State {
 
     /// Calculates the pool's solvency after opening a short.
     ///
-    /// We can express the pool's solvency after opening a short of $x$ bonds as:
+    /// We can express the pool's solvency after opening a short of `$x$` bonds
+    /// as:
     ///
-    /// $$
+    /// ```math
     /// s(x) = z(x) - \tfrac{e(x)}{c} - z_{min}
-    /// $$
+    /// ```
     ///
-    /// where $z(x)$ represents the pool's share reserves after opening the short:
+    /// where `$z(x)$` represents the pool's share reserves after opening the
+    /// short:
     ///
-    /// $$
+    /// ```math
     /// z(x) = z_0 - \left(
     ///            P(x) - \left( \tfrac{c(x)}{c} - \tfrac{g(x)}{c} \right)
     ///        \right)
-    /// $$
+    /// ```
     ///
-    /// and $e(x)$ represents the pool's exposure after opening the short:
+    /// and `$e(x)$` represents the pool's exposure after opening the short:
     ///
-    /// $$
+    /// ```math
     /// e(x) = e_0 - min(x + D(x), max(e_{c}, 0))
-    /// $$
+    /// ```
     ///
-    /// We simplify our $e(x)$ formula by noting that the max short is only
-    /// constrained by solvency when $x + D(x) > max(e_{c}, 0)$ since $x + D(x)$
-    /// grows faster than $P(x) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot x$.
-    /// With this in mind, $min(x + D(x), max(e_{c}, 0)) = max(e_{c}, 0)$
+    /// We simplify our `$e(x)$` formula by noting that the max short is only
+    /// constrained by solvency when `$x + D(x) > max(e_{c}, 0)$` since
+    /// `$x + D(x)$` grows faster than
+    /// `$P(x) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot x$`.
+    /// With this in mind, `$min(x + D(x), max(e_{c}, 0)) = max(e_{c}, 0)$`
     /// whenever solvency is actually a constraint, so we can write:
     ///
-    /// $$
+    /// ```math
     /// e(x) = e_0 - max(e_{c}, 0)
-    /// $$
+    /// ```
     fn solvency_after_short(
         &self,
         bond_amount: FixedPoint,
@@ -500,10 +511,12 @@ impl State {
         }
     }
 
-    /// Calculates the derivative of the pool's solvency w.r.t. the short amount.
+    /// Calculates the derivative of the pool's solvency w.r.t. the short
+    /// amount.
     ///
     /// The derivative is calculated as:
     ///
+    /// ```math
     /// \begin{aligned}
     /// s'(x) &= z'(x) - 0 - 0
     ///       &= 0 - \left( P'(x) - \frac{(c'(x) - g'(x))}{c} \right)
@@ -511,6 +524,7 @@ impl State {
     ///              \phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})
     ///          }{c}
     /// \end{aligned}
+    /// ```
     ///
     /// Since solvency decreases as the short amount increases, we negate the
     /// derivative. This avoids issues with the fixed point library which

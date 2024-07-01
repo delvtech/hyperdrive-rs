@@ -5,7 +5,7 @@ use fixed_point::FixedPoint;
 use crate::State;
 
 impl State {
-    /// Calculates the lp_shares for a given contribution when adding liquidity.
+    /// Calculates the LP shares for a given contribution when adding liquidity.
     pub fn calculate_add_liquidity(
         &self,
         current_block_timestamp: U256,

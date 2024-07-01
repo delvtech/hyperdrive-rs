@@ -115,12 +115,12 @@ impl State {
         // Now we can calculate adjusted proceeds account for the backdated
         // vault price:
         //
-        // $$
+        // ```math
         // \text{base_proceeds} = (
         //    \frac{c1 \cdot \Delta y}{c0 \cdot c}
         //    + \frac{\Delta y \cdot \phi_f}{c} - \Delta z
         // ) \cdot c
-        // $$
+        // ```
         let base_proceeds = self
             .calculate_short_proceeds_up(
                 bond_amount,
@@ -140,20 +140,21 @@ impl State {
     /// maximum short that a trader can open. The share adjustment derivative is
     /// a constant:
     ///
-    /// $$
-    /// P^{\prime}_{\text{adj}}(\Delta y) = \tfrac{c_{1}}{c_{0} \cdot c} + \tfrac{\phi_{f}}{c}
-    /// $$
+    /// ```math
+    /// P^{\prime}_{\text{adj}}(\Delta y)
+    /// = \tfrac{c_{1}}{c_{0} \cdot c} + \tfrac{\phi_{f}}{c}
+    /// ```
     ///
     /// The curve fee dervative is given by:
     ///
-    /// $$
+    /// ```math
     /// \Phi^{\prime}_{\text{c}}(\Delta y) = \phi_{c} \cdot (1 - p_0),
-    /// $$
+    /// ```
     ///
-    /// where $p_0$ is the opening (or initial) spot price. Using these and the
+    /// where `$p_0$` is the opening (or initial) spot price. Using these and the
     /// short principal derivative, we can calculate the open short derivative:
     ///
-    /// $$
+    /// ```math
     /// D^{\prime}(\Delta y) =
     ///\begin{cases}
     ///    c \cdot \left(
@@ -165,7 +166,7 @@ impl State {
     ///      P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c,os}(\Delta y) \\
     ///    0, & \text{otherwise}
     ///\end{cases}
-    /// $$
+    /// ```
     pub fn calculate_open_short_derivative(
         &self,
         bond_amount: FixedPoint,
@@ -209,20 +210,22 @@ impl State {
         Ok(share_adjustment_derivative - short_principal_derivative + curve_fee_derivative)
     }
 
-    /// Calculates the amount of short principal that the LPs need to pay to back a
-    /// short before fees are taken into consideration, $P_\text{lp}(\Delta y)$.
+    /// Calculates the amount of short principal that the LPs need to pay to
+    /// back a short before fees are taken into consideration,
+    /// `$P_\text{lp}(\Delta y)$`.
     ///
-    /// Let the LP principal that backs $\Delta y$ shorts be given by $P_{\text{lp}}(\Delta y)$.
-    /// We can solve for this in terms of $\Delta y$ using the YieldSpace invariant:
+    /// Let the LP principal that backs $\Delta y$ shorts be given by
+    /// `$P_{\text{lp}}(\Delta y)$`. We can solve for this in terms of
+    /// `$\Delta y$` using the YieldSpace invariant:
     ///
-    /// $$
+    /// ```math
     /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
     /// \implies \\
     /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
     /// \cdot \left(
     ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     /// \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// ```
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
         self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
     }
@@ -232,12 +235,12 @@ impl State {
     ///
     /// The derivative is:
     ///
-    /// $$
+    /// ```math
     /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s}
     /// \cdot \left(
     ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     /// \right)^{\tfrac{t_s}{1 - t_s}}
-    /// $$
+    /// ```
     pub fn calculate_short_principal_derivative(
         &self,
         bond_amount: FixedPoint,
@@ -325,15 +328,17 @@ impl State {
 
     /// Calculate the spot rate after a short has been opened.
     /// If a base_amount is not provided, then one is estimated
-    /// using `calculate_pool_deltas_after_open_short`.
+    /// using [calculate_pool_deltas_after_open_short](State::calculate_pool_deltas_after_open_short).
     ///
     /// We calculate the rate for a fixed length of time as:
-    /// $$
-    /// r(\Delta y) = (1 - p(\Delta y)) / (p(\Delta y) \cdot t)
-    /// $$
     ///
-    /// where $p(\Delta y)$ is the spot price after a short for `delta_bonds`$= \Delta y$ and
-    /// $t$ is the normalized position druation.
+    /// ```math
+    /// r(\Delta y) = \frac{1 - p(\Delta y)}{p(\Delta y) \cdot t}
+    /// ```
+    ///
+    /// where `$p(\Delta y)$` is the spot price after a short for
+    /// `delta_bonds` `$= \Delta y$` and `$t$` is the normalized position
+    /// druation.
     pub fn calculate_spot_rate_after_short(
         &self,
         bond_amount: FixedPoint,
@@ -349,41 +354,43 @@ impl State {
     /// Calculate the implied rate of opening a short at a given size. This rate
     /// is calculated as an APY.
     ///
-    /// Given the effective fixed rate the short will pay $r_{effective}$ and
-    /// the variable rate the short will receive $r_{variable}$, the short's
-    /// implied APY, $r_{implied}$ will be:
+    /// Given the effective fixed rate the short will pay
+    /// `$r_{\text{effective}}$` and the variable rate the short will receive
+    /// `$r_{\text{variable}}$`, the short's implied APY,
+    /// `$r_{\text{implied}}$` will be:
     ///
-    /// $$
-    /// r_{implied} = \frac{r_{variable} - r_{effective}}{r_{effective}}
-    /// $$
+    /// ```math
+    /// r_{\text{implied}} = \frac{r_{\text{variable}}
+    /// - r_{\text{effective}}}{r_{\text{effective}}}
+    /// ```
     ///
     /// We can short-cut this calculation using the amount of base the short
     /// will pay and comparing this to the amount of base the short will receive
     /// if the variable rate stays the same. The implied rate is just the ROI
     /// if the variable rate stays the same.
     ///
-    /// To do this, we must figure out the term-adjusted yield $TPY$ according to
-    /// the position duration $t$. Since we start off from a compounded APY and also
-    /// output a compounded TPY, the compounding frequency $f$ is simplified away.
-    /// so the adjusted yield will be:
+    /// To do this, we must figure out the term-adjusted yield `$TPY$` according
+    /// to the position duration `$t$`. Since we start off from a compounded APY
+    /// and also output a compounded TPY, the compounding frequency `$f$` is
+    /// simplified away. Thus, the adjusted yield will be:
     ///
-    /// $$
-    /// APR = f \cdot (( 1 + APY)^{\tfrac{1}{f}}  - 1)
-    /// $$
+    /// ```math
+    /// \text{APR} = f \cdot (( 1 + \text{APY})^{\tfrac{1}{f}}  - 1)
+    /// ```
     ///
     /// Therefore,
     ///
-    /// $$
-    /// \begin{align}
+    /// ```math
+    /// \begin{aligned}
     /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
     /// &= (1 + APY)^{d} - 1
-    /// \end{align}
-    /// $$
+    /// \end{aligned}
+    /// ```
     ///
-    /// We use the TPY to figure out the base proceeds, and calculate the rate of
-    /// return based on the short's opening cost. Since shorts must backpay the
-    /// variable interest accrued since the last checkpoint, we subtract that from
-    /// the opening cost, as they get it back upon closing the short.
+    /// We use the TPY to figure out the base proceeds, and calculate the rate
+    /// of return based on the short's opening cost. Since shorts must backpay
+    /// the variable interest accrued since the last checkpoint, we subtract
+    /// that from the opening cost, as they get it back upon closing the short.
     pub fn calculate_implied_rate(
         &self,
         bond_amount: FixedPoint,

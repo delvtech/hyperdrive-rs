@@ -13,8 +13,8 @@ impl State {
     /// ```
     ///
     /// Where `$y_{*}(x)$` is the amount of long that would be opened if there was
-    /// no curve fee and $c(x)$ is the [curve fee](State::long_curve_fee).
-    /// `$y_{*}(x)$` is given by:
+    /// no curve fee and `$c(x)$` is the
+    /// [curve fee](State::open_long_curve_fee). `$y_{*}(x)$` is given by:
     ///
     /// ```math
     /// y_{*}(x) = y - \left(
@@ -94,15 +94,17 @@ impl State {
     }
 
     /// Calculate the spot rate after a long has been opened.
-    /// If a bond_amount is not provided, then one is estimated using `calculate_open_long`.
+    /// If a bond_amount is not provided, then one is estimated using
+    /// [calculate_open_long](State::calculate_open_long).
     ///
     /// We calculate the rate for a fixed length of time as:
-    /// $$
-    /// r(\Delta y) = (1 - p(\Delta y)) / (p(\Delta y) t)
-    /// $$
     ///
-    /// where $p(x)$ is the spot price after a long for `delta_base`$= x$ and
-    /// t is the normalized position druation.
+    /// ```math
+    /// r(\Delta y) = \frac{1 - p(\Delta y)}{p(\Delta y) t}
+    /// ```
+    ///
+    /// where `$p(x)$` is the spot price after a long for `delta_base` `$= x$`
+    /// and `$t$` is the normalized position druation.
     ///
     /// In this case, we use the resulting spot price after a hypothetical long
     /// for `base_amount` is opened.

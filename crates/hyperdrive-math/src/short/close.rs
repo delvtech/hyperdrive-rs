@@ -62,25 +62,25 @@ impl State {
     /// margin that was released by closing the short. The adjusted value in
     /// shares that underlies the bonds is given by:
     ///
-    /// $$
-    /// P_\text{adj} = (\frac{c1}{c_0 \cdot c}
-    /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
-    /// $$
+    /// ```math
+    /// P_{\text{adj}} = \left( \frac{c1}{c_0 \cdot c} + \phi_f \right)
+    /// \cdot \frac{\Delta y}{c}
+    /// ```
     ///
     /// and the short proceeds are given by:
     ///
-    /// $$
-    /// proceeds =
+    /// ```math
+    /// \text{proceeds} =
     /// \begin{cases}
-    ///     P_\text{adj} - dz
+    ///     P_\text{adj} - dz,
     ///       & \text{if } P_{\text{adj}} > dz \\
     ///     0,              & \text{otherwise}
     /// \end{cases}
-    /// $$
+    /// ```
     ///
-    /// where $dz$ is the pool share adjustment. In the event that the interest
-    /// is negative and outweighs the trading profits and margin released,
-    /// the short's proceeds are marked to zero.
+    /// where `$dz$` is the pool share adjustment. In the event that the
+    /// interest is negative and outweighs the trading profits and margin
+    /// released, the short's proceeds are marked to zero.
     pub fn calculate_short_proceeds_up(
         &self,
         bond_amount: FixedPoint,
@@ -124,25 +124,25 @@ impl State {
     /// margin that was released by closing the short. The adjusted value in
     /// shares that underlies the bonds is given by:
     ///
-    /// $$
-    /// P_\text{adj} = (\frac{c1}{c_0 \cdot c}
-    /// + \text{\phi_f}) \cdot \frac{\Delta y}{c}
-    /// $$
+    /// ```math
+    /// P_{\text{adj}} = \left( \frac{c1}{c_0 \cdot c} + \phi_f \right)
+    /// \cdot \frac{\Delta y}{c}
+    /// ```
     ///
     /// and the short proceeds are given by:
     ///
-    /// $$
-    /// proceeds =
+    /// ```math
+    /// \text{proceeds} =
     /// \begin{cases}
     ///     P_\text{adj} - dz
     ///       & \text{if } P_{\text{adj}} > dz \\
     ///     0,              & \text{otherwise}
     /// \end{cases}
-    /// $$
+    /// ```
     ///
-    /// where $dz$ is the pool share adjustment. In the event that the interest
-    /// is negative and outweighs the trading profits and margin released,
-    /// the short's proceeds are marked to zero.
+    /// where `$dz$` is the pool share adjustment. In the event that the
+    /// interest is negative and outweighs the trading profits and margin
+    /// released, the short's proceeds are marked to zero.
     fn calculate_short_proceeds_down(
         &self,
         bond_amount: FixedPoint,
@@ -184,12 +184,12 @@ impl State {
     /// it is possible for traders to receive a negative interest rate even
     /// if curve's spot price is less than or equal to 1.
     //
-    /// Given the curve fee $\phi_c$ and the starting spot price `p_0`, the
+    /// Given the curve fee `$\phi_c$` and the starting spot price `$p_0$`, the
     /// maximum spot price is given by:
     ///
-    /// $$
-    /// p_max = 1 - \phi_c * (1 - p_0)
-    /// $$
+    /// ```math
+    /// p_{\text{max}} = 1 - \phi_c \cdot (1 - p_0)
+    /// ```
     fn calculate_close_short_max_spot_price(&self) -> Result<FixedPoint> {
         Ok(fixed!(1e18)
             - self

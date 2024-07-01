@@ -25,7 +25,8 @@ impl State {
             - self.minimum_share_reserves()
     }
 
-    /// Calculates the number of base that are not reserved by open positions.
+    /// Calculates the number of base reserves that are not reserved by open
+    /// positions.
     pub fn calculate_idle_share_reserves_in_base(&self) -> FixedPoint {
         // NOTE: Round up to underestimate the pool's idle.
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
@@ -41,8 +42,8 @@ impl State {
         idle_shares_in_base
     }
 
-    /// Function that takes in a scaled FixedPoint maturity time and calculates
-    /// normalized time remaining with higher precision.
+    /// Given a scaled FixedPoint maturity time, calculate the normalized time
+    /// remaining with high precision.
     pub fn calculate_scaled_normalized_time_remaining(
         &self,
         scaled_maturity_time: FixedPoint,
