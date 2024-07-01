@@ -12,3 +12,6 @@ eyre = "0.6.8"
 futures-locks = "0.7.1"
 lazy_static = "1.4.0"
 thiserror = "1.0"
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]

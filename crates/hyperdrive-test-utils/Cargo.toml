@@ -31,3 +31,6 @@ tracing = "0.1"
 fixed-point = { path = "../fixed-point" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
 test-utils = { path = "../test-utils" }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]

@@ -31,3 +31,6 @@ strip = true
 debug = false
 codegen-units = 1
 lto = true
+
+[workspace.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]
