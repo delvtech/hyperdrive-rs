@@ -133,7 +133,7 @@ impl State {
         Ok((new_share_reserves, new_share_adjustment, new_bond_reserves))
     }
 
-    /// Calculates the present value of LP's capital in the pool.
+    /// Calculates the present value in shares of LP's capital in the pool.
     pub fn calculate_present_value(&self, current_block_timestamp: U256) -> Result<FixedPoint> {
         // Calculate the average time remaining for the longs and shorts.
 

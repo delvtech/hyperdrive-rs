@@ -265,9 +265,11 @@ impl State {
     /// Given these, we can write out intermediate derivatives:
     ///
     /// ```math
+    /// \begin{aligned}
     /// a'(\Delta x) &= \frac{\mu}{c} (1 - \Phi_{g,ol}'(\Delta x)) \\
     /// b'(\Delta x) &= -y'(\Delta x) \\
     /// v'(\Delta x) &= \frac{b(\Delta x) \cdot a'(\Delta x) - a(\Delta x) \cdotb'(\Delta x)}{b(\Delta x)^2}
+    /// \end{aligned}
     /// ```
     ///
     /// And finally, the price after long derivative is:
