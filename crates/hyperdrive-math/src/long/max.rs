@@ -125,9 +125,9 @@ impl State {
             // candidate solution, we check to see if the pool is solvent after
             // a long is opened with the candidate amount. If the pool isn't
             // solvent, then we're done.
-            let derivative = match self.solvency_after_long_derivative(max_base_amount)? {
-                Some(derivative) => derivative,
-                None => break,
+            let derivative = match self.solvency_after_long_derivative_negation(max_base_amount) {
+                Ok(d) => d,
+                Err(_) => break,
             };
 
             let mut possible_max_base_amount = max_base_amount + solvency / derivative;
@@ -421,78 +421,18 @@ impl State {
     /// This derivative is negative since solvency decreases as more longs are
     /// opened. We use the negation of the derivative to stay in the positive
     /// domain, which allows us to use the fixed point library.
-    pub(super) fn solvency_after_long_derivative(
+    pub(super) fn solvency_after_long_derivative_negation(
         &self,
         base_amount: FixedPoint,
-    ) -> Result<Option<FixedPoint>> {
-        let maybe_derivative = self.calculate_open_long_derivative(base_amount)?;
+    ) -> Result<FixedPoint> {
+        let derivative = self.calculate_open_long_derivative(base_amount)?;
         let spot_price = self.calculate_spot_price()?;
-        Ok(maybe_derivative.map(|derivative| {
-            (derivative + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
+        Ok(
+            (derivative
+                + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
                 - fixed!(1e18))
-            .mul_div_down(fixed!(1e18), self.vault_share_price())
-        }))
-    }
-
-    /// Calculates the derivative of
-    /// [calculate open long](State::calculate_open_long) with respect to the
-    /// base amount.
-    ///
-    /// We calculate the derivative of the long amount `$y(x)$` as:
-    ///
-    /// ```math
-    /// y'(x) = y_{*}'(x) - c'(x)
-    /// ```
-    ///
-    /// Where `$y_{*}'(x)$` is the derivative of `$y_{*}(x)$` and `$c^{\prime}(x)$`
-    /// is the derivative of `$c(x)$`, the [long curve fee](State::open_long_curve_fee).
-    /// `$y_{*}^{\prime}(x)$` is given by:
-    ///
-    /// ```math
-    /// y_{*}'(x) = \left( \mu \cdot (z + \tfrac{x}{c}) \right)^{-t_s}
-    ///             \left(
-    ///                 k - \tfrac{c}{\mu} \cdot
-    ///                 \left(
-    ///                     \mu \cdot (z + \tfrac{x}{c}
-    ///                 \right)^{1 - t_s}
-    ///             \right)^{\tfrac{t_s}{1 - t_s}}
-    /// ```
-    ///
-    /// and `$c^{\prime}(x)$` is given by:
-    ///
-    /// ```math
-    /// c^{\prime}(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
-    /// ```
-    pub(super) fn calculate_open_long_derivative(
-        &self,
-        base_amount: FixedPoint,
-    ) -> Result<Option<FixedPoint>> {
-        let share_amount = base_amount / self.vault_share_price();
-        let inner =
-            self.initial_vault_share_price() * (self.effective_share_reserves()? + share_amount);
-        let mut derivative = fixed!(1e18) / (inner).pow(self.time_stretch())?;
-
-        // It's possible that k is slightly larger than the rhs in the inner
-        // calculation. If this happens, we are close to the root, and we short
-        // circuit.
-        let k = self.k_down()?;
-        let rhs = self.vault_share_price().mul_div_down(
-            inner.pow(self.time_stretch())?,
-            self.initial_vault_share_price(),
-        );
-        if k < rhs {
-            return Ok(None);
-        }
-        derivative *= (k - rhs).pow(
-            self.time_stretch()
-                .div_up(fixed!(1e18) - self.time_stretch()),
-        )?;
-
-        // Finish computing the derivative.
-        derivative -=
-            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price()?) - fixed!(1e18));
-
-        Ok(Some(derivative))
+            .div_down(self.vault_share_price()),
+        )
     }
 }
 
@@ -639,68 +579,6 @@ mod tests {
 
             // Reset chain snapshot.
             chain.revert(id).await?;
-        }
-
-        Ok(())
-    }
-
-    /// This test empirically tests the derivative returned by `long_amount_derivative`
-    /// by calling `calculate_open_long` at two points and comparing the empirical
-    /// result with the output of `long_amount_derivative`.
-    #[tokio::test]
-    async fn fuzz_max_long_derivative() -> Result<()> {
-        let mut rng = thread_rng();
-        // We use a relatively large epsilon here due to the underlying fixed point pow
-        // function not being monotonically increasing.
-        let empirical_derivative_epsilon = fixed!(1e12);
-        // TODO pretty big comparison epsilon here
-        let test_comparison_epsilon = fixed!(10e18);
-
-        for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
-            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
-
-            // We need to catch panics here because FixedPoint panics on overflow or underflow.
-            let f_x = match panic::catch_unwind(|| state.calculate_open_long(amount)) {
-                Ok(result) => match result {
-                    Ok(result) => result,
-                    Err(_) => continue, // Err; the amount results in the pool being insolvent.
-                },
-                Err(_) => continue, // panic; likely in FixedPoint
-            };
-
-            let f_x_plus_delta = match panic::catch_unwind(|| {
-                state.calculate_open_long(amount + empirical_derivative_epsilon)
-            }) {
-                Ok(result) => match result {
-                    Ok(result) => result,
-                    Err(_) => continue,
-                },
-                // If the amount results in the pool being insolvent, skip this iteration.
-                Err(_) => continue,
-            };
-            // Sanity check.
-            assert!(f_x_plus_delta > f_x);
-
-            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
-            let maybe_open_long_derivative = state.calculate_open_long_derivative(amount)?;
-            maybe_open_long_derivative.map(|derivative| {
-                let derivative_diff;
-                if derivative >= empirical_derivative {
-                    derivative_diff = derivative - empirical_derivative;
-                } else {
-                    derivative_diff = empirical_derivative - derivative;
-                }
-                assert!(
-                    derivative_diff < test_comparison_epsilon,
-                    "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
-                    calculated_derivative={}, emperical_derivative={}",
-                    derivative_diff,
-                    test_comparison_epsilon,
-                    derivative,
-                    empirical_derivative
-                );
-            });
         }
 
         Ok(())
