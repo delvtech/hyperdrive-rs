@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
+use fixedpointmath::FixedPoint;
 
 use crate::State;
 
@@ -115,7 +115,7 @@ impl State {
 mod tests {
     use std::panic;
 
-    use fixed_point::{fixed, int256, uint256};
+    use fixedpointmath::{fixed, int256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},

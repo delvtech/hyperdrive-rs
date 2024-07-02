@@ -5,7 +5,7 @@ use ethers::{
     types::{I256, U128, U256},
 };
 use eyre::{eyre, Result};
-use fixed_point::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, uint256, FixedPoint};
 use hyperdrive_test_utils::{agent::Agent, chain::ChainClient};
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -202,7 +202,7 @@ fn get_max_short(
 
 #[cfg(test)]
 mod tests {
-    use fixed_point::fixed;
+    use fixedpointmath::fixed;
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;

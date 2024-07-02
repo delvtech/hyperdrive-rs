@@ -1,8 +1,14 @@
 [package]
 
 name = "hyperdrive-math"
-version = { workspace = true }
 edition = "2021"
+version = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = "https://docs.rs/crate/hyperdrive-math"
+repository = { workspace = true }
+description = { workspace = true }
+readme = { workspace = true }
 
 [dependencies]
 
@@ -12,8 +18,8 @@ eyre = "0.6.8"
 rand = "0.8.5"
 
 # Workspace dependencies
-fixed-point = { path = "../fixed-point" }
-hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
+fixedpointmath = { workspace=true }
+hyperdrive-wrappers = { workspace=true }
 
 [dev-dependencies]
 
@@ -27,4 +33,4 @@ tracing-test = "0.1"
 hyperdrive-test-utils = { path = "../hyperdrive-test-utils" }
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "assets/katex_header.html"]
+rustdoc-args = ["--html-in-header", "../assets/katex_header.html"]

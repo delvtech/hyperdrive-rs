@@ -2,7 +2,7 @@ use std::cmp::{max, min, Ordering};
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::{fixed, int256, FixedPoint};
+use fixedpointmath::{fixed, int256, FixedPoint};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -1127,7 +1127,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use fixed_point::uint256;
+    use fixedpointmath::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},

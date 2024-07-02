@@ -1,5 +1,5 @@
 use eyre::{eyre, Result};
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
@@ -186,11 +186,16 @@ mod tests {
     use std::panic;
 
     use ethers::types::{I256, U256};
+<<<<<<< HEAD
     use fixed_point::fixed;
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
     };
+=======
+    use fixedpointmath::fixed;
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+>>>>>>> 2d587e6 (update readme & cargo)
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;

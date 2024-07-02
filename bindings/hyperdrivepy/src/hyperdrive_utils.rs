@@ -1,5 +1,5 @@
 use ethers::core::types::{I256, U256};
-use fixed_point::FixedPoint;
+use fixedpointmath::FixedPoint;
 use hyperdrive_math::{
     calculate_bonds_given_effective_shares_and_rate as rs_calculate_bonds_given_effective_shares_and_rate,
     calculate_effective_share_reserves as rs_calculate_effective_share_reserves,
