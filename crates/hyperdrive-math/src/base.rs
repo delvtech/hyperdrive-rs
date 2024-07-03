@@ -1,5 +1,5 @@
 use ethers::types::U256;
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::State;
 

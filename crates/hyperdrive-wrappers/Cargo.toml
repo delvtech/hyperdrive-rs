@@ -1,10 +1,13 @@
 [package]
 name = "hyperdrive-wrappers"
-version = { workspace = true }
 edition = "2021"
-
-# Builds the Solidity contract wrappers.
-build = "build.rs"
+version = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = "https://docs.rs/crate/hyperdrive-wrappers"
+repository = { workspace = true }
+readme = { workspace = true }
+description = "Generated Rust types for the Hyperdrive Solidity smart contracts."
 
 [dependencies]
 
@@ -33,4 +36,4 @@ tokio = { version = "1", features = ["full"] }
 walkdir = "2"
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "assets/katex_header.html"]
+rustdoc-args = ["--html-in-header", "../assets/katex_header.html"]

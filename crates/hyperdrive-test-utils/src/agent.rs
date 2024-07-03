@@ -9,7 +9,7 @@ use ethers::{
     types::{Address, BlockId, I256, U256, U64},
 };
 use eyre::Result;
-use fixed_point::{uint256, FixedPoint};
+use fixedpointmath::{uint256, FixedPoint};
 use hyperdrive_wrappers::wrappers::{
     erc20_mintable::ERC20Mintable,
     ihyperdrive::{Checkpoint, IHyperdrive, IHyperdriveEvents, Options, PoolConfig},

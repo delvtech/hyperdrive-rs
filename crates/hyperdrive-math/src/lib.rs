@@ -9,7 +9,7 @@ mod yield_space;
 
 use ethers::types::{Address, I256, U256};
 use eyre::Result;
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 use hyperdrive_wrappers::wrappers::ihyperdrive::{Fees, PoolConfig, PoolInfo};
 use rand::{
     distributions::{Distribution, Standard},

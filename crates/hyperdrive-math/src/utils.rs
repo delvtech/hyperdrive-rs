@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, uint256, FixedPoint};
 
 pub fn calculate_time_stretch(
     rate: FixedPoint,

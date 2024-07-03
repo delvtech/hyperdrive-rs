@@ -1,5 +1,5 @@
 use ethers::core::types::U256;
-use fixed_point::FixedPoint;
+use fixedpointmath::FixedPoint;
 use hyperdrive_math::YieldSpace;
 use pyo3::{exceptions::PyValueError, prelude::*};
 

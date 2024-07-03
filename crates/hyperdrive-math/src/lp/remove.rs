@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use super::math::SHARE_PROCEEDS_MAX_ITERATIONS;
 use crate::State;
@@ -224,7 +224,7 @@ impl State {
 mod tests {
     use std::cmp::min;
 
-    use fixed_point::uint256;
+    use fixedpointmath::uint256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng};

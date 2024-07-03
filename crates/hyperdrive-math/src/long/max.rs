@@ -1,6 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::{fixed, int256, FixedPoint};
+use fixedpointmath::{fixed, int256, FixedPoint};
 
 use crate::{State, YieldSpace};
 
@@ -441,7 +441,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use fixed_point::uint256;
+    use fixedpointmath::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
