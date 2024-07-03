@@ -9,9 +9,6 @@ repository = { workspace = true }
 readme = { workspace = true }
 description = "Generated Rust types for the Hyperdrive Solidity smart contracts."
 
-# Builds the Solidity contract wrappers.
-# build = "build.rs"
-
 [dependencies]
 
 # External dependencies
