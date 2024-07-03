@@ -1,6 +1,6 @@
 #!/bin/bash
 
-echo "simlink assets into crates"
+echo "copy assets into crates"
 mkdir crates/fixedpointmath/assets && cp assets/katex_header.html crates/fixedpointmath/assets/
 mkdir crates/hyperdrive-wrappers/assets && cp assets/katex_header.html crates/hyperdrive-wrappers/assets/
 mkdir crates/hyperdrive-math/assets && cp assets/katex_header.html crates/hyperdrive-math/assets/
