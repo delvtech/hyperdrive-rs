@@ -36,4 +36,4 @@ tokio = { version = "1", features = ["full"] }
 walkdir = "2"
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "../assets/katex_header.html"]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]
