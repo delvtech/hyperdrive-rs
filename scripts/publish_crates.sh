@@ -6,9 +6,10 @@ mkdir crates/hyperdrive-wrappers/assets && cp assets/katex_header.html crates/hy
 mkdir crates/hyperdrive-math/assets && cp assets/katex_header.html crates/hyperdrive-math/assets/
 
 echo "publish rust crates to crates.io"
-cargo publish --token $1 -p fixedpointmath
-BUILD_DISABLED=true cargo publish --token $1 -p hyperdrive-wrappers
-cargo publish --token $1 -p hyperdrive-math
+# need to allow-dirty because we added a file to the git repo
+cargo publish --allow-dirty --token $1 -p fixedpointmath
+BUILD_DISABLED=true cargo publish --allow-dirty --token $1 -p hyperdrive-wrappers
+cargo publish --allow-dirty --token $1 -p hyperdrive-math
 
 echo "remove crate asset directories"
 rm -rf crates/fixedpointmath/assets
