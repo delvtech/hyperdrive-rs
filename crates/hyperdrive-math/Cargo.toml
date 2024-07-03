@@ -33,4 +33,4 @@ tracing-test = "0.1"
 hyperdrive-test-utils = { path = "../hyperdrive-test-utils" }
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "../assets/katex_header.html"]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]

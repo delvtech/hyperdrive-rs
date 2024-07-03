@@ -24,4 +24,4 @@ test-utils = { path = "../test-utils" }
 hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--html-in-header", "../assets/katex_header.html"]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]
