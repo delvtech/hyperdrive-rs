@@ -1,0 +1,34 @@
+name: publish crates
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  publish-crates:
+    name: publish crates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout hyperdrive-rs
+        uses: actions/checkout@v4
+        with:
+          token: ${{github.token}}
+
+      - name: setup rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: setup foundry
+        uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: nightly
+
+      - name: publish crates
+        shell: bash
+        run: source scripts/publish_crates.sh ${{ secrets.CRATES_IO_API_TOKEN }}

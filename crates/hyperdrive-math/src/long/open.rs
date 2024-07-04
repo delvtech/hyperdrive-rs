@@ -1,28 +1,28 @@
 use eyre::{eyre, Result};
-use fixed_point::FixedPoint;
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
 impl State {
     /// Calculates the long amount that will be opened for a given base amount.
     ///
-    /// The long amount $y(x)$ that a trader will receive is given by:
+    /// The long amount `$y(x)$` that a trader will receive is given by:
     ///
-    /// $$
+    /// ```math
     /// y(x) = y_{*}(x) - c(x)
-    /// $$
+    /// ```
     ///
-    /// Where $y_{*}(x)$ is the amount of long that would be opened if there was
-    /// no curve fee and [$c(x)$](long_curve_fee) is the curve fee. $y_{*}(x)$
-    /// is given by:
+    /// Where `$y_{*}(x)$` is the amount of long that would be opened if there was
+    /// no curve fee and `$c(x)$` is the
+    /// [curve fee](State::open_long_curve_fee). `$y_{*}(x)$` is given by:
     ///
-    /// $$
+    /// ```math
     /// y_{*}(x) = y - \left(
     ///                k - \tfrac{c}{\mu} \cdot \left(
     ///                    \mu \cdot \left( z + \tfrac{x}{c}
     ///                \right) \right)^{1 - t_s}
     ///            \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// ```
     pub fn calculate_open_long<F: Into<FixedPoint>>(&self, base_amount: F) -> Result<FixedPoint> {
         let base_amount = base_amount.into();
 
@@ -42,6 +42,67 @@ impl State {
         }
 
         Ok(bond_amount - self.open_long_curve_fee(base_amount)?)
+    }
+
+    /// Calculates the derivative of
+    /// [calculate open long](State::calculate_open_long) with respect to the
+    /// base amount.
+    ///
+    /// We calculate the derivative of the long amount `$y(x)$` as:
+    ///
+    /// ```math
+    /// y'(x) = y_{*}'(x) - c'(x)
+    /// ```
+    ///
+    /// Where `$y_{*}'(x)$` is the derivative of `$y_{*}(x)$` and `$c^{\prime}(x)$`
+    /// is the derivative of `$c(x)$`, the [long curve fee](State::open_long_curve_fee).
+    /// `$y_{*}^{\prime}(x)$` is given by:
+    ///
+    /// ```math
+    /// y_{*}'(x) = \left( \mu \cdot (z + \tfrac{x}{c}) \right)^{-t_s}
+    ///             \left(
+    ///                 k - \tfrac{c}{\mu} \cdot
+    ///                 \left(
+    ///                     \mu \cdot (z + \tfrac{x}{c}
+    ///                 \right)^{1 - t_s}
+    ///             \right)^{\tfrac{t_s}{1 - t_s}}
+    /// ```
+    ///
+    /// and `$c^{\prime}(x)$` is given by:
+    ///
+    /// ```math
+    /// c^{\prime}(x) = \phi_{c} \cdot \left( \tfrac{1}{p} - 1 \right)
+    /// ```
+    pub(super) fn calculate_open_long_derivative(
+        &self,
+        base_amount: FixedPoint,
+    ) -> Result<FixedPoint> {
+        let share_amount = base_amount / self.vault_share_price();
+        let inner =
+            self.initial_vault_share_price() * (self.effective_share_reserves()? + share_amount);
+        let mut derivative = fixed!(1e18) / (inner).pow(self.time_stretch())?;
+
+        // It's possible that k is slightly larger than the rhs in the inner
+        // calculation. If this happens, we are close to the root, and we short
+        // circuit.
+        let k = self.k_down()?;
+        let rhs = self.vault_share_price().mul_div_down(
+            inner.pow(self.time_stretch())?,
+            self.initial_vault_share_price(),
+        );
+        if k < rhs {
+            return Err(eyre!("Open long derivative is undefined."));
+        }
+        derivative *= (k - rhs).pow(
+            self.time_stretch()
+                .div_up(fixed!(1e18) - self.time_stretch()),
+        )?;
+
+        // Finish computing the derivative.
+        derivative -=
+            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price()?) - fixed!(1e18));
+
+        Ok(derivative)
     }
 
     /// Calculate an updated pool state after opening a long.
@@ -94,15 +155,17 @@ impl State {
     }
 
     /// Calculate the spot rate after a long has been opened.
-    /// If a bond_amount is not provided, then one is estimated using `calculate_open_long`.
+    /// If a bond_amount is not provided, then one is estimated using
+    /// [calculate_open_long](State::calculate_open_long).
     ///
     /// We calculate the rate for a fixed length of time as:
-    /// $$
-    /// r(\Delta y) = (1 - p(\Delta y)) / (p(\Delta y) t)
-    /// $$
     ///
-    /// where $p(x)$ is the spot price after a long for `delta_base`$= x$ and
-    /// t is the normalized position druation.
+    /// ```math
+    /// r(\Delta y) = \frac{1 - p(\Delta y)}{p(\Delta y) t}
+    /// ```
+    ///
+    /// where `$p(x)$` is the spot price after a long for `delta_base` `$= x$`
+    /// and `$t$` is the normalized position druation.
     ///
     /// In this case, we use the resulting spot price after a hypothetical long
     /// for `base_amount` is opened.
@@ -123,8 +186,11 @@ mod tests {
     use std::panic;
 
     use ethers::types::{I256, U256};
-    use fixed_point::fixed;
-    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+    use fixedpointmath::fixed;
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
@@ -223,7 +289,10 @@ mod tests {
             alice.initialize(fixed_rate, contribution, None).await?;
 
             // Attempt to predict the spot price after opening a long.
-            let base_paid = rng.gen_range(fixed!(0.1e18)..=bob.calculate_max_long(None).await?);
+            let base_paid = rng.gen_range(
+                alice.get_state().await?.minimum_transaction_amount()
+                    ..=bob.calculate_max_long(None).await?,
+            );
             let expected_spot_rate = bob
                 .get_state()
                 .await?
@@ -328,7 +397,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calc_open_long() -> Result<()> {
-        let tolerance = fixed!(1e10);
+        let tolerance = fixed!(1e3);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -353,13 +422,10 @@ mod tests {
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get state and trade details.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
             let max_long = bob.calculate_max_long(None).await?;
             let base_amount = rng.gen_range(min_txn_amount..=max_long);
-
-            // Compare the open short call output against calculate_open_long.
-            let rust_bonds = state.calculate_open_long(base_amount);
 
             // Fund a little extra to allow for of slippage.
             bob.fund(base_amount + base_amount * fixed!(0.001e18))
@@ -380,6 +446,12 @@ mod tests {
                 .await
             {
                 Ok((_, sol_bonds)) => {
+                    // Anvil ticks the block before applying solidity fn; update state with new price.
+                    let new_vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = new_vault_share_price.into();
+                    let rust_bonds = state.calculate_open_long(base_amount);
+
+                    // Compare the Rust open long call output against calculate_open_long.
                     let rust_bonds_unwrapped = rust_bonds.unwrap();
                     let error = if rust_bonds_unwrapped >= sol_bonds.into() {
                         rust_bonds_unwrapped - FixedPoint::from(sol_bonds)
@@ -394,6 +466,10 @@ mod tests {
                     );
                 }
                 Err(sol_err) => {
+                    // Anvil ticks the block before applying solidity fn; update state with new price.
+                    let new_vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = new_vault_share_price.into();
+                    let rust_bonds = state.calculate_open_long(base_amount);
                     assert!(
                         rust_bonds.is_err(),
                         "sol_err={:#?}, but rust_bonds={:#?} did not error",
@@ -408,6 +484,66 @@ mod tests {
             alice.reset(Default::default()).await?;
             bob.reset(Default::default()).await?;
             celine.reset(Default::default()).await?;
+        }
+
+        Ok(())
+    }
+
+    /// This test empirically tests the derivative returned by
+    /// `calculate_open_long_derivative` by calling `calculate_open_long` at two
+    /// points and comparing the empirical result with the output of
+    /// `calculate_open_long_derivative`.
+    #[tokio::test]
+    async fn fuzz_open_long_derivative() -> Result<()> {
+        let mut rng = thread_rng();
+        // We use a relatively large epsilon here due to the underlying fixed point pow
+        // function not being monotonically increasing.
+        let empirical_derivative_epsilon = fixed!(1e12);
+        // TODO pretty big comparison epsilon here
+        let test_comparison_epsilon = fixed!(10e18);
+
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
+
+            // We need to catch panics here because FixedPoint panics on overflow or underflow.
+            let f_x = match panic::catch_unwind(|| state.calculate_open_long(amount)) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // Err; the amount results in the pool being insolvent.
+                },
+                Err(_) => continue, // panic; likely in FixedPoint
+            };
+
+            let f_x_plus_delta = match panic::catch_unwind(|| {
+                state.calculate_open_long(amount + empirical_derivative_epsilon)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue,
+                },
+                // If the amount results in the pool being insolvent, skip this iteration.
+                Err(_) => continue,
+            };
+            // Sanity check.
+            assert!(f_x_plus_delta > f_x);
+
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
+            let open_long_derivative = state.calculate_open_long_derivative(amount)?;
+            let derivative_diff = if open_long_derivative >= empirical_derivative {
+                open_long_derivative - empirical_derivative
+            } else {
+                empirical_derivative - open_long_derivative
+            };
+            assert!(
+                derivative_diff < test_comparison_epsilon,
+                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                calculated_derivative={}, emperical_derivative={}",
+                derivative_diff,
+                test_comparison_epsilon,
+                open_long_derivative,
+                empirical_derivative
+            );
         }
 
         Ok(())

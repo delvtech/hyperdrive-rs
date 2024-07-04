@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::Result;
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::State;
 

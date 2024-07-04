@@ -27,7 +27,7 @@ use ethers::{
     types::{Address, U256},
 };
 use eyre::Result;
-use fixed_point::uint256;
+use fixedpointmath::uint256;
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,

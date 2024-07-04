@@ -1,12 +1,10 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::calculate_effective_share_reserves;
 
 pub trait YieldSpace {
-    /// Info ///
-
     /// The effective share reserves.
     fn ze(&self) -> Result<FixedPoint> {
         calculate_effective_share_reserves(self.z(), self.zeta())
@@ -30,8 +28,7 @@ pub trait YieldSpace {
     /// The YieldSpace time parameter.
     fn t(&self) -> FixedPoint;
 
-    /// Core ///
-
+    // The current spot price ignoring slippage.
     fn calculate_spot_price(&self) -> Result<FixedPoint> {
         if self.y() <= fixed!(0) {
             return Err(eyre!("expected y={} > 0", self.y()));

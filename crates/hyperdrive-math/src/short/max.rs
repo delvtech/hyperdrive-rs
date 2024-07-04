@@ -1,6 +1,6 @@
 use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -11,21 +11,22 @@ impl State {
     /// minimum price that the pool can support. This is the price at which the
     /// share reserves are equal to the minimum share reserves.
     ///
-    /// We can solve for the bond reserves $y_{max}$ implied by the share reserves
-    /// being equal to $z_{min}$ using the current k value:
+    /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the share reserves
+    /// being equal to `$z_{\text{min}}$` using the current k value:
     ///
-    /// $$
-    /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} + y_{max}^{1 - t_s} \\
+    /// ```math
+    /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s}
+    /// + y_{max}^{1 - t_s} \\
     /// \implies \\
-    /// y_{max} = \left( k - \tfrac{c}{\mu}
-    /// \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// y_{max} = \left( k - \tfrac{c}{\mu} \cdot \left(
+    /// \mu \cdot z_{min} \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
+    /// ```
     ///
     /// From there, we can calculate the spot price as normal as:
     ///
-    /// $$
+    /// ```math
     /// p = \left( \tfrac{\mu \cdot z_{min}}{y_{max}} \right)^{t_s}
-    /// $$
+    /// ```
     pub fn calculate_min_price(&self) -> Result<FixedPoint> {
         let y_max = (self.k_up()?
             - (self.vault_share_price() / self.initial_vault_share_price())
@@ -117,17 +118,9 @@ impl State {
         }
 
         // Figure out the base deposit for the absolute max bond amount.
-        // This could fail due to inaccuracies in the absolute max estimate.
-        // If so, ignore it and move on.
-        // FIXME: This should not fail; we should be able to use ? operator and move on.
-        let maybe_absolute_max_deposit =
-            match self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price) {
-                Ok(deposit) => Some(deposit),
-                Err(_) => None,
-            };
-        if maybe_absolute_max_deposit.is_some()
-            && maybe_absolute_max_deposit.unwrap() <= target_budget
-        {
+        let absolute_max_deposit =
+            self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price)?;
+        if absolute_max_deposit <= target_budget {
             return Ok(absolute_max_bond_amount);
         }
 
@@ -153,16 +146,19 @@ impl State {
         // notation from the function comments, we can write our objective
         // function as:
         //
-        // $$
+        // ```math
         // F(x) = B - D(x)
-        // $$
+        // ```
         //
-        // Since $B$ is just a constant, $F'(x) = -D'(x)$. Given the current guess
-        // of $x_n$, Newton's method gives us an updated guess of $x_{n+1}$:
+        // Since `$B$` is just a constant, `$F'(x) = -D'(x)$`. Given the current guess
+        // of `$x_n$`, Newton's method gives us an updated guess of `$x_{n+1}$`:
         //
-        // $$
-        // x_{n+1} = x_n - \tfrac{F(x_n)}{F'(x_n)} = x_n + \tfrac{B - D(x_n)}{D'(x_n)}
-        // $$
+        // ```math
+        // \begin{aligned}
+        // x_{n+1} &= x_n - \tfrac{F(x_n)}{F'(x_n)} \\
+        // &= x_n + \tfrac{B - D(x_n)}{D'(x_n)}
+        // \end{aligned}
+        // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
@@ -183,7 +179,7 @@ impl State {
 
             // We update the best valid max bond amount if the deposit amount
             // is valid and the current guess is bigger than the previous best.
-            if deposit <= target_budget && max_bond_amount > best_valid_max_bond_amount {
+            if deposit <= target_budget && max_bond_amount >= best_valid_max_bond_amount {
                 best_valid_max_bond_amount = max_bond_amount;
                 // Stop if we found the exact solution.
                 if deposit == target_budget {
@@ -244,22 +240,23 @@ impl State {
         // is an overestimate or if a conservative price isn't given, we revert
         // to using the theoretical worst case scenario as our guess.
         if let Some(conservative_price) = maybe_conservative_price {
-            // Given our conservative price $p_c$, we can write the short deposit
+            // Given our conservative price `$p_c$`, we can write the short deposit
             // function as:
             //
-            // $$
+            // ```math
             // D(x) = \left( \tfrac{c}{c_0} - $p_c$ \right) \cdot x
             //        + \phi_{flat} \cdot x + \phi_{curve} \cdot (1 - p) \cdot x
-            // $$
+            // ```
             //
             // We then solve for $x^*$ such that $D(x^*) = B$, which gives us a
             // guess of:
             //
-            // $$
-            // x^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat} + \phi_{curve} \cdot (1 - p)}
-            // $$
+            // ```math
+            // x^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat}
+            // + \phi_{curve} \cdot (1 - p)}
+            // ```
             //
-            // If the budget can cover the actual short deposit on $x^*$ , we
+            // If the budget can cover the actual short deposit on `$x^*$`, we
             // return it as our guess. Otherwise, we revert to the worst case
             // scenario.
             let guess = budget
@@ -333,7 +330,7 @@ impl State {
 
     /// Calculates the absolute max short that can be opened without violating the
     /// pool's solvency constraints.
-    fn calculate_absolute_max_short(
+    pub fn calculate_absolute_max_short(
         &self,
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
@@ -360,9 +357,12 @@ impl State {
         // Given the current guess of $x_n$, Newton's method gives us an updated
         // guess of $x_{n+1}$:
         //
-        // $$
-        // x_{n+1} = x_n - \tfrac{S(x_n)}{S'(x_n)} = x_n + \tfrac{S(x_n)}{-S'(x_n)}
-        // $$
+        // ```math
+        // \begin{aligned}
+        // x_{n+1} &= x_n - \tfrac{S(x_n)}{S'(x_n)} \\
+        // &= x_n + \tfrac{S(x_n)}{-S'(x_n)}
+        // \end{aligned}
+        // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
@@ -408,71 +408,76 @@ impl State {
     /// we need to start Newton's method.
     ///
     /// To calculate our guess, we assume an unrealistically good realized
-    /// price $p_r$ for opening the short. This allows us to approximate
-    /// $P(x) \approx \tfrac{1}{c} \cdot p_r \cdot x$. Plugging this
-    /// into our solvency function $s(x)$, we get an approximation of our
+    /// price `$p_r$` for opening the short. This allows us to approximate
+    /// `$P(x) \approx \tfrac{1}{c} \cdot p_r \cdot x$`. Plugging this
+    /// into our solvency function `$S(x)$`, we get an approximation of our
     /// solvency as:
     ///
-    /// $$
+    /// ```math
     /// S(x) \approx (z_0 - \tfrac{1}{c} \cdot (
     ///                  p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
     ///              )) - \tfrac{e_0 - max(e_{c}, 0)}{c} - z_{min}
-    /// $$
+    /// ```
     ///
     /// Setting this equal to zero, we can solve for our initial guess:
     ///
-    /// $$
+    /// ```math
     /// x = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
     ///         p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
     ///     }
-    /// $$
+    /// ```
     fn absolute_max_short_guess(
         &self,
         spot_price: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint> {
         let checkpoint_exposure_shares =
-            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))? / self.vault_share_price();
-        // FIXME: Check this against solidity; should we be using solvency here or just share reserves?
+            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
+                .div_down(self.vault_share_price());
         // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
         let solvency = self.calculate_solvency();
-        let guess = self.vault_share_price() * (solvency + checkpoint_exposure_shares);
-        let curve_fee = self.curve_fee() * (fixed!(1e18) - spot_price);
-        let gov_curve_fee = self.governance_lp_fee() * curve_fee;
-        Ok(guess / (spot_price - curve_fee + gov_curve_fee))
+        let guess = self
+            .vault_share_price()
+            .mul_down(solvency + checkpoint_exposure_shares);
+        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
+        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
+        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
     }
 
     /// Calculates the pool's solvency after opening a short.
     ///
-    /// We can express the pool's solvency after opening a short of $x$ bonds as:
+    /// We can express the pool's solvency after opening a short of `$x$` bonds
+    /// as:
     ///
-    /// $$
+    /// ```math
     /// s(x) = z(x) - \tfrac{e(x)}{c} - z_{min}
-    /// $$
+    /// ```
     ///
-    /// where $z(x)$ represents the pool's share reserves after opening the short:
+    /// where `$z(x)$` represents the pool's share reserves after opening the
+    /// short:
     ///
-    /// $$
+    /// ```math
     /// z(x) = z_0 - \left(
     ///            P(x) - \left( \tfrac{c(x)}{c} - \tfrac{g(x)}{c} \right)
     ///        \right)
-    /// $$
+    /// ```
     ///
-    /// and $e(x)$ represents the pool's exposure after opening the short:
+    /// and `$e(x)$` represents the pool's exposure after opening the short:
     ///
-    /// $$
+    /// ```math
     /// e(x) = e_0 - min(x + D(x), max(e_{c}, 0))
-    /// $$
+    /// ```
     ///
-    /// We simplify our $e(x)$ formula by noting that the max short is only
-    /// constrained by solvency when $x + D(x) > max(e_{c}, 0)$ since $x + D(x)$
-    /// grows faster than $P(x) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot x$.
-    /// With this in mind, $min(x + D(x), max(e_{c}, 0)) = max(e_{c}, 0)$
+    /// We simplify our `$e(x)$` formula by noting that the max short is only
+    /// constrained by solvency when `$x + D(x) > max(e_{c}, 0)$` since
+    /// `$x + D(x)$` grows faster than
+    /// `$P(x) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot x$`.
+    /// With this in mind, `$min(x + D(x), max(e_{c}, 0)) = max(e_{c}, 0)$`
     /// whenever solvency is actually a constraint, so we can write:
     ///
-    /// $$
+    /// ```math
     /// e(x) = e_0 - max(e_{c}, 0)
-    /// $$
+    /// ```
     fn solvency_after_short(
         &self,
         bond_amount: FixedPoint,
@@ -506,10 +511,12 @@ impl State {
         }
     }
 
-    /// Calculates the derivative of the pool's solvency w.r.t. the short amount.
+    /// Calculates the derivative of the pool's solvency w.r.t. the short
+    /// amount.
     ///
     /// The derivative is calculated as:
     ///
+    /// ```math
     /// \begin{aligned}
     /// s'(x) &= z'(x) - 0 - 0
     ///       &= 0 - \left( P'(x) - \frac{(c'(x) - g'(x))}{c} \right)
@@ -517,6 +524,7 @@ impl State {
     ///              \phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})
     ///          }{c}
     /// \end{aligned}
+    /// ```
     ///
     /// Since solvency decreases as the short amount increases, we negate the
     /// derivative. This avoids issues with the fixed point library which
@@ -544,7 +552,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::{U128, U256};
-    use fixed_point::{fixed, uint256};
+    use fixedpointmath::{fixed, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -754,8 +762,8 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
-        let max_base_tolerance = fixed!(10e18);
-        let max_bonds_tolerance = fixed!(1e2);
+        let max_bonds_tolerance = fixed!(1e10);
+        let max_base_tolerance = fixed!(1e10);
         let reserves_drained_tolerance = fixed!(1e27);
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
@@ -781,16 +789,9 @@ mod tests {
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get the current state from solidity.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
 
-            // Get the open vault share price.
-            let Checkpoint {
-                weighted_spot_price: _,
-                last_weighted_spot_price_update_time: _,
-                vault_share_price: open_vault_share_price,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
+            // Get the current checkpoint exposure.
             let checkpoint_exposure = alice
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
@@ -821,9 +822,32 @@ mod tests {
                 .await
             {
                 Ok(sol_max_bonds) => {
+                    // Solidity reports everything is good, so we run the Rust fns.
+                    let rust_max_bonds = panic::catch_unwind(|| {
+                        state.calculate_absolute_max_short(
+                            state.calculate_spot_price()?,
+                            checkpoint_exposure,
+                            Some(max_iterations),
+                        )
+                    });
+
+                    // Compare the max bond amounts.
+                    let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
+                    let sol_max_bonds_fp = FixedPoint::from(sol_max_bonds);
+                    let error = if rust_max_bonds_unwrapped > sol_max_bonds_fp {
+                        rust_max_bonds_unwrapped - sol_max_bonds_fp
+                    } else {
+                        sol_max_bonds_fp - rust_max_bonds_unwrapped
+                    };
+                    assert!(
+                        error < max_bonds_tolerance,
+                        "expected abs(rust_bonds - sol_bonds)={} >= max_bonds_tolerance={}",
+                        error,
+                        max_bonds_tolerance
+                    );
+
                     // The amount Celine has to pay will always be less than the bond amount.
                     celine.fund(sol_max_bonds.into()).await?;
-
                     match celine
                         .hyperdrive()
                         .open_short(
@@ -840,28 +864,22 @@ mod tests {
                         .await
                     {
                         Ok((_, sol_max_base)) => {
-                            // Solidity reports everything is good, so we run the Rust fns.
-                            let rust_max_bonds = panic::catch_unwind(|| {
-                                state.calculate_absolute_max_short(
-                                    state.calculate_spot_price()?,
-                                    checkpoint_exposure,
-                                    Some(max_iterations),
-                                )
-                            });
+                            // Calling any Solidity Hyperdrive transaction causes the
+                            // mock yield source to accrue some interest. We want to use
+                            // the state before the Solidity OpenShort, but with the
+                            // vault share price after the block tick.
+                            // Get the current vault share price & update state.
+                            let vault_share_price = alice.get_state().await?.vault_share_price();
+                            state.info.vault_share_price = vault_share_price.into();
 
-                            // Compare the max bond amounts.
-                            let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
-                            let error = if rust_max_bonds_unwrapped >= sol_max_bonds.into() {
-                                rust_max_bonds_unwrapped - FixedPoint::from(sol_max_bonds)
-                            } else {
-                                FixedPoint::from(sol_max_bonds) - rust_max_bonds_unwrapped
-                            };
-                            assert!(
-                                error <= max_bonds_tolerance,
-                                "max bonds error {} exceeds tolerance of {}",
-                                error,
-                                max_bonds_tolerance
-                            );
+                            // Get the open vault share price.
+                            let Checkpoint {
+                                weighted_spot_price: _,
+                                last_weighted_spot_price_update_time: _,
+                                vault_share_price: open_vault_share_price,
+                            } = alice
+                                .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                                .await?;
 
                             // Compare the open short call outputs.
                             let rust_max_base = state.calculate_open_short(
@@ -870,14 +888,15 @@ mod tests {
                             );
 
                             let rust_max_base_unwrapped = rust_max_base.unwrap();
-                            let error = if rust_max_base_unwrapped >= sol_max_base.into() {
-                                rust_max_base_unwrapped - FixedPoint::from(sol_max_base)
+                            let sol_max_base_fp = FixedPoint::from(sol_max_base);
+                            let error = if rust_max_base_unwrapped > sol_max_base_fp {
+                                rust_max_base_unwrapped - sol_max_base_fp
                             } else {
-                                FixedPoint::from(sol_max_base) - rust_max_base_unwrapped
+                                sol_max_base_fp - rust_max_base_unwrapped
                             };
                             assert!(
-                                error <= max_base_tolerance,
-                                "max base error {} exceeds tolerance of {}",
+                                error < max_base_tolerance,
+                                "expected abs(rust_base - sol_base)={} >= max_base_tolerance={}",
                                 error,
                                 max_base_tolerance
                             );
@@ -888,18 +907,18 @@ mod tests {
                                 .min(state.share_reserves());
                             let min_share_reserves = state.minimum_share_reserves();
                             assert!(pool_shares >= min_share_reserves,
-                                    "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
-                                    state.effective_share_reserves()?,
-                                    min_share_reserves,
-                                );
+                                "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
+                                state.effective_share_reserves()?,
+                                min_share_reserves,
+                            );
                             let reserve_amount_above_minimum = pool_shares - min_share_reserves;
                             assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
-                                    "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
-                                    pool_shares,
-                                    min_share_reserves,
-                                    reserve_amount_above_minimum,
-                                    reserves_drained_tolerance,
-                                );
+                                "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
+                                pool_shares,
+                                min_share_reserves,
+                                reserve_amount_above_minimum,
+                                reserves_drained_tolerance,
+                            );
                         }
 
                         // Solidity calculate_max_short worked, but passing that bond amount to open_short failed.
@@ -912,18 +931,25 @@ mod tests {
 
                 // Solidity calculate_max_short failed; verify that rust calculate_max_short fails.
                 Err(_) => {
-                    let rust_calc_max_output = panic::catch_unwind(|| {
-                        state.calculate_max_short(
-                            U256::from(U128::MAX),
-                            open_vault_share_price,
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the current checkpoint exposure.
+                    let checkpoint_exposure = alice
+                        .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Solidity reports everything is good, so we run the Rust fns.
+                    let rust_max_bonds = panic::catch_unwind(|| {
+                        state.calculate_absolute_max_short(
+                            state.calculate_spot_price()?,
                             checkpoint_exposure,
-                            None,
                             Some(max_iterations),
                         )
                     });
-                    assert!(
-                        rust_calc_max_output.is_err() || rust_calc_max_output.unwrap().is_err()
-                    );
+
+                    assert!(rust_max_bonds.is_err() || rust_max_bonds.unwrap().is_err());
                 }
             }
 

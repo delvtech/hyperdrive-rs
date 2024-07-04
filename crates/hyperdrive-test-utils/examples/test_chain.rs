@@ -1,5 +1,5 @@
 use eyre::Result;
-use fixed_point::fixed;
+use fixedpointmath::fixed;
 use hyperdrive_test_utils::chain::TestChain;
 
 #[tokio::main]

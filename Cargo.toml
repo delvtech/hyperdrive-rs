@@ -1,17 +1,17 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/fixed-point",
-    "crates/hyperdrive-math",
+    "crates/fixedpointmath",
     "crates/hyperdrive-wrappers",
     "crates/test-utils",
     "crates/hyperdrive-test-utils",
+    "crates/hyperdrive-math",
     "bindings/hyperdrivepy",
 ]
 
 [workspace.package]
-name="hyperdrive-rs"
-version="0.16.0"
+name = "hyperdrive-rs"
+version = "0.16.8"
 authors = [
     "Alex Towle <alex@delv.tech>",
     "Dylan Paiton <dylan@delv.tech>",
@@ -21,6 +21,17 @@ authors = [
     "Ryan Goree <ryan@delv.tech>",
     "Sheng Lundquist <sheng@delv.tech>",
 ]
+readme = "README.md"
+license = "Apache-2.0"
+homepage = "https://hyperdrive.box/"
+documentation = "https://docs.hyperdrive.box"
+repository = "https://github.com/delvtech/hyperdrive-rs"
+description = "API for simulating Hyperdrive smart contract transactions."
+
+[workspace.dependencies]
+fixedpointmath = { version = "0.16.8", path="crates/fixedpointmath" }
+hyperdrive-wrappers = { version = "0.16.8", path="crates/hyperdrive-wrappers" }
+hyperdrive-math = { version = "0.16.8", path="crates/hyperdrive-math" }
 
 [workspace.lints.clippy]
 comparison_chain = "allow"
@@ -31,3 +42,6 @@ strip = true
 debug = false
 codegen-units = 1
 lto = true
+
+[workspace.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]

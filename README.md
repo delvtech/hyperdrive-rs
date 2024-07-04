@@ -2,7 +2,7 @@
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://github.com/delvtech/elf-contracts/blob/master/LICENSE)
 [![Static Badge](https://img.shields.io/badge/DELV-Terms%20Of%20Service-orange)](https://delv-public.s3.us-east-2.amazonaws.com/delv-terms-of-service.pdf)
 
-<img src="icons/hyperdrive_winter.webp" width="800" alt="hyperdrive"><br>
+<img src="https://raw.githubusercontent.com/delvtech/hyperdrive-rs/main/assets/icons/hyperdrive_winter.webp" width="800" alt="hyperdrive"><br>
 
 # Hyperdrive
 
@@ -31,7 +31,10 @@ against smart contracts for implemented functions, which demonstrates parity
 between the two implementations. This is a work-in-progress and not all
 Hyperdrive features are present.
 
-Python bindings for this libarary can be accessed [here](bindings/hyperdrivepy/).
+Python bindings for this library can be accessed via [hyperdrivepy](https://pypi.org/project/hyperdrivepy/)
+or see [agent0](https://pypi.org/project/agent0/) for Python applications that utilize `hyperdrivepy`.
+
+Typescript bindings for this library can be found [here](https://js.hyperdrive.box/).
 
 # Resources
 
@@ -55,7 +58,17 @@ build and test smart contracts against the Rust implementation. If you haven't
 already, you will need to [Install
 forge](https://github.com/foundry-rs/foundry#installatio://github.com/foundry-rs/foundry#installation).
 
-## Build
+## Install hyperdrive-rs
+
+`hyperdrive-rs` is composed of three published packages:
+
+- [`fixedpointmath`](https://crates.io/crates/fixedpointmath)
+- [`hyperdrive-wrappers`](https://crates.io/crates/hyperdrive-wrappers)
+- [`hyperdrive-math`](https://crates.io/crates/hyperdrive-math)
+
+You can install them for production runs via `cargo add [package]`, or add it to your `cargo.toml`.
+
+If you'd like to set up a development environment, clone the repo and build with `make`:
 
 ```sh
 make build

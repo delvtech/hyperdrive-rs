@@ -6,7 +6,7 @@ use std::ops::{Deref, DerefMut};
 /// the chain.
 use ethers::signers::{LocalWallet, Signer};
 use eyre::Result;
-use fixed_point::uint256;
+use fixedpointmath::uint256;
 use hyperdrive_wrappers::wrappers::{
     lp_math::LPMath,
     mock_fixed_point_math::MockFixedPointMath,

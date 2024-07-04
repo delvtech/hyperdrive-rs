@@ -2,7 +2,7 @@ use std::cmp::{max, min, Ordering};
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::{fixed, int256, FixedPoint};
+use fixedpointmath::{fixed, int256, FixedPoint};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -11,15 +11,15 @@ pub static SHARE_PROCEEDS_SHORT_CIRCUIT_TOLERANCE: u128 = 1_000_000_000; // 1e9
 pub static SHARE_PROCEEDS_TOLERANCE: u128 = 100_000_000_000_000; // 1e14
 
 impl State {
-    ///      Calculates the initial reserves. We solve for the initial reserves
-    ///      by solving the following equations simultaneously:
+    /// Calculates the initial reserves. We solve for the initial reserves
+    /// by solving the following equations simultaneously:
     ///
-    ///      (1) c * z = c * z_e + p_target * y
+    /// (1) `$c \cdot z = c \cdot z_e + p_{\text{target}} \cdot y$`
     ///
-    ///      (2) p_target = ((mu * z_e) / y) ** t_s
+    /// (2) `$p_{\text{target}} = \left(\tfrac{\mu \cdot z_e}{y}\right)^{t_s}$`
     ///
-    ///      where p_target is the target spot price implied by the target spot
-    ///      rate.
+    /// where `$p_{\text{target}}$` is the target spot price implied by the
+    /// target spot rate.
     pub fn calculate_initial_reserves(
         &self,
         share_amount: FixedPoint,
@@ -67,7 +67,7 @@ impl State {
     }
 
     /// Calculates the resulting share_reserves, share_adjustment, and
-    /// bond_reserves when updating liquidity with a share_reserves_delta.
+    /// bond_reserves when updating liquidity with a `share_reserves_delta`.
     pub fn calculate_update_liquidity_safe(
         &self,
         share_reserves: FixedPoint,
@@ -133,7 +133,7 @@ impl State {
         Ok((new_share_reserves, new_share_adjustment, new_bond_reserves))
     }
 
-    /// Calculates the present value of LPs capital in the pool.
+    /// Calculates the present value in shares of LP's capital in the pool.
     pub fn calculate_present_value(&self, current_block_timestamp: U256) -> Result<FixedPoint> {
         // Calculate the average time remaining for the longs and shorts.
 
@@ -335,19 +335,22 @@ impl State {
     /// shares to (1) preserve the LP share price and (2) pay out as much
     /// of the idle liquidity as possible to the withdrawal pool:
     ///
-    /// 1. If `y_s * t_s <= y_l * t_l` or
-    ///    `y_max_out(I) >= y_s * t_s - y_l * t_l`, set `dz_max = I` and
-    ///    proceed to step (3). Otherwise, proceed to step (2).
-    /// 2. Solve `y_max_out(dz_max) = y_s * t_s - y_l * t_l` for `dz_max`
-    ///    using Newton's method.
-    /// 3. Set `dw = (1 - PV(dz_max) / PV(0)) * l`. If `dw <= w`, then
-    ///    proceed to step (5). Otherwise, set `dw = w` and continue to
-    ///    step (4).
-    /// 4. Solve `PV(0) / l = PV(dz) / (l - dw)` for `dz` using Newton's
-    ///    method if `y_l * t_l != y_s * t_s` or directly otherwise.
-    /// 5. Return `dw` and `dz`.
+    /// 1. If `$y_s \cdot t_s <= y_l \cdot t_l$` or
+    ///    `$y_{\text{max\_out}}(I) >= y_s \cdot t_s - y_l \cdot t_l$` ,
+    ///    set `$dz_{\text{max}} = I$` and proceed to step (3).
+    ///    Otherwise, proceed to step (2).
+    /// 2. Solve
+    ///    `$y_{\text{max\_out}}(dz_{\text{max}}) = y_s \cdot t_s - y_l \cdot t_l$`
+    ///    for `$dz_{\text{max}}$` using Newton's method.
+    /// 3. Set `$dw = (1 - \tfrac{PV(dz_{\text{max}})}{PV(0)}) \cdot l$`.
+    ///    If `$dw <= w$`, then proceed to step (5). Otherwise, set `$dw = w$`
+    ///    and continue to step (4).
+    /// 4. Solve `$\tfrac{PV(0)}{l} = \tfrac{PV(dz)}{(l - dw)}$` for `$dz$`
+    ///    using Newton's method if `$y_l \cdot t_l ~= y_s \cdot t_s$` or
+    ///    directly otherwise.
+    /// 5. Return `$dw$` and `$dz$`.
     ///
-    ///  Returns (withdrawal_shares_redeemed, share_proceeds, success)
+    ///  Returns `(withdrawal_shares_redeemed, share_proceeds, success)`
     pub fn calculate_distribute_excess_idle(
         &self,
         current_block_timestamp: U256,
@@ -1124,7 +1127,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use fixed_point::uint256;
+    use fixedpointmath::uint256;
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},

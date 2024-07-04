@@ -1102,8 +1102,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "fixed-point"
-version = "0.16.0"
+name = "fixedbitset"
+version = "0.4.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
+
+[[package]]
+name = "fixedpointmath"
+version = "0.16.8"
 dependencies = [
  "ethers",
  "eyre",
@@ -1112,12 +1118,6 @@ dependencies = [
  "test-utils",
  "tokio",
 ]
-
-[[package]]
-name = "fixedbitset"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "flate2"
@@ -1508,11 +1508,11 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-math"
-version = "0.16.0"
+version = "0.16.8"
 dependencies = [
  "ethers",
  "eyre",
- "fixed-point",
+ "fixedpointmath",
  "hyperdrive-test-utils",
  "hyperdrive-wrappers",
  "rand",
@@ -1524,14 +1524,14 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-test-utils"
-version = "0.16.0"
+version = "0.16.8"
 dependencies = [
  "async-trait",
  "dotenvy",
  "envy",
  "ethers",
  "eyre",
- "fixed-point",
+ "fixedpointmath",
  "hyperdrive-wrappers",
  "lazy_static",
  "rand",
@@ -1546,7 +1546,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-wrappers"
-version = "0.16.0"
+version = "0.16.8"
 dependencies = [
  "dotenv",
  "ethers",
@@ -1564,11 +1564,11 @@ dependencies = [
 
 [[package]]
 name = "hyperdrivepy"
-version = "0.16.0"
+version = "0.16.8"
 dependencies = [
  "ethers",
  "eyre",
- "fixed-point",
+ "fixedpointmath",
  "hyperdrive-math",
  "hyperdrive-wrappers",
  "pyo3",
@@ -3307,7 +3307,7 @@ dependencies = [
 
 [[package]]
 name = "test-utils"
-version = "0.16.0"
+version = "0.16.8"
 dependencies = [
  "async-trait",
  "ethers",

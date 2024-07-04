@@ -1,32 +1,58 @@
-use ethers::{providers::maybe, types::I256};
+use ethers::types::I256;
 use eyre::{eyre, Result};
-use fixed_point::{fixed, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
 use crate::{calculate_rate_given_fixed_price, State, YieldSpace};
 
 impl State {
-    /// Calculates the amount of base the trader will need to deposit for a short of
-    /// a given size.
+    /// Calculates the amount of base the trader will need to deposit for a
+    /// short of a given size.
     ///
-    /// We can write out the short deposit function as:
+    /// For some number of bonds being shorted, `$\Delta y$`, the short deposit,
+    /// `$D(\Delta y)$`, is made up of several components:
     ///
-    /// $$
-    /// D(\Delta y) = \Delta y - (c \cdot P(\Delta y) - \phi_{curve} \cdot (1 - p) \cdot \Delta y)
-    ///        + (c - c_0) \cdot \tfrac{\Delta y}{c_0} + \phi_{flat} \cdot \Delta y \\
-    ///      = \tfrac{c}{c_0} \cdot \Delta y - (c \cdot P(\Delta y) - \phi_{curve} \cdot (1 - p) \cdot \Delta y)
-    ///        + \phi_{flat} \cdot \Delta y
-    /// $$
+    /// - The short principal:
+    ///   `$P_{\text{lp}}(\Delta y)$`
+    /// - The curve fee:
+    ///   `$\Phi_{c,os}(\Delta y) = \phi_{c} \cdot ( 1 - p_{0} ) \cdot \Delta y$`
+    /// - The governance-curve fee:
+    ///   `$\Phi_{g,os}(\Delta y) = \phi_{g} \Phi_{c,os}(\Delta y)$`
+    /// - The flat fee:
+    ///   `$\Phi_{f,os}(\Delta y) = \tfrac{1}{c} ( \Delta y \cdot (1 - t) \cdot \phi_{f} )$`
+    /// - The total value in shares that underlies the bonds:
+    ///   `$\tfrac{c_1}{c_0 \cdot c} \Delta y$`
     ///
-    /// $\Delta y$ is the number of bonds being shorted and $P(\Delta y)$ is the amount of
-    /// shares the curve says the LPs need to pay the shorts (i.e. the LP
-    /// principal).
+    /// The short principal is given by:
+    ///
+    /// ```math
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu} \cdot (
+    ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// )^{\tfrac{1}{1 - t_s}}
+    /// ```
+    ///
+    /// The adjusted value in shares that underlies the bonds is given by:
+    ///
+    /// ```math
+    /// P_\text{adj} = \left( \frac{c_1}{c_0} + \phi_f \right) \cdot \frac{\Delta y}{c}
+    /// ```
+    ///
+    /// And finally the short deposit in base is:
+    ///
+    /// ```math
+    /// D(\Delta y) =
+    /// \begin{cases}
+    ///     P_\text{adj} - P_{\text{lp}}(\Delta y) + \Phi_{c}(\Delta y),
+    ///       & \text{if } P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c}(\Delta y) \\
+    ///     0, & \text{otherwise}
+    /// \end{cases}
+    /// ```
     pub fn calculate_open_short(
         &self,
         bond_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
     ) -> Result<FixedPoint> {
-        // Verify that the bond amount is high enough.
-        // This is checked in Solidity but at a later stage.
+        // Ensure that the bond amount is greater than or equal to the minimum
+        // transaction amount.
         if bond_amount < self.minimum_transaction_amount() {
             return Err(eyre!(
                 "MinimumTransactionAmount: Input amount too low. bond_amount = {:#?} must be >= {:#?}",
@@ -44,117 +70,199 @@ impl State {
             open_vault_share_price
         };
 
-        // Calculate the effect that opening the short will have on the pool's reserves.
-        let share_reserves_delta_in_base = self
-            .vault_share_price()
-            .mul_up(self.calculate_short_principal(bond_amount)?);
+        // Calculate the effect that opening the short will have on the pool's
+        // share reserves.
+        let share_reserves_delta = self.calculate_short_principal(bond_amount)?;
+
+        // NOTE: Round up to make the check stricter.
+        //
         // If the base proceeds of selling the bonds is greater than the bond
         // amount, then the trade occurred in the negative interest domain.
         // We revert in these pathological cases.
-        if share_reserves_delta_in_base > bond_amount {
+        if share_reserves_delta.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!(
                 "InsufficientLiquidity: Negative Interest.
-                expected bond_amount={} <= share_reserves_delta_in_base={}",
+                expected bond_amount={} <= share_reserves_delta_in_shares={}",
                 bond_amount,
-                share_reserves_delta_in_base
+                share_reserves_delta
             ));
         }
 
-        // NOTE: The order of additions and subtractions is important to avoid underflows.
-        let spot_price = self.calculate_spot_price()?;
-        Ok(
-            bond_amount.mul_div_down(self.vault_share_price(), open_vault_share_price)
-                + self.flat_fee() * bond_amount
-                + self.curve_fee() * (fixed!(1e18) - spot_price) * bond_amount
-                - share_reserves_delta_in_base,
-        )
+        // NOTE: Round up to overestimate the base deposit.
+        //
+        // The trader will need to deposit capital to pay for the fixed rate,
+        // the fees, and any back-paid interest that will be received back upon
+        // closing the trade.
+        let curve_fee_shares = self
+            .open_short_curve_fee(bond_amount)?
+            .div_up(self.vault_share_price());
+        if share_reserves_delta < curve_fee_shares {
+            return Err(eyre!(format!(
+                "The transaction curve fee = {}, computed with coefficient = {},
+                is too high. It must be less than share reserves delta = {}",
+                curve_fee_shares,
+                self.curve_fee(),
+                share_reserves_delta
+            )));
+        }
+
+        // If negative interest has accrued during the current checkpoint, we
+        // set the close vault share price to equal the open vault share price.
+        // This ensures that shorts don't benefit from negative interest that
+        // accrued during the current checkpoint.
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+
+        // Now we can calculate adjusted proceeds account for the backdated
+        // vault price:
+        //
+        // ```math
+        // \text{base_proceeds} = (
+        //    \frac{c1 \cdot \Delta y}{c0 \cdot c}
+        //    + \frac{\Delta y \cdot \phi_f}{c} - \Delta z
+        // ) \cdot c
+        // ```
+        let base_proceeds = self
+            .calculate_short_proceeds_up(
+                bond_amount,
+                share_reserves_delta - curve_fee_shares,
+                open_vault_share_price,
+                close_vault_share_price,
+            )
+            .mul_up(self.vault_share_price());
+
+        Ok(base_proceeds)
     }
 
-    /// Calculates the derivative of the short deposit function with respect to the
-    /// short amount. This allows us to use Newton's method to approximate the
-    /// maximum short that a trader can open.
+    /// Calculates the derivative of the short deposit function with respect to
+    /// the short amount.
     ///
-    /// Using this, calculating $D'(\Delta y)$ is straightforward:
+    /// This derivative allows us to use Newton's method to approximate the
+    /// maximum short that a trader can open. The share adjustment derivative is
+    /// a constant:
     ///
-    /// $$
-    /// D'(\Delta y) = \tfrac{c}{c_0} - (c \cdot P'(\Delta y) - \phi_{curve} \cdot (1 - p)) + \phi_{flat}
-    /// $$
+    /// ```math
+    /// P^{\prime}_{\text{adj}}(\Delta y)
+    /// = \tfrac{c_{1}}{c_{0} \cdot c} + \tfrac{\phi_{f}}{c}
+    /// ```
     ///
-    /// $$
-    /// P'(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}) \right)^{\tfrac{t_s}{1 - t_s}}
-    /// $$
+    /// The curve fee dervative is given by:
+    ///
+    /// ```math
+    /// \Phi^{\prime}_{\text{c}}(\Delta y) = \phi_{c} \cdot (1 - p_0),
+    /// ```
+    ///
+    /// where `$p_0$` is the opening (or initial) spot price. Using these and the
+    /// short principal derivative, we can calculate the open short derivative:
+    ///
+    /// ```math
+    /// D^{\prime}(\Delta y) =
+    ///\begin{cases}
+    ///    c \cdot \left(
+    ///      P^{\prime}_{\text{adj}}(\Delta y)
+    ///      - P^{\prime}_{\text{lp}}(\Delta y)
+    ///      + \Phi^{\prime}_{c,os}(\Delta y)
+    ///    \right),
+    ///    & \text{if }
+    ///      P_{\text{adj}} > P_{\text{lp}}(\Delta y) - \Phi_{c,os}(\Delta y) \\
+    ///    0, & \text{otherwise}
+    ///\end{cases}
+    /// ```
     pub fn calculate_open_short_derivative(
         &self,
         bond_amount: FixedPoint,
         open_vault_share_price: FixedPoint,
         maybe_initial_spot_price: Option<FixedPoint>,
     ) -> Result<FixedPoint> {
+        // We're avoiding negative interest, so we will cap the close share
+        // price to be greater than or equal to the open share price. This
+        // will assume the max loss for the trader, some of which may be
+        // reimbursed upon closing.
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+
+        // Short circuit the derivative if the function returns 0.
+        if self.calculate_short_proceeds_up(
+            bond_amount,
+            self.calculate_short_principal(bond_amount)?
+                - self
+                    .open_short_curve_fee(bond_amount)?
+                    .div_up(self.vault_share_price()),
+            open_vault_share_price,
+            close_vault_share_price,
+        ) == fixed!(0)
+        {
+            return Ok(fixed!(0));
+        }
+
         let spot_price = match maybe_initial_spot_price {
             Some(spot_price) => spot_price,
             None => self.calculate_spot_price()?,
         };
 
-        // Theta calculates the inner component of the `short_principal` calculation,
-        // which makes the `short_principal` and `short_deposit_derivative` calculations
-        // easier. $\theta(\Delta y)$ is defined as:
-        //
-        // $$
-        // \theta(\Delta y) = \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-        // $$
-        let theta = (self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()?
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?);
-        // NOTE: The order of additions and subtractions is important to avoid underflows.
-        let payment_factor = (fixed!(1e18)
-            / (self.bond_reserves() + bond_amount).pow(self.time_stretch())?)
-            * theta.pow(self.time_stretch() / (fixed!(1e18) - self.time_stretch()))?;
-        Ok((self.vault_share_price() / open_vault_share_price)
-            + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - spot_price)
-            - payment_factor)
+        // All of these are in base.
+        let share_adjustment_derivative =
+            close_vault_share_price.div_up(open_vault_share_price) + self.flat_fee();
+        let short_principal_derivative = self
+            .calculate_short_principal_derivative(bond_amount)?
+            .mul_up(self.vault_share_price());
+        let curve_fee_derivative = self.curve_fee().mul_up((fixed!(1e18) - spot_price));
+
+        // Multiply by the share price to return base.
+        Ok(share_adjustment_derivative - short_principal_derivative + curve_fee_derivative)
     }
 
-    /// Calculates the amount of short principal that the LPs need to pay to back a
-    /// short before fees are taken into consideration, $P(\Delta y)$.
+    /// Calculates the amount of short principal that the LPs need to pay to
+    /// back a short before fees are taken into consideration,
+    /// `$P_\text{lp}(\Delta y)$`.
     ///
-    /// Let the LP principal that backs $\Delta y$ shorts be given by $P(\Delta y)$. We can
-    /// solve for this in terms of $\Delta y$ using the YieldSpace invariant:
+    /// Let the LP principal that backs $\Delta y$ shorts be given by
+    /// `$P_{\text{lp}}(\Delta y)$`. We can solve for this in terms of
+    /// `$\Delta y$` using the YieldSpace invariant:
     ///
-    /// $$
+    /// ```math
     /// k = \tfrac{c}{\mu} \cdot (\mu \cdot (z - P(\Delta y)))^{1 - t_s} + (y + \Delta y)^{1 - t_s} \\
     /// \implies \\
-    /// P(\Delta y) = z - \tfrac{1}{\mu} \cdot (\tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s}))^{\tfrac{1}{1 - t_s}}
-    /// $$
+    /// P_{\text{lp}}(\Delta y) = z - \tfrac{1}{\mu}
+    /// \cdot \left(
+    ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// \right)^{\tfrac{1}{1 - t_s}}
+    /// ```
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
         self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
     }
 
-    /// Calculates the derivative of the short principal $P(\Delta y)$ w.r.t. the amount of
-    /// bonds that are shorted $\Delta y$.
+    /// Calculates the derivative of the short principal w.r.t. the amount of
+    /// bonds that are shorted.
     ///
-    /// The derivative is calculated as:
+    /// The derivative is:
     ///
-    /// $$
-    /// P'(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s} \cdot \left(
-    ///             \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
-    ///         \right)^{\tfrac{t_s}{1 - t_s}}
-    /// $$
+    /// ```math
+    /// P^{\prime}_{\text{lp}}(\Delta y) = \tfrac{1}{c} \cdot (y + \Delta y)^{-t_s}
+    /// \cdot \left(
+    ///     \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    /// \right)^{\tfrac{t_s}{1 - t_s}}
+    /// ```
     pub fn calculate_short_principal_derivative(
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
-        let lhs = fixed!(1e18)
-            / (self
-                .vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?));
-        let rhs = ((self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()?
-                - (self.bond_reserves() + bond_amount).pow(fixed!(1e18) - self.time_stretch())?))
+        // Avoid negative exponent by putting the term in the denominator.
+        let lhs = fixed!(1e18).div_up(
+            self.vault_share_price()
+                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
+        );
+        let rhs = (self
+            .initial_vault_share_price()
+            .div_up(self.vault_share_price())
+            .mul_up(
+                self.k_up()?
+                    - (self.bond_reserves() + bond_amount)
+                        .pow(fixed!(1e18) - self.time_stretch())?,
+            ))
         .pow(
             self.time_stretch()
                 .div_up(fixed!(1e18) - self.time_stretch()),
         )?;
-        Ok(lhs * rhs)
+        Ok(lhs.mul_up(rhs))
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -166,15 +274,15 @@ impl State {
     pub fn calculate_pool_state_after_open_short(
         &self,
         bond_amount: FixedPoint,
-        maybe_shares_amount: Option<FixedPoint>,
+        maybe_share_amount: Option<FixedPoint>,
     ) -> Result<Self> {
-        let shares_delta = match maybe_shares_amount {
-            Some(shares_amount) => shares_amount,
+        let share_amount = match maybe_share_amount {
+            Some(share_amount) => share_amount,
             None => self.calculate_pool_deltas_after_open_short(bond_amount)?,
         };
         let mut state = self.clone();
         state.info.bond_reserves += bond_amount.into();
-        state.info.share_reserves -= shares_delta.into();
+        state.info.share_reserves -= share_amount.into();
         Ok(state)
     }
 
@@ -203,33 +311,34 @@ impl State {
     }
 
     /// Calculates the spot price after opening a short.
+    /// Arguments are deltas that would be applied to the pool.
     pub fn calculate_spot_price_after_short(
         &self,
         bond_amount: FixedPoint,
         maybe_base_amount: Option<FixedPoint>,
     ) -> Result<FixedPoint> {
-        let shares_amount = match maybe_base_amount {
+        let share_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
             None => self.calculate_pool_deltas_after_open_short(bond_amount)?,
         };
         let updated_state =
-            self.calculate_pool_state_after_open_short(bond_amount, Some(shares_amount))?;
+            self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
         updated_state.calculate_spot_price()
     }
 
     /// Calculate the spot rate after a short has been opened.
-    /// If a base_amount is not provided, then one is estimated using `calculate_open_short`.
+    /// If a base_amount is not provided, then one is estimated
+    /// using [calculate_pool_deltas_after_open_short](State::calculate_pool_deltas_after_open_short).
     ///
     /// We calculate the rate for a fixed length of time as:
-    /// $$
-    /// r(\Delta y) = (1 - p(\Delta y)) / (p(\Delta y) t)
-    /// $$
     ///
-    /// where $p(\Delta y)$ is the spot price after a short for `delta_bonds`$= \Delta y$ and
-    /// t is the normalized position druation.
+    /// ```math
+    /// r(\Delta y) = \frac{1 - p(\Delta y)}{p(\Delta y) \cdot t}
+    /// ```
     ///
-    /// In this case, we use the resulting spot price after a hypothetical short
-    /// for `bond_amount` is opened.
+    /// where `$p(\Delta y)$` is the spot price after a short for
+    /// `delta_bonds` `$= \Delta y$` and `$t$` is the normalized position
+    /// druation.
     pub fn calculate_spot_rate_after_short(
         &self,
         bond_amount: FixedPoint,
@@ -245,41 +354,43 @@ impl State {
     /// Calculate the implied rate of opening a short at a given size. This rate
     /// is calculated as an APY.
     ///
-    /// Given the effective fixed rate the short will pay $r_{effective}$ and
-    /// the variable rate the short will receive $r_{variable}$, the short's
-    /// implied APY, $r_{implied}$ will be:
+    /// Given the effective fixed rate the short will pay
+    /// `$r_{\text{effective}}$` and the variable rate the short will receive
+    /// `$r_{\text{variable}}$`, the short's implied APY,
+    /// `$r_{\text{implied}}$` will be:
     ///
-    /// $$
-    /// r_{implied} = \frac{r_{variable} - r_{effective}}{r_{effective}}
-    /// $$
+    /// ```math
+    /// r_{\text{implied}} = \frac{r_{\text{variable}}
+    /// - r_{\text{effective}}}{r_{\text{effective}}}
+    /// ```
     ///
     /// We can short-cut this calculation using the amount of base the short
     /// will pay and comparing this to the amount of base the short will receive
     /// if the variable rate stays the same. The implied rate is just the ROI
     /// if the variable rate stays the same.
     ///
-    /// To do this, we must figure out the term-adjusted yield $TPY$ according to
-    /// the position duration $t$. Since we start off from a compounded APY and also
-    /// output a compounded TPY, the compounding frequency $f$ is simplified away.
-    /// so the adjusted yield will be:
+    /// To do this, we must figure out the term-adjusted yield `$TPY$` according
+    /// to the position duration `$t$`. Since we start off from a compounded APY
+    /// and also output a compounded TPY, the compounding frequency `$f$` is
+    /// simplified away. Thus, the adjusted yield will be:
     ///
-    /// $$
-    /// APR = f \cdot (( 1 + APY)^{\tfrac{1}{f}}  - 1)
-    /// $$
+    /// ```math
+    /// \text{APR} = f \cdot (( 1 + \text{APY})^{\tfrac{1}{f}}  - 1)
+    /// ```
     ///
     /// Therefore,
     ///
-    /// $$
-    /// \begin{align}
+    /// ```math
+    /// \begin{aligned}
     /// TPY &= (1 + \frac{APR}{f})^{d \cdot f} \\
     /// &= (1 + APY)^{d} - 1
-    /// \end{align}
-    /// $$
+    /// \end{aligned}
+    /// ```
     ///
-    /// We use the TPY to figure out the base proceeds, and calculate the rate of
-    /// return based on the short's opening cost. Since shorts must backpay the
-    /// variable interest accrued since the last checkpoint, we subtract that from
-    /// the opening cost, as they get it back upon closing the short.
+    /// We use the TPY to figure out the base proceeds, and calculate the rate
+    /// of return based on the short's opening cost. Since shorts must backpay
+    /// the variable interest accrued since the last checkpoint, we subtract
+    /// that from the opening cost, as they get it back upon closing the short.
     pub fn calculate_implied_rate(
         &self,
         bond_amount: FixedPoint,
@@ -311,10 +422,10 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use fixed_point::{fixed, int256};
+    use fixedpointmath::{fixed, int256};
     use hyperdrive_test_utils::{
         chain::TestChain,
-        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::ihyperdrive::{Checkpoint, Options};
     use rand::{thread_rng, Rng, SeedableRng};
@@ -326,7 +437,9 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn test_calculate_pool_deltas_after_open_short() -> Result<()> {
+    async fn test_sol_calculate_pool_deltas_after_open_short() -> Result<()> {
+        let test_tolerance = fixed!(10);
+
         let chain = TestChain::new().await?;
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -342,11 +455,9 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price()?,
                     checkpoint_exposure,
-                    None,
                     None,
                 )
             }) {
@@ -360,11 +471,12 @@ mod tests {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
-            let actual = state.calculate_pool_deltas_after_open_short(bond_amount);
+            let rust_pool_deltas = state.calculate_pool_deltas_after_open_short(bond_amount);
             let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
-            let gov_fee = state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
+            let gov_fee_base =
+                state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
             let fees = curve_fee_base.div_up(state.vault_share_price())
-                - gov_fee.div_up(state.vault_share_price());
+                - gov_fee_base.div_up(state.vault_share_price());
             match chain
                 .mock_hyperdrive_math()
                 .calculate_open_short(
@@ -378,15 +490,16 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(expected) => {
-                    let expected_with_fees = FixedPoint::from(expected) - fees;
-                    let actual_with_fees = actual.unwrap();
-                    let result_equal = expected_with_fees <= actual_with_fees + fixed!(10)
-                        && expected_with_fees >= actual_with_fees - fixed!(10);
+                Ok(sol_pool_deltas) => {
+                    let sol_pool_deltas_with_fees = FixedPoint::from(sol_pool_deltas) - fees;
+                    let rust_pool_deltas_unwrapped = rust_pool_deltas.unwrap();
+                    let result_equal = sol_pool_deltas_with_fees
+                        <= rust_pool_deltas_unwrapped + test_tolerance
+                        && sol_pool_deltas_with_fees >= rust_pool_deltas_unwrapped - test_tolerance;
                     assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => {
-                    assert!(actual.is_err())
+                    assert!(rust_pool_deltas.is_err())
                 }
             };
         }
@@ -431,41 +544,51 @@ mod tests {
     async fn fuzz_calculate_short_principal_derivative() -> Result<()> {
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
-        let empirical_derivative_epsilon = fixed!(1e12);
-        // TODO pretty big comparison epsilon here
-        let test_tolerance = fixed!(1e16);
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
 
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
 
-            let p1 = match state.calculate_short_principal(amount - empirical_derivative_epsilon) {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
-                Err(_) => continue,
+            // Min trade amount should be at least 1,000x the derivative epsilon.
+            let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
+
+            // Calculate the function output at the bond amount and a small perturbation away.
+            let f_x = match panic::catch_unwind(|| state.calculate_short_principal(bond_amount)) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+            };
+            let f_x_plus_delta = match panic::catch_unwind(|| {
+                state.calculate_short_principal(bond_amount + empirical_derivative_epsilon)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
-            let p2 = match state.calculate_short_principal(amount + empirical_derivative_epsilon) {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => p,
-                Err(_) => continue,
-            };
             // Sanity check
-            assert!(p2 > p1);
+            assert!(f_x_plus_delta > f_x);
 
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-            let short_principal_derivative = state.calculate_short_principal_derivative(amount)?;
+            // Compute the empirical and analytical derivatives.
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
+            let short_principal_derivative =
+                state.calculate_short_principal_derivative(bond_amount)?;
 
-            let derivative_diff;
-            if short_principal_derivative >= empirical_derivative {
-                derivative_diff = short_principal_derivative - empirical_derivative;
+            // Ensure that the empirical and analytical derivatives match.
+            let derivative_diff = if short_principal_derivative >= empirical_derivative {
+                short_principal_derivative - empirical_derivative
             } else {
-                derivative_diff = empirical_derivative - short_principal_derivative;
-            }
+                empirical_derivative - short_principal_derivative
+            };
             assert!(
                 derivative_diff < test_tolerance,
-                "expected (derivative_diff={}) < (test_tolerance={}), \
+                "expected abs(derivative_diff={}) < test_tolerance={};
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
                 test_tolerance,
@@ -484,64 +607,59 @@ mod tests {
     async fn fuzz_calculate_open_short_derivative() -> Result<()> {
         // We use a relatively large epsilon here due to the underlying fixed point pow
         // function not being monotonically increasing.
-        let empirical_derivative_epsilon = fixed!(1e12);
-        // TODO pretty big comparison epsilon here
-        let test_tolerance = fixed!(1e15);
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
 
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let amount = rng.gen_range(fixed!(10e18)..=fixed!(10_000_000e18));
+            // Min trade amount should be at least 1,000x the derivative epsilon.
+            let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
 
-            let p1 = match panic::catch_unwind(|| {
-                state.calculate_open_short(
-                    amount - empirical_derivative_epsilon,
-                    state.vault_share_price(),
-                )
+            // Calculate the function output at the bond amount and a small perturbation away.
+            let f_x = match panic::catch_unwind(|| {
+                state.calculate_open_short(bond_amount, state.vault_share_price())
             }) {
-                Ok(p) => match p {
-                    Ok(p) => p,
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
                 Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
-
-            let p2 = match panic::catch_unwind(|| {
+            let f_x_plus_delta = match panic::catch_unwind(|| {
                 state.calculate_open_short(
-                    amount + empirical_derivative_epsilon,
+                    bond_amount + empirical_derivative_epsilon,
                     state.vault_share_price(),
                 )
             }) {
-                // If the amount results in the pool being insolvent, skip this iteration
-                Ok(p) => match p {
-                    Ok(p) => p,
+                Ok(result) => match result {
+                    Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
                 Err(_) => continue, // Overflow or underflow error from FixedPoint.
             };
 
             // Sanity check
-            assert!(p2 > p1);
+            assert!(f_x_plus_delta > f_x);
 
-            // Compute the derivative.
-            let empirical_derivative = (p2 - p1) / (fixed!(2e18) * empirical_derivative_epsilon);
-
+            // Compute the empirical and analytical derivatives.
             // Setting open, close, and current vault share price to be equal assumes 0% variable yield.
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
             let short_deposit_derivative = state.calculate_open_short_derivative(
-                amount,
+                bond_amount,
                 state.vault_share_price(),
                 Some(state.calculate_spot_price()?),
             )?;
 
-            let derivative_diff;
-            if short_deposit_derivative >= empirical_derivative {
-                derivative_diff = short_deposit_derivative - empirical_derivative;
+            // Ensure that the empirical and analytical derivatives match.
+            let derivative_diff = if short_deposit_derivative >= empirical_derivative {
+                short_deposit_derivative - empirical_derivative
             } else {
-                derivative_diff = empirical_derivative - short_deposit_derivative;
-            }
+                empirical_derivative - short_deposit_derivative
+            };
             assert!(
                 derivative_diff < test_tolerance,
-                "expected (derivative_diff={}) < (test_comparison_epsilon={}), \
+                "expected abs(derivative_diff={}) < test_tolerance={};
                 calculated_derivative={}, emperical_derivative={}",
                 derivative_diff,
                 test_tolerance,
@@ -554,7 +672,9 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_spot_price_after_short() -> Result<()> {
+    async fn fuzz_sol_calculate_spot_price_after_short() -> Result<()> {
+        let test_tolerance = fixed!(1e3);
+
         // Spawn a test chain and create two agents -- Alice and Bob. Alice is
         // funded with a large amount of capital so that she can initialize the
         // pool. Bob is funded with a small amount of capital so that we can
@@ -579,29 +699,40 @@ mod tests {
             // Alice initializes the pool.
             alice.initialize(fixed_rate, contribution, None).await?;
 
-            // Set the variable rate to 0.
-            // This is required so that no interest is accrued between the
-            // estimate and actual open_short call.
-            // FIXME: We should not have to do this for the test to pass.
-            alice.advance_time(fixed!(0), fixed!(1)).await?;
-
             // Attempt to predict the spot price after opening a short.
-            let bond_amount = rng.gen_range(fixed!(0.01e18)..=bob.calculate_max_short(None).await?);
-            let current_state = bob.get_state().await?;
-            let expected_spot_price =
-                current_state.calculate_spot_price_after_short(bond_amount, None)?;
+            let mut state = alice.get_state().await?;
+            let bond_amount = rng.gen_range(
+                state.minimum_transaction_amount()..=bob.calculate_max_short(None).await?,
+            );
 
             // Open the short.
             bob.open_short(bond_amount, None, None).await?;
 
+            // Calling any Solidity Hyperdrive transaction causes the
+            // mock yield source to accrue some interest. We want to use
+            // the state before the Solidity OpenShort, but with the
+            // vault share price after the block tick.
+            let new_state = alice.get_state().await?;
+            let new_vault_share_price = new_state.vault_share_price();
+            state.info.vault_share_price = new_vault_share_price.into();
+
             // Verify that the predicted spot price is equal to the ending spot
-            // price. These won't be exactly equal because the vault share price
-            // increases between the prediction and opening the short.
-            let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
-            assert_eq!(
-                actual_spot_price, expected_spot_price,
-                "expected actual_spot_price={} == expected_spot_price={}",
-                actual_spot_price, expected_spot_price,
+            // price.
+            let expected_spot_price = state.calculate_spot_price_after_short(bond_amount, None)?;
+            let actual_spot_price = new_state.calculate_spot_price()?;
+            let abs_spot_price_diff = if actual_spot_price >= expected_spot_price {
+                actual_spot_price - expected_spot_price
+            } else {
+                expected_spot_price - actual_spot_price
+            };
+            assert!(
+                abs_spot_price_diff <= test_tolerance,
+                "expected abs(spot_price_diff={}) <= test_tolerance={};
+                calculated_spot_price={}, actual_spot_price={}",
+                abs_spot_price_diff,
+                test_tolerance,
+                expected_spot_price,
+                actual_spot_price,
             );
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
@@ -613,10 +744,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_defaults_calculate_spot_price_after_short() -> Result<()> {
+    async fn test_defaults_calculate_spot_price_after_short() -> Result<()> {
         let mut rng = thread_rng();
         let mut num_checks = 0;
-        for _ in 0..*FUZZ_RUNS {
+        // We don't need a lot of tests for this because each component is
+        // tested elsewhere.
+        for _ in 0..*SLOW_FUZZ_RUNS {
             // We use a random state but we will ignore any case where a call
             // fails because we want to test the default behavior when the state
             // allows all actions.
@@ -629,15 +762,12 @@ mod tests {
                     I256::try_from(value).unwrap()
                 }
             };
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price()?,
                     checkpoint_exposure,
-                    None,
-                    None,
+                    Some(3),
                 )
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
@@ -675,7 +805,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_implied_rate() -> Result<()> {
-        let tolerance = int256!(1e15);
+        let tolerance = int256!(1e12);
 
         // Spawn a test chain with two agents.
         let mut rng = thread_rng();
@@ -762,10 +892,12 @@ mod tests {
     // Tests open short with an amount smaller than the minimum.
     #[tokio::test]
     async fn test_error_open_short_min_txn_amount() -> Result<()> {
+        let min_bond_delta = fixed!(1);
+
         let mut rng = thread_rng();
         let state = rng.gen::<State>();
         let result = state.calculate_open_short(
-            (state.config.minimum_transaction_amount - 10).into(),
+            state.minimum_transaction_amount() - min_bond_delta,
             state.vault_share_price(),
         );
         assert!(result.is_err());
@@ -794,14 +926,11 @@ mod tests {
             };
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            // TODO: We should use calculate_absolute_max_short here because that is what we are testing.
             // We need to catch panics because of FixedPoint overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price()?,
                     checkpoint_exposure,
-                    None,
                     Some(max_iterations),
                 )
             });
@@ -841,8 +970,6 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calculate_open_short() -> Result<()> {
-        let tolerance = fixed!(1e10);
-
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
@@ -865,14 +992,8 @@ mod tests {
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
-            // Set the variable rate to 0.
-            // This is required so that no interest is accrued between the
-            // estimate and actual open_short call.
-            // FIXME: We should not have to do this for the test to pass.
-            alice.advance_time(fixed!(0), fixed!(1)).await?;
-
             // Get state and trade details.
-            let state = alice.get_state().await?;
+            let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
             let max_short = celine.calculate_max_short(None).await?;
             let bond_amount = rng.gen_range(min_txn_amount..=max_short);
@@ -880,17 +1001,7 @@ mod tests {
             // The base required should always be less than the short amount.
             celine.fund(bond_amount).await?;
 
-            // Get the open vault share price.
-            let Checkpoint {
-                weighted_spot_price: _,
-                last_weighted_spot_price_update_time: _,
-                vault_share_price: open_vault_share_price,
-            } = alice
-                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                .await?;
-
             // Compare the open short call output against calculate_open_short.
-            let rust_base = state.calculate_open_short(bond_amount, open_vault_share_price.into());
             match celine
                 .hyperdrive()
                 .open_short(
@@ -907,20 +1018,56 @@ mod tests {
                 .await
             {
                 Ok((_, sol_base)) => {
+                    // Calling any Solidity Hyperdrive transaction causes the
+                    // mock yield source to accrue some interest. We want to use
+                    // the state before the Solidity OpenShort, but with the
+                    // vault share price after the block tick.
+
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the open vault share price.
+                    let Checkpoint {
+                        weighted_spot_price: _,
+                        last_weighted_spot_price_update_time: _,
+                        vault_share_price: open_vault_share_price,
+                    } = alice
+                        .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Run the Rust function.
+                    let rust_base =
+                        state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+                    // Compare the results.
                     let rust_base_unwrapped = rust_base.unwrap();
-                    let error = if rust_base_unwrapped >= sol_base.into() {
-                        rust_base_unwrapped - FixedPoint::from(sol_base)
-                    } else {
-                        FixedPoint::from(sol_base) - rust_base_unwrapped
-                    };
-                    assert!(
-                        error <= tolerance,
-                        "error {} exceeds tolerance of {}",
-                        error,
-                        tolerance
+                    let sol_base_fp = FixedPoint::from(sol_base);
+                    assert_eq!(
+                        rust_base_unwrapped, sol_base_fp,
+                        "expected rust_base={:#?} == sol_base={:#?}",
+                        rust_base_unwrapped, sol_base_fp
                     );
                 }
                 Err(sol_err) => {
+                    // Get the current vault share price & update state.
+                    let vault_share_price = alice.get_state().await?.vault_share_price();
+                    state.info.vault_share_price = vault_share_price.into();
+
+                    // Get the open vault share price.
+                    let Checkpoint {
+                        weighted_spot_price: _,
+                        last_weighted_spot_price_update_time: _,
+                        vault_share_price: open_vault_share_price,
+                    } = alice
+                        .get_checkpoint(state.to_checkpoint(alice.now().await?))
+                        .await?;
+
+                    // Run the Rust function.
+                    let rust_base =
+                        state.calculate_open_short(bond_amount, open_vault_share_price.into());
+
+                    // Make sure Rust failed.
                     assert!(
                         rust_base.is_err(),
                         "sol_err={:#?}, but rust_base={:#?} did not error",

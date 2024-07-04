@@ -1,0 +1,27 @@
+[package]
+name = "fixedpointmath"
+edition = "2021"
+version = { workspace = true }
+license = { workspace = true }
+homepage = { workspace = true }
+documentation = "https://docs.rs/crate/fixedpointmath"
+repository = { workspace = true }
+readme = { workspace = true }
+description = "Math library to simulate FixedPoint computation in Solidity smart contracts."
+
+[dependencies]
+
+# External dependencies
+ethers = "2.0.11"
+eyre = "0.6.8"
+rand = "0.8.5"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+# Workspace dependencies
+test-utils = { path = "../test-utils" }
+hyperdrive-wrappers = { path = "../hyperdrive-wrappers" }
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--html-in-header", "assets/katex_header.html"]

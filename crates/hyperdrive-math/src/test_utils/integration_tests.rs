@@ -3,7 +3,7 @@ mod tests {
 
     use ethers::types::U256;
     use eyre::Result;
-    use fixed_point::fixed;
+    use fixedpointmath::fixed;
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};

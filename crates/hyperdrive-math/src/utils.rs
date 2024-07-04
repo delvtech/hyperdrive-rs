@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixed_point::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, uint256, FixedPoint};
 
 pub fn calculate_time_stretch(
     rate: FixedPoint,
@@ -63,24 +63,20 @@ pub fn calculate_effective_share_reserves_safe(
 /// effective share reserves and fixed rate APR.
 ///
 /// NOTE: This function should not be used for computing reserve levels when
-/// initializing a pool. Instead use `lp::calculate_initial_reserves`.
+/// initializing a pool. Instead use
+/// (calculate_initial_reserves)[State::calculate_initial_reserves].
 ///
-/// r = ((1 / p) - 1) / t = (1 - p) / (pt)
-/// p = ((u * z) / y) ** t
+/// ```math
+/// \begin{aligned}
+/// r &= \tfrac{(1 / p) - 1}{t} \\
+/// &= \frac{1 - p}{p \cdot t}
+/// ```
 ///
-/// Arguments:
+/// ```math
+/// p = \left( \tfrac{u * z}{y} \right)^{t}
+/// ```
 ///
-/// * effective_share_reserves : The pool's effective share reserves. The
-/// effective share reserves are a modified version of the share
-/// reserves used when pricing trades.
-/// * target_rate : The target pool's fixed APR.
-/// * initial_vault_share_price : The pool's initial vault share price.
-/// * position_duration : The amount of time until maturity in seconds.
-/// * time_stretch : The time stretch parameter.
-///
-/// Returns:
-///
-/// * bond_reserves : The bond reserves that make the pool have a specified APR.
+/// Returns the bond reserves that make the pool have a specified APR.
 pub fn calculate_bonds_given_effective_shares_and_rate(
     effective_share_reserves: FixedPoint,
     target_rate: FixedPoint,
@@ -118,14 +114,14 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
 ///
 /// We calculate the rate for a fixed length of time as:
 ///
-/// $$
-/// r = (1 - p) / (p t)
-/// $$
+/// ```math
+/// r = \frac{(1 - p)}{p \cdot t}
+/// ```
 ///
 /// where $p$ is the price and $t$ is the length of time that this price is
 /// assumed to be constant, in units of years. For example, if the price is
-/// constant for 6 months, then $t=0.5$.
-/// In our case, $t = \text{position_duration} / (60*60*24*365)$.
+/// constant for 6 months, then `$t=0.5$`.
+/// In our case, `$t = \text{position_duration} / (60*60*24*365)$`.
 pub fn calculate_rate_given_fixed_price(
     price: FixedPoint,
     position_duration: FixedPoint,
@@ -139,12 +135,12 @@ pub fn calculate_rate_given_fixed_price(
 ///
 /// Since the rate is non-compounding, we calculate the hpr as:
 ///
-/// $$
-/// hpr = apr * t
-/// $$
+/// ```math
+/// \text{hpr} = \text{apr} \cdot t
+/// ```
 ///
-/// where $t$ is the holding period, in units of years. For example, if the
-/// holding period is 6 months, then $t=0.5$.
+/// where `$t$` is the holding period, in units of years. For example, if the
+/// holding period is 6 months, then `$t=0.5$`.
 pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
@@ -157,12 +153,12 @@ pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint) -> Resu
 ///
 /// Since the rate is compounding, we calculate the hpr as:
 ///
-/// $$
-/// hpr = (1 + apy) ^ (t) - 1
-/// $$
+/// ```math
+/// \text{hpr} = (1 +  \text{apy})^{t} - 1
+/// ```
 ///
-/// where $t$ is the holding period, in units of years. For example, if the
-/// holding period is 6 months, then $t=0.5$.
+/// where `$t$` is the holding period, in units of years. For example, if the
+/// holding period is 6 months, then `$t=0.5$`.
 pub fn calculate_hpr_given_apy(apy: I256, position_duration: FixedPoint) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
