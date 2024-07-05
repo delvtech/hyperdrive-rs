@@ -320,7 +320,7 @@ impl State {
 mod tests {
     use std::panic;
 
-    use fixed_point::{fixed, int256};
+    use fixedpointmath::int256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
