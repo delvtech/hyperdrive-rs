@@ -10,7 +10,7 @@ use eyre::{eyre, Result};
 /// use fixedpointmath::u256_from_str;
 ///
 /// let u = u256_from_str("1.1e18").unwrap();
-/// assert_eq!(u, U256::from(11) * U256::from(10).pow(17));
+/// assert_eq!(u, U256::from(11) * U256::from(10).pow(U256::from(17)));
 /// ```
 pub fn u256_from_str(s: &str) -> Result<U256> {
     // Parse a string into a mantissa and an exponent. The U256 arithmetic
