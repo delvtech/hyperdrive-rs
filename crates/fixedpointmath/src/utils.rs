@@ -91,7 +91,7 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
         } else if digit == '.' && !found_dot {
             found_dot = true;
         } else if digit != '_' {
-            panic!("Unexpected character: {digit}");
+            return Err(eyre!("Unexpected character: {digit}"));
         }
     }
 
@@ -99,7 +99,7 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
     // overflow if the exponent is too large. We also need to make sure that
     // the final result is an integer.
     if exponent < decimals {
-        panic!("Exponent is too small: {exponent}");
+        return Err(eyre!("Exponent is too small: {exponent}"));
     }
 
     Ok(sign * mantissa * ethers::types::I256::from(10).pow(exponent - decimals))
