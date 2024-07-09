@@ -3,6 +3,10 @@ name: dynamic fuzz
 on:
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   # Check if files in the /test, /crates, or /lib directories or the
   # /Cargo.lock, or /Cargo.toml files were changed in this PR.

@@ -1,6 +1,10 @@
+mod macros;
+mod utils;
+
 use std::{
     fmt,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Shr, Sub, SubAssign},
+    str::FromStr,
 };
 
 use ethers::types::{Sign, I256, U256};
@@ -12,7 +16,7 @@ use rand::{
     },
     Rng,
 };
-mod macros;
+pub use utils::*;
 
 /// A fixed point wrapper around the `U256` type from ethers-rs.
 ///
@@ -94,6 +98,14 @@ impl TryFrom<FixedPoint> for I256 {
     fn try_from(f: FixedPoint) -> Result<I256> {
         I256::checked_from_sign_and_abs(Sign::Positive, f.0)
             .ok_or(eyre!("failed to convert {} to I256", f))
+    }
+}
+
+impl FromStr for FixedPoint {
+    type Err = Error;
+
+    fn from_str(s: &str) -> Result<FixedPoint> {
+        Ok(FixedPoint(u256_from_str(s)?))
     }
 }
 
