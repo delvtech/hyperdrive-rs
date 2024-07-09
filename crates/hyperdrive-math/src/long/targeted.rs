@@ -503,7 +503,7 @@ mod tests {
             );
 
             // Check solvency
-            let is_solvent = { current_state.calculate_solvency() > allowable_solvency_error };
+            let is_solvent = { current_state.calculate_solvency()? > allowable_solvency_error };
             assert!(is_solvent, "Resulting pool state is not solvent.");
 
             let new_rate = current_state.calculate_spot_rate()?;

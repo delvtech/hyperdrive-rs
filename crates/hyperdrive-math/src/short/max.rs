@@ -435,7 +435,7 @@ impl State {
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
                 .div_down(self.vault_share_price());
         // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
-        let solvency = self.calculate_solvency();
+        let solvency = self.calculate_solvency()?;
         let guess = self
             .vault_share_price()
             .mul_down(solvency + checkpoint_exposure_shares);
