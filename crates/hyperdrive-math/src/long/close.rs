@@ -72,7 +72,7 @@ impl State {
     /// dy = bond_amount
     /// p  = spot_price
     /// t  = time_remaining
-    pub fn calculate_value_long<F: Into<FixedPoint>>(
+    pub fn calculate_market_value_long<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
@@ -81,6 +81,9 @@ impl State {
         let bond_amount = bond_amount.into();
 
         let spot_price = self.calculate_spot_price()?;
+        if spot_price > fixed!(1e18) {
+            return Err(eyre!("Negative fixed interest!"));
+        }
 
         // get the time remaining
         let time_remaining = self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -91,9 +94,15 @@ impl State {
 
         let trading_proceeds = flat_value + curve_value;
         let flat_fees_paid = flat_value * self.config.fees.flat.into();
+        // curve_fees_paid would only underflow if spot_price > 1, which is checked earlier
         let curve_fees_paid = (curve_bonds - curve_value) * self.config.fees.curve.into();
+        let fees_paid = flat_fees_paid + curve_fees_paid;
 
-        Ok(trading_proceeds - flat_fees_paid - curve_fees_paid)
+        if fees_paid > trading_proceeds {
+            Ok(fixed!(0))
+        } else {
+            Ok(trading_proceeds - flat_fees_paid - curve_fees_paid)
+        }
     }
 }
 
@@ -163,33 +172,37 @@ mod tests {
     // Tests market valuation against yield space valuation when closing a long
     // with the minimum transaction amount.
     #[tokio::test]
-    async fn test_calculate_value_long() -> Result<()> {
-        let tolerance = int256!(1e15);
+    async fn test_calculate_market_value_long() -> Result<()> {
+        let tolerance = int256!(1e13);
 
         // Fuzz the spot valuation and yield space valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
+            let state = rng
+                .gen::<State>()
+                .calculate_pool_state_after_add_liquidity(fixed!(1e27), true)?;
             let bond_amount = state.minimum_transaction_amount();
             let maturity_time = state.position_duration();
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
 
             // Ensure curve_fee is smaller than spot_price to avoid overflows
-            // on the yield space valuation
+            // on the yield space valuation, as that'd mean having to pay a larger
+            // amount of fees than the current value of the long
             if state.curve_fee() > state.calculate_spot_price()? {
                 continue;
             }
 
-            let yield_space_valuation = panic::catch_unwind(|| {
-                state.calculate_close_long(bond_amount, maturity_time.into(), current_time.into())
-            })
-            .unwrap()
-            .unwrap();
+            let yield_space_valuation = state.calculate_close_long(
+                bond_amount,
+                maturity_time.into(),
+                current_time.into(),
+            )?;
 
-            let spot_valuation = state
-                .calculate_value_long(bond_amount, maturity_time.into(), current_time.into())
-                .unwrap()
-                / state.vault_share_price();
+            let spot_valuation = state.calculate_market_value_long(
+                bond_amount,
+                maturity_time.into(),
+                current_time.into(),
+            )? / state.vault_share_price();
 
             let error = if spot_valuation > yield_space_valuation {
                 I256::try_from(spot_valuation / yield_space_valuation - fixed!(1e18))?
