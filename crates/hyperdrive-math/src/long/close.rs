@@ -54,24 +54,28 @@ impl State {
         Ok(flat + curve)
     }
 
-    /// Calculates the market value in shares of a long position using the equation:
+    /// Calculates the market value in shares of a long position.
+    ///
     /// market_estimate = trading_proceeds - flat_fees_paid - curve_fees_paid
-    ///
     /// trading_proceeds = flat_value + curve_value
-    ///                  = dy * (1 - t) + dy * t * p
-    ///                  = dy * ((1 - t) + (t * p))
-    /// flat_value       = dy * (1 - t)
-    /// curve_bonds      = dy * t
-    /// curve_value      = curve_bonds * p
-    ///                  = dy * t * p
-    /// flat_fees_paid   = flat_value * flat_fee
-    ///                  = dy * (1 - t) * flat_fee
-    /// curve_fees_paid  = (curve_bonds - curve_value) * curve_fee
-    ///                  = dy * t * (1 - p) * curve_fee
+    /// ```math
+    /// \begin{aligned}
+    /// \text{trading_proceeds} &= \Delta y \cdot (1 - t) + \Delta y \cdot t \cdot p \\
+    ///                  &= \Delta y \cdot ((1 - t) + (t \cdot p)) \\
+    /// \text{flat_value} &= \Delta y \cdot (1 - t) \\
+    /// \text{curve_bonds} &= \Delta y \cdot t \\
+    /// \text{curve_value} &= \text{curve_bonds} \cdot p \\
+    /// &= \Delta y \cdot t \cdot p \\
+    /// \text{flat_fees_paid} &= \text{flat_value} \cdot \phi_f \\
+    /// &= \Delta y \cdot (1 - t) \cdot \text{flat_fee} \\
+    /// \text{curve_fees_paid} &= (\text{curve_bonds} - \text{curve_value}) \cdot \phi_c \\
+    /// &= \Delta y \cdot t \cdot (1 - p) \cdot \phi_c \\
+    /// \end{aligned}
+    /// ```
     ///
-    /// dy = bond_amount
-    /// p  = spot_price
-    /// t  = time_remaining
+    /// `$\Delta y = \text{bond_amount}$`
+    /// `$p  = \text{spot_price}$`
+    /// `$t  = \text{time_remaining}$`
     pub fn calculate_market_value_long<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
