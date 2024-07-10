@@ -73,7 +73,7 @@ impl Distribution<State> for Standard {
                 // We generate values that satisfy `z - zeta >= z_min`,
                 // so `z - z_min >= zeta`.
                 I256::try_from(rng.gen_range(
-                    fixed!(0)..(share_reserves - FixedPoint::from(config.minimum_share_reserves)),
+                    fixed!(0)..=(share_reserves - FixedPoint::from(config.minimum_share_reserves)),
                 ))
                 .unwrap()
             }
