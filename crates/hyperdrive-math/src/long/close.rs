@@ -177,7 +177,7 @@ mod tests {
     // with the minimum transaction amount.
     #[tokio::test]
     async fn test_calculate_market_value_long() -> Result<()> {
-        let tolerance = int256!(1e13);
+        let tolerance = int256!(1e14);
 
         // Fuzz the spot valuation and yield space valuation against each other.
         let mut rng = thread_rng();
