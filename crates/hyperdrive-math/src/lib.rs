@@ -30,7 +30,6 @@ impl Distribution<State> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> State {
         let one_day_in_seconds = 60 * 60 * 24;
         let one_hour_in_seconds = 60 * 60;
-
         let config = PoolConfig {
             base_token: Address::zero(),
             vault_shares_token: Address::zero(),
@@ -63,8 +62,6 @@ impl Distribution<State> for Standard {
                 governance_zombie: rng.gen_range(fixed!(0.0001e18)..=fixed!(0.2e18)).into(),
             },
         };
-        // We need the spot price to be less than or equal to 1, so we need to
-        // generate the bond reserves so that mu * z <= y
         let share_reserves = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
         let share_adjustment = {
             if rng.gen() {
@@ -76,23 +73,25 @@ impl Distribution<State> for Standard {
                     fixed!(0)
                         ..(share_reserves
                             - FixedPoint::from(config.minimum_share_reserves)
-                            - fixed!(1e8)),
+                            - fixed!(10e18)),
                 ))
                 .unwrap()
             }
         };
         let effective_share_reserves =
             calculate_effective_share_reserves(share_reserves, share_adjustment).unwrap();
+        // We need the spot price to be less than or equal to 1, so we need to
+        // generate the bond reserves so that mu * z <= y.
+        let bond_reserves = rng.gen_range(
+            effective_share_reserves * FixedPoint::from(config.initial_vault_share_price)
+                ..=fixed!(1_000_000_000e18),
+        );
+        // Populate PoolInfo.
         let info = PoolInfo {
             share_reserves: share_reserves.into(),
             zombie_base_proceeds: fixed!(0).into(),
             zombie_share_reserves: fixed!(0).into(),
-            bond_reserves: rng
-                .gen_range(
-                    effective_share_reserves * FixedPoint::from(config.initial_vault_share_price)
-                        ..=fixed!(1_000_000_000e18),
-                )
-                .into(),
+            bond_reserves: bond_reserves.into(),
             vault_share_price: rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18)).into(),
             longs_outstanding: rng.gen_range(fixed!(0)..=fixed!(100_000e18)).into(),
             shorts_outstanding: rng.gen_range(fixed!(0)..=fixed!(100_000e18)).into(),
