@@ -1,4 +1,5 @@
 use ethers::types::U256;
+use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
 use crate::State;
@@ -19,10 +20,18 @@ impl State {
     /// ```math
     /// s = z - \tfrac{\text{exposure}}{c} - z_{\text{min}}
     /// ```
-    pub fn calculate_solvency(&self) -> FixedPoint {
-        self.share_reserves()
-            - self.long_exposure() / self.vault_share_price()
-            - self.minimum_share_reserves()
+    pub fn calculate_solvency(&self) -> Result<FixedPoint> {
+        let share_reserves = self.share_reserves();
+        let long_exposure_shares = self.long_exposure() / self.vault_share_price();
+        let min_share_reserves = self.minimum_share_reserves();
+        if share_reserves > long_exposure_shares + min_share_reserves {
+            Ok((share_reserves - long_exposure_shares) - min_share_reserves)
+        } else {
+            return Err(eyre!(
+                "State is insolvent. Expected share_reserves={} > long_exposure_shares={} + min_share_reserves={}",
+                share_reserves, long_exposure_shares, min_share_reserves
+            ));
+        }
     }
 
     /// Calculates the number of base reserves that are not reserved by open

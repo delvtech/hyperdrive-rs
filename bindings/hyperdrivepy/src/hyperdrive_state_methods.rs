@@ -29,7 +29,9 @@ impl HyperdriveState {
     }
 
     pub fn calculate_solvency(&self) -> PyResult<String> {
-        let result_fp = self.state.calculate_solvency();
+        let result_fp = self.state.calculate_solvency().map_err(|err| {
+            PyErr::new::<PyValueError, _>(format!("failed to calculate solvency: {}", err))
+        })?;
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }

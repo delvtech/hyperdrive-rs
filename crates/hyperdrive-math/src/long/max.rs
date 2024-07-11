@@ -329,7 +329,7 @@ impl State {
     ) -> Result<FixedPoint> {
         let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         let mut estimate =
-            self.calculate_solvency() + checkpoint_exposure / self.vault_share_price();
+            self.calculate_solvency()? + checkpoint_exposure / self.vault_share_price();
         estimate = estimate.mul_div_down(self.vault_share_price(), fixed!(2e18));
         estimate /= fixed!(1e18) / estimate_price
             + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
@@ -641,9 +641,9 @@ mod tests {
             let is_max_price =
                 max_spot_price - spot_price_after_long.min(max_spot_price) < fixed!(1e15);
             let is_solvency_consumed = {
-                let state = bob.get_state().await?;
+                let state = alice.get_state().await?;
                 let error_tolerance = fixed!(1_000e18).mul_div_down(fixed_rate, fixed!(0.1e18));
-                state.calculate_solvency() < error_tolerance
+                state.calculate_solvency()? < error_tolerance
             };
             let is_budget_consumed = {
                 let error_tolerance = fixed!(1e18);
