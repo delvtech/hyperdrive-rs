@@ -1109,7 +1109,7 @@ checksum = "0ce7134b9999ecaf8bcd65542e436736ef32ddca1b3e06094cb6ec5755203b80"
 
 [[package]]
 name = "fixedpointmath"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "ethers",
  "eyre",
@@ -1508,7 +1508,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-math"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "ethers",
  "eyre",
@@ -1524,7 +1524,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-test-utils"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "async-trait",
  "dotenvy",
@@ -1546,7 +1546,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrive-wrappers"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "dotenv",
  "ethers",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "hyperdrivepy"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "ethers",
  "eyre",
@@ -3307,7 +3307,7 @@ dependencies = [
 
 [[package]]
 name = "test-utils"
-version = "0.16.9"
+version = "0.16.10"
 dependencies = [
  "async-trait",
  "ethers",

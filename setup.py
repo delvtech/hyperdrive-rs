@@ -5,7 +5,7 @@ from setuptools_rust import Binding, RustExtension
 
 setup(
     name="hyperdrivepy",
-    version="0.16.8",
+    version="0.16.10",
     packages=["hyperdrivepy"],
     package_dir={"": "bindings/hyperdrivepy/python"},
     rust_extensions=[
