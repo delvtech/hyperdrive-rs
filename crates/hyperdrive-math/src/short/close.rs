@@ -481,14 +481,16 @@ mod tests {
     // with the minimum transaction amount.
     #[tokio::test]
     async fn test_calculate_market_value_short() -> Result<()> {
-        let tolerance_rel = int256!(1e15); // 0.1%
+        let tolerance_rel = int256!(1e14); // 0.1%
         let tolerance_abs = int256!(1e12); // 0.0000
         let mut tolerance = tolerance_rel;
 
         // Fuzz the spot valuation and yield space valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
+            let state = rng
+                .gen::<State>()
+                .calculate_pool_state_after_add_liquidity(fixed!(1e27), true)?;
             let bond_amount = state.minimum_transaction_amount();
             let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
             let maturity_time = state.position_duration();
