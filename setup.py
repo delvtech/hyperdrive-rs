@@ -7,9 +7,9 @@ setup(
     name="hyperdrivepy",
     version="0.16.8",
     packages=["hyperdrivepy"],
-    package_dir={"": "python"},
+    package_dir={"": "bindings/hyperdrivepy/python"},
     rust_extensions=[
-        RustExtension("hyperdrivepy.hyperdrivepy", binding=Binding.PyO3),
+        RustExtension("hyperdrivepy.hyperdrivepy", binding=Binding.PyO3, path="bindings/hyperdrivepy/Cargo.toml"),
     ],
     # Rust extensions are not zip safe, just like C-extensions.
     zip_safe=False,
