@@ -17,9 +17,6 @@ Issues = "https://github.com/delvtech/hyperdrive-rs/issues"
 requires = ["setuptools", "wheel", "setuptools-rust"]
 build-backend = "setuptools.build_meta"
 
-# [tool.setuptools.packages.find]
-# where = ["bindings/hyperdrivepy/python"]
-
 [tool.pytest.ini_options]
 minversion = "6.0"
 addopts = ["--tb=short"]
