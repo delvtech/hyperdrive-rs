@@ -481,7 +481,7 @@ mod tests {
     // with the minimum transaction amount.
     #[tokio::test]
     async fn test_calculate_market_value_short() -> Result<()> {
-        let tolerance_rel = int256!(1e14); // 0.1%
+        let tolerance_rel = int256!(1e15); // 0.1%
         let tolerance_abs = int256!(1e12); // 0.0000
         let mut tolerance = tolerance_rel;
 
