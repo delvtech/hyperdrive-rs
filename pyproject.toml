@@ -6,12 +6,19 @@ authors = [
     { name = "Matthew Brown", email = "matt@delv.tech" },
     { name = "Sheng Lundquist", email = "sheng@delv.tech" },
 ]
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 readme = "README.md"
 
 [project.urls]
 Homepage = "https://github.com/delvtech/hyperdrive-rs"
 Issues = "https://github.com/delvtech/hyperdrive-rs/issues"
+
+[build-system]
+requires = ["setuptools", "wheel", "setuptools-rust"]
+build-backend = "setuptools.build_meta"
+
+# [tool.setuptools.packages.find]
+# where = ["bindings/hyperdrivepy/python"]
 
 [tool.pytest.ini_options]
 minversion = "6.0"
