@@ -69,6 +69,7 @@ impl Distribution<State> for Standard {
             } else {
                 // We generate values that satisfy `z - zeta >= z_min`,
                 // so `z - z_min >= zeta`.
+                // TODO: The upper bound had to be lowered to make tests pass; issue #171
                 I256::try_from(rng.gen_range(
                     fixed!(0)
                         ..(share_reserves
