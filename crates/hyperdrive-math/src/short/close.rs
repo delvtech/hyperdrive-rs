@@ -270,20 +270,24 @@ impl State {
         ))
     }
 
-    /// Calculates the market value of a short position using the equation:
+    /// Calculates the market value of a short position.
+    ///
     /// market_value = yield_accrued + trading_proceeds - curve_fees_paid + flat_fees_returned
+    /// ```math
+    /// \begin{aligned}
+    /// \text{yield_accrued} &= \text{closing_bond_value} - \Delta y \\
+    /// \text{closing_bond_value} = \Delta y \cdot \dfrac{c}{c_0} \\
+    /// \text{trading_proceeds} &= \Delta y \cdot (1 - p) \cdot t \\
+    /// \text{curve_fees_paid} &= \text{trading_proceeds} \cdot \phi_c \\
+    /// \text{flat_fees_returned} &= \Delta y \cdot t \cdot \phi_f \\
+    /// ```
     ///
-    /// yield_accrued      = dy * (c-c0)/c0
-    /// trading_proceeds   = dy * (1 - p) * t
-    /// curve_fees_paid    = trading_proceeds * curve_fee
-    /// flat_fees_returned = dy * t * flat_fee
-    ///
-    /// dy = bond_amount
-    /// c  = close_vault_share_price (current if non-matured, or checkpoint's if matured)
-    /// c0 = open_vault_share_price
-    /// p  = spot_price
-    /// t  = time_remaining
-    pub fn calculate_value_short<F: Into<FixedPoint>>(
+    /// `$\Delta y = \text{bond_amount}$`
+    /// `$c = \text{close_vault_share_price (current if non-matured)}$`
+    /// `$c_0 = \text{open_vault_share_price}$`
+    /// `$p = \text{spot_price}$`
+    /// `$t = \text{time_remaining}$`
+    pub fn calculate_market_value_short<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
         open_vault_share_price: F,
@@ -296,23 +300,31 @@ impl State {
         let close_vault_share_price = close_vault_share_price.into();
 
         let spot_price = self.calculate_spot_price()?;
+        if spot_price > fixed!(1e18) {
+            return Err(eyre!("Negative fixed interest!"));
+        }
 
         // get the time remaining
         let time_remaining = self.calculate_normalized_time_remaining(maturity_time, current_time);
-
-        let yield_accrued = bond_amount * (close_vault_share_price - open_vault_share_price)
-            / open_vault_share_price;
-
+        // yield_accrued = closing_bond_value - bond_amount
+        // closing_bond_value = dy * c1/c0
+        let closing_bond_value = bond_amount * close_vault_share_price / open_vault_share_price;
         // trading_proceeds = dy * (1 - p) * t
         let trading_proceeds = bond_amount * (fixed!(1e18) - spot_price) * (time_remaining);
-
         // curve_fees_paid = trading_proceeds * curve_fee
         let curve_fees_paid = trading_proceeds * self.config.fees.curve.into();
-
         // flat_fees_returned = dy * t * flat_fee
         let flat_fees_returned = bond_amount * time_remaining * self.config.fees.flat.into();
 
-        Ok(yield_accrued + trading_proceeds - curve_fees_paid + flat_fees_returned)
+        let total_value = closing_bond_value + trading_proceeds + flat_fees_returned;
+        if total_value >= (bond_amount + curve_fees_paid) {
+            // market_value = total_value - bond_amount - curve_fees_paid
+            Ok(total_value - bond_amount - curve_fees_paid)
+        } else {
+            // If the interest is more negative than the trading proceeds and
+            // the margin released, we mark short's value to 0
+            Ok(fixed!(0))
+        }
     }
 }
 
@@ -468,44 +480,49 @@ mod tests {
     // Tests market valuation against yield space valuation when closing a short
     // with the minimum transaction amount.
     #[tokio::test]
-    async fn test_calculate_value_short() -> Result<()> {
-        let tolerance = int256!(1e15);
+    async fn test_calculate_market_value_short() -> Result<()> {
+        let tolerance_rel = int256!(1e14); // 0.01%
+        let tolerance_abs = int256!(1e12); // 0.0000
+        let mut tolerance = tolerance_rel;
 
         // Fuzz the spot valuation and yield space valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
             let maturity_time = state.position_duration();
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
-            let yield_space_valuation = panic::catch_unwind(|| {
-                state.calculate_close_short(
-                    bond_amount,
-                    open_vault_share_price,
-                    state.vault_share_price(),
-                    maturity_time.into(),
-                    current_time.into(),
-                )
-            })
-            .unwrap()
-            .unwrap();
 
-            let spot_valuation = state
-                .calculate_value_short(
-                    bond_amount,
-                    open_vault_share_price,
-                    state.vault_share_price(),
-                    maturity_time.into(),
-                    current_time.into(),
-                )
-                .unwrap()
-                / state.vault_share_price();
+            let yield_space_valuation = state.calculate_close_short(
+                bond_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                current_time.into(),
+            )?;
 
-            let error = if spot_valuation > yield_space_valuation {
-                I256::try_from(spot_valuation / yield_space_valuation - fixed!(1e18))?
+            let spot_valuation = state.calculate_market_value_short(
+                bond_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                current_time.into(),
+            )? / state.vault_share_price();
+
+            let error = if spot_valuation > fixed!(0) && yield_space_valuation > fixed!(0) {
+                tolerance = tolerance_rel;
+                if spot_valuation > yield_space_valuation {
+                    I256::try_from(spot_valuation / yield_space_valuation - fixed!(1e18))?
+                } else {
+                    -I256::try_from(fixed!(1e18) - spot_valuation / yield_space_valuation)?
+                }
             } else {
-                -I256::try_from(fixed!(1e18) - spot_valuation / yield_space_valuation)?
+                // at least one of them is 0, so we can't divide
+                tolerance = tolerance_abs;
+                println!("spot_valuation: {}", spot_valuation);
+                println!("yield_space_valuation: {}", yield_space_valuation);
+                I256::try_from(spot_valuation + yield_space_valuation)?
             };
 
             assert!(
