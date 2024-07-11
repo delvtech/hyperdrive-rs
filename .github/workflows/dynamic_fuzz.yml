@@ -57,7 +57,7 @@ jobs:
             echo "$new_tests"
             while IFS= read -r test; do
               echo "Running test: $test"
-              env HYPERDRIVE_SLOW_FUZZ_RUNS=500 HYPERDRIVE_FUZZ_RUNS=1000 HYPERDRIVE_FAST_FUZZ_RUNS=10000 cargo test --release $test --
+              env HYPERDRIVE_SLOW_FUZZ_RUNS=500 HYPERDRIVE_FUZZ_RUNS=1000 HYPERDRIVE_FAST_FUZZ_RUNS=100000 cargo test --release $test --
             done <<< "$new_tests"
           else
             echo "No new tests found."
