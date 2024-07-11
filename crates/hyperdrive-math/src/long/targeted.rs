@@ -495,7 +495,7 @@ mod tests {
             // 3. IF Bob's budget is not consumed; then new rate is close to the target rate
 
             // Check that our resulting price is under the max
-            let current_state = bob.get_state().await?;
+            let current_state = alice.get_state().await?;
             let spot_price_after_long = current_state.calculate_spot_price()?;
             assert!(
                 max_spot_price_before_long > spot_price_after_long,
@@ -503,18 +503,7 @@ mod tests {
             );
 
             // Check solvency
-            let is_solvent = {
-                let state = alice.get_state().await?;
-                let checkpoint_exposure = FixedPoint::try_from(
-                    alice
-                        .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                        .await?
-                        .max(I256::from(0)),
-                )?;
-                let solvency = current_state.calculate_solvency()?
-                    + checkpoint_exposure / current_state.vault_share_price();
-                solvency > allowable_solvency_error
-            };
+            let is_solvent = { current_state.calculate_solvency()? > allowable_solvency_error };
             assert!(is_solvent, "Resulting pool state is not solvent.");
 
             let new_rate = current_state.calculate_spot_rate()?;

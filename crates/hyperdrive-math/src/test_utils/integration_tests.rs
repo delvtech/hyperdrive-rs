@@ -1,9 +1,9 @@
 #[cfg(test)]
 mod tests {
 
-    use ethers::types::{I256, U256};
+    use ethers::types::U256;
     use eyre::Result;
-    use fixedpointmath::{fixed, FixedPoint};
+    use fixedpointmath::fixed;
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};
@@ -136,14 +136,7 @@ mod tests {
                 let state = bob.get_state().await?;
                 let error_tolerance =
                     fixed!(1_000e18).mul_div_down(state.calculate_spot_rate()?, fixed!(0.1e18));
-                let checkpoint_exposure_shares = FixedPoint::try_from(
-                    alice
-                        .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                        .await?
-                        .max(I256::from(0)),
-                )? / state.vault_share_price();
-                let solvency = state.calculate_solvency()? + checkpoint_exposure_shares;
-                solvency < error_tolerance
+                state.calculate_solvency()? < error_tolerance
             };
             let is_budget_consumed = {
                 let error_tolerance = fixed!(1e18);

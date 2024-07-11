@@ -642,16 +642,8 @@ mod tests {
                 max_spot_price - spot_price_after_long.min(max_spot_price) < fixed!(1e15);
             let is_solvency_consumed = {
                 let state = alice.get_state().await?;
-                let checkpoint_exposure = FixedPoint::try_from(
-                    alice
-                        .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                        .await?
-                        .max(I256::from(0)),
-                )?;
                 let error_tolerance = fixed!(1_000e18).mul_div_down(fixed_rate, fixed!(0.1e18));
-                let solvency =
-                    state.calculate_solvency()? + checkpoint_exposure / state.vault_share_price();
-                solvency < error_tolerance
+                state.calculate_solvency()? < error_tolerance
             };
             let is_budget_consumed = {
                 let error_tolerance = fixed!(1e18);
