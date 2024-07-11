@@ -72,7 +72,7 @@ impl Distribution<State> for Standard {
                 // TODO: The upper bound had to be lowered to make tests pass; issue #171
                 I256::try_from(rng.gen_range(
                     fixed!(0)
-                        ..(share_reserves
+                        ..=(share_reserves
                             - FixedPoint::from(config.minimum_share_reserves)
                             - fixed!(10e18)),
                 ))
