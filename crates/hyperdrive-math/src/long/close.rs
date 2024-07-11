@@ -173,13 +173,13 @@ mod tests {
         Ok(())
     }
 
-    // Tests market valuation against yield space valuation when closing a long
+    // Tests market valuation against hyperdrive valuation when closing a long
     // with the minimum transaction amount.
     #[tokio::test]
     async fn test_calculate_market_value_long() -> Result<()> {
         let tolerance = int256!(1e14);
 
-        // Fuzz the spot valuation and yield space valuation against each other.
+        // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng
@@ -190,13 +190,13 @@ mod tests {
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
 
             // Ensure curve_fee is smaller than spot_price to avoid overflows
-            // on the yield space valuation, as that'd mean having to pay a larger
+            // on the hyperdrive valuation, as that'd mean having to pay a larger
             // amount of fees than the current value of the long
             if state.curve_fee() > state.calculate_spot_price()? {
                 continue;
             }
 
-            let yield_space_valuation = state.calculate_close_long(
+            let hyperdrive_valuation = state.calculate_close_long(
                 bond_amount,
                 maturity_time.into(),
                 current_time.into(),
@@ -208,10 +208,10 @@ mod tests {
                 current_time.into(),
             )? / state.vault_share_price();
 
-            let error = if spot_valuation > yield_space_valuation {
-                I256::try_from(spot_valuation / yield_space_valuation - fixed!(1e18))?
+            let error = if spot_valuation > hyperdrive_valuation {
+                I256::try_from(spot_valuation / hyperdrive_valuation - fixed!(1e18))?
             } else {
-                -I256::try_from(fixed!(1e18) - spot_valuation / yield_space_valuation)?
+                -I256::try_from(fixed!(1e18) - spot_valuation / hyperdrive_valuation)?
             };
 
             assert!(

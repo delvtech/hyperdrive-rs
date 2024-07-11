@@ -494,7 +494,7 @@ mod tests {
             let maturity_time = state.position_duration();
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
 
-            let yield_space_valuation = state.calculate_close_short(
+            let hyperdrive_valuation = state.calculate_close_short(
                 bond_amount,
                 open_vault_share_price,
                 state.vault_share_price(),
@@ -510,19 +510,17 @@ mod tests {
                 current_time.into(),
             )? / state.vault_share_price();
 
-            let error = if spot_valuation > fixed!(0) && yield_space_valuation > fixed!(0) {
+            let error = if spot_valuation > fixed!(0) && hyperdrive_valuation > fixed!(0) {
                 tolerance = tolerance_rel;
-                if spot_valuation > yield_space_valuation {
-                    I256::try_from(spot_valuation / yield_space_valuation - fixed!(1e18))?
+                if spot_valuation > hyperdrive_valuation {
+                    I256::try_from(spot_valuation / hyperdrive_valuation - fixed!(1e18))?
                 } else {
-                    -I256::try_from(fixed!(1e18) - spot_valuation / yield_space_valuation)?
+                    -I256::try_from(fixed!(1e18) - spot_valuation / hyperdrive_valuation)?
                 }
             } else {
                 // at least one of them is 0, so we can't divide
                 tolerance = tolerance_abs;
-                println!("spot_valuation: {}", spot_valuation);
-                println!("yield_space_valuation: {}", yield_space_valuation);
-                I256::try_from(spot_valuation + yield_space_valuation)?
+                I256::try_from(spot_valuation + hyperdrive_valuation)?
             };
 
             assert!(
