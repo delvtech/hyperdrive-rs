@@ -336,9 +336,79 @@ impl YieldSpace for State {
 
 #[cfg(test)]
 mod tests {
+    use ethers::types::I256;
+    use fixedpointmath::{fixed, uint256};
+    use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
     use rand::thread_rng;
 
     use super::*;
+
+    #[tokio::test]
+    async fn fuzz_reserves_given_rate_ignoring_exposure() -> Result<()> {
+        let test_tolerance = fixed!(1e11);
+        let mut rng = thread_rng();
+        let mut counter = 0;
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // We want a state with net zero exposure and zero fees.
+            let mut state = rng.gen::<State>();
+            // Zero exposure
+            state.info.longs_outstanding = uint256!(0);
+            state.info.long_average_maturity_time = uint256!(0);
+            state.info.long_exposure = uint256!(0);
+            state.info.shorts_outstanding = uint256!(0);
+            state.info.short_average_maturity_time = uint256!(0);
+            // Effective share reserves == share reserves
+            state.info.share_adjustment = I256::try_from(0)?;
+            // Zero fees
+            state.config.fees.curve = uint256!(0);
+            state.config.fees.flat = uint256!(0);
+            state.config.fees.governance_lp = uint256!(0);
+            state.config.fees.governance_zombie = uint256!(0);
+
+            if state.calculate_spot_price()? < state.calculate_min_price()?
+                || state.calculate_spot_price()? > fixed!(1e18)
+                || state.calculate_solvency().is_err()
+            {
+                continue;
+            }
+
+            // Pick a random target rate that is near the current rate.
+            let target_rate =
+                state.calculate_spot_rate()? * rng.gen_range(fixed!(0.1e18)..=fixed!(10e18));
+
+            // Estimate the long that achieves a target rate.
+            let (target_share_reserves, target_bond_reserves) =
+                state.reserves_given_rate_ignoring_exposure(target_rate)?;
+
+            // Verify that the new levels are solvent.
+            let mut new_state = state.clone();
+            new_state.info.share_reserves = target_share_reserves.into();
+            new_state.info.bond_reserves = target_bond_reserves.into();
+            if new_state.calculate_solvency().is_err()
+                || new_state.calculate_spot_price()? > fixed!(1e18)
+            {
+                continue;
+            }
+
+            // Fixed rate for the new state should equal the target rate.
+            let realized_rate = new_state.calculate_spot_rate()?;
+            let error = if realized_rate > target_rate {
+                realized_rate - target_rate
+            } else {
+                target_rate - realized_rate
+            };
+
+            assert!(
+                error <= test_tolerance,
+                "expected error={} <= tolerance={}",
+                error,
+                test_tolerance
+            );
+            counter += 1;
+        }
+        assert!(counter >= 1_000); // this passed at least 100 times
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_calculate_normalized_time_remaining() -> Result<()> {
