@@ -71,7 +71,7 @@ impl State {
         // withdrawal proceeds regardless of whether or not idle could be
         // distributed.
         let (_withdrawal_shares_redeemed, share_proceeds, updated_state, _success) = self
-            .distribute_excess_idle_safe(
+            .distribute_excess_idle(
                 current_block_timestamp,
                 active_lp_total_supply,
                 withdrawal_shares_total_supply,
@@ -125,7 +125,7 @@ impl State {
 
     /// Distribute as much of the excess idle as possible to the withdrawal
     /// pool while holding the LP share price constant.
-    fn distribute_excess_idle_safe(
+    fn distribute_excess_idle(
         &self,
         current_block_timestamp: U256,
         active_lp_total_supply: FixedPoint,
