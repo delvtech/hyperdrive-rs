@@ -264,10 +264,6 @@ impl State {
         calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())
     }
 
-    fn effective_share_reserves_safe(&self) -> Result<FixedPoint> {
-        calculate_effective_share_reserves_safe(self.share_reserves(), self.share_adjustment())
-    }
-
     fn bond_reserves(&self) -> FixedPoint {
         self.info.bond_reserves.into()
     }

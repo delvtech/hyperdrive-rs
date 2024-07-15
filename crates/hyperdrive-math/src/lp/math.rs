@@ -190,7 +190,7 @@ impl State {
                     self.shorts_outstanding()
                         .mul_down(short_average_time_remaining),
                 )?;
-        match self.effective_share_reserves_safe() {
+        match self.effective_share_reserves() {
             Ok(_) => {}
             // NOTE: Return 0 to indicate that the net curve trade couldn't be
             // computed.
@@ -362,7 +362,7 @@ impl State {
         // debited. If the effective share reserves or the maximum share
         // reserves delta can't be calculated or if the maximum share reserves
         // delta is zero, idle can't be distributed.
-        let success = match self.effective_share_reserves_safe() {
+        let success = match self.effective_share_reserves() {
             Ok(_) => true,
             // The error is safe from the calculation, panics are not.
             Err(_) => false,
@@ -1048,7 +1048,7 @@ impl State {
         // derivative = c * (mu * z_e(x)) ** -t_s +
         //              (y / z_e) * (y(x)) ** -t_s -
         //              (y / z_e) * (y(x) + dy) ** -t_s
-        let effective_share_reserves = self.effective_share_reserves_safe()?;
+        let effective_share_reserves = self.effective_share_reserves()?;
         // NOTE: The exponent is positive and base is flipped to handle the negative value.
         let derivative = self.vault_share_price().div_up(
             self.initial_vault_share_price()
