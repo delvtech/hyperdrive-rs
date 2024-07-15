@@ -364,7 +364,7 @@ mod tests {
             state.config.fees.flat = uint256!(0);
             state.config.fees.governance_lp = uint256!(0);
             state.config.fees.governance_zombie = uint256!(0);
-
+            // Make sure we're still solvent
             if state.calculate_spot_price()? < state.calculate_min_price()?
                 || state.calculate_spot_price()? > fixed!(1e18)
                 || state.calculate_solvency().is_err()

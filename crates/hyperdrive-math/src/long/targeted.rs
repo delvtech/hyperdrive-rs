@@ -353,11 +353,93 @@ impl State {
 mod tests {
     use ethers::types::U256;
     use fixedpointmath::uint256;
-    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+    };
     use rand::{thread_rng, Rng};
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
+
+    #[tokio::test]
+    async fn fuzz_long_trade_deltas_from_reserves() -> Result<()> {
+        let test_tolerance = fixed!(1e7);
+        let mut rng = thread_rng();
+        let mut counter = 0;
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // We want a state with net zero exposure.
+            let mut state = rng.gen::<State>();
+            // Zero exposure
+            state.info.longs_outstanding = uint256!(0);
+            state.info.long_average_maturity_time = uint256!(0);
+            state.info.long_exposure = uint256!(0);
+            state.info.shorts_outstanding = uint256!(0);
+            state.info.short_average_maturity_time = uint256!(0);
+            // Effective share reserves == share reserves
+            state.info.share_adjustment = I256::try_from(0)?;
+            // Zero fees
+            state.config.fees.curve = uint256!(0);
+            state.config.fees.flat = uint256!(0);
+            state.config.fees.governance_lp = uint256!(0);
+            state.config.fees.governance_zombie = uint256!(0);
+            // Make sure we're still solvent
+            if state.calculate_spot_price()? < state.calculate_min_price()?
+                || state.calculate_spot_price()? > fixed!(1e18)
+                || state.calculate_solvency().is_err()
+            {
+                continue;
+            }
+
+            // Pick a random target rate that is always smaller than the current rate.
+            let target_rate =
+                state.calculate_spot_rate()? / rng.gen_range(fixed!(1.00001e18)..=fixed!(10e18));
+
+            // Estimate the long that achieves a target rate.
+            let (target_share_reserves, target_bond_reserves) =
+                state.reserves_given_rate_ignoring_exposure(target_rate)?;
+
+            // Verify that the new levels are solvent.
+            let mut new_state = state.clone();
+            new_state.info.share_reserves = target_share_reserves.into();
+            new_state.info.bond_reserves = target_bond_reserves.into();
+            if new_state.calculate_solvency().is_err()
+                || new_state.calculate_spot_price()? > fixed!(1e18)
+            {
+                continue;
+            }
+
+            // Calculate the long deltas to achieve the target rate.
+            let (target_base_delta, target_bond_delta) = match state
+                .long_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves)
+            {
+                Ok(deltas) => deltas,
+                Err(_) => continue,
+            };
+
+            // Determine what rate was achieved after that long.
+            let resulting_rate =
+                state.calculate_spot_rate_after_long(target_base_delta, Some(target_bond_delta))?;
+
+            // By what percentage does the resulting rate differ from the target?
+            let error = if target_rate > resulting_rate {
+                target_rate - resulting_rate
+            } else {
+                resulting_rate - target_rate
+            };
+
+            // The resulting rate should equal the target rate.
+            assert!(
+                error <= test_tolerance,
+                "expected abs(resulting_rate-target_rate)={} <= test_tolerance={}",
+                error,
+                test_tolerance
+            );
+            counter += 1;
+        }
+        assert!(counter >= 1_000); // this passed at least 1,000 times
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_calculate_targeted_long_with_budget() -> Result<()> {
