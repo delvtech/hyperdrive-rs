@@ -406,7 +406,7 @@ mod tests {
             );
             counter += 1;
         }
-        assert!(counter >= 1_000); // this passed at least 100 times
+        assert!(counter >= 1_000); // this passed at least 1,000 times
         Ok(())
     }
 
