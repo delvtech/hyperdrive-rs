@@ -148,10 +148,8 @@ impl State {
             self.short_average_maturity_time(),
             current_block_timestamp,
         );
-        let net_curve_trade = self.calculate_net_curve_trade_safe(
-            long_average_time_remaining,
-            short_average_time_remaining,
-        )?;
+        let net_curve_trade = self
+            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
         let net_flat_trade = self
             .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)?;
 
@@ -166,7 +164,7 @@ impl State {
         Ok(present_value.try_into()?)
     }
 
-    pub fn calculate_net_curve_trade_safe(
+    pub fn calculate_net_curve_trade(
         &self,
         long_average_time_remaining: FixedPoint,
         short_average_time_remaining: FixedPoint,
@@ -528,7 +526,7 @@ impl State {
         // If the pool is net neutral, the initial guess is equal to the final
         // result.
         let net_curve_trade =
-            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         if net_curve_trade == int256!(0) {
             return Ok(share_proceeds);
         }
@@ -916,7 +914,7 @@ impl State {
         current_block_timestamp: U256,
     ) -> Result<(FixedPoint, bool)> {
         let net_curve_trade =
-            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         let idle = self.calculate_idle_share_reserves();
         // If the net curve position is zero or net long, then the maximum
         // share reserves delta is equal to the pool's idle.
@@ -1242,7 +1240,7 @@ mod tests {
                 state.short_average_maturity_time().into(),
                 current_block_timestamp.into(),
             );
-            let actual = state.calculate_net_curve_trade_safe(
+            let actual = state.calculate_net_curve_trade(
                 long_average_time_remaining,
                 short_average_time_remaining,
             );
