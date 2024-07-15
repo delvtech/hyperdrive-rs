@@ -338,8 +338,8 @@ impl State {
         Ok(estimate)
     }
 
-    /// Calculates the solvency of the pool `$S(x)$` after a long is opened with a base
-    /// amount `$x$`.
+    /// Calculates the solvency of the pool `$S(x)$` after a long is opened with
+    /// a base amount `$x$`.
     ///
     /// Since longs can net out with shorts in this checkpoint, we decrease
     /// the global exposure variable by any negative exposure we have
@@ -366,8 +366,8 @@ impl State {
     ///
     /// ```math
     /// S(x) = \left( z + \Delta z \right) - \left(
-    ///            \tfrac{exposure + min(exposure_{checkpoint}, 0) + \Delta exposure}{c}
-    ///        \right) - z_{min}
+    ///   \tfrac{exposure + min(exposure_{checkpoint}, 0) + \Delta exposure}{c}
+    /// \right) - z_{min}
     /// ```
     ///
     /// It's possible that the pool is insolvent after opening a long. In this

@@ -160,34 +160,37 @@ impl State {
     }
 
     /// Calculates the pool reserve levels to achieve a target interest rate.
-    /// This calculation does not take Hyperdrive's solvency constraints or exposure
-    /// into account and shouldn't be used directly.
+    /// This calculation does not take into account Hyperdrive's solvency
+    /// constraints, exposure and shouldn't be used directly.
     ///
-    /// The price for a given fixed-rate is given by $p = 1 / (r \cdot t + 1)$, where
-    /// $r$ is the fixed-rate and $t$ is the annualized position duration. The
-    /// price for a given pool reserves is given by $p = \frac{\mu z}{y}^{t_{s}}$,
-    /// where $\mu$ is the initial share price and $t_{s}$ is the time stretch
-    /// constant. By setting these equal we can solve for the pool reserve levels
-    /// as a function of a target rate.
-    ///
-    /// For some target rate, $r_t$, the pool share reserves, $z_t$, must be:
+    /// The price for a given fixed-rate is given by
+    /// `$p = \tfrac{1}{r \cdot t + 1}$`, where `$r$` is the fixed-rate and
+    /// `$t$` is the annualized position duration. The price for a given pool
+    /// reserves is `$p = \left( \tfrac{\mu \cdot z}{y} \right)^{t_s}$`, where
+    /// `$\mu$` is the initial share price and `$t_s$` is the time stretch
+    /// constant. The reserve levels are related using the modified yieldspace
+    /// formula: `$k = \tfrac{\mu}{c}^{-t_s} x^{1 - t_s} + y^{1 - t_s}$`.
+    /// Using these three equations, we can solve for the pool reserve levels as
+    /// a function of a target rate.
+    //
+    /// For a target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
     ///
     /// ```math
     /// z_t = \frac{1}{\mu} \left(
     ///   \frac{k}{\frac{c}{\mu} + \left(
-    ///     (r_t \cdot t + 1)^{\frac{1}{t_{s}}}
+    ///     (r_t \cdot t + 1)^{\frac{1}{t_s}}
     ///   \right)^{1 - t_{s}}}
     /// \right)^{\frac{1}{1 - t_{s}}}
     /// ```
     ///
-    /// and the pool bond reserves, $y_t$, must be:
+    /// and the pool bond reserves, `$y_t$`, must be:
     ///
     /// ```math
     /// y_t = \left(
     ///   \frac{k}{ \frac{c}{\mu} +  \left(
-    ///     \left( r_t \cdot t + 1 \right)^{\frac{1}{t_{s}}}
-    ///   \right)^{1 - t_{s}}}
-    /// \right)^{1 - t_{s}} \left( r_t t + 1 \right)^{\frac{1}{t_{s}}}
+    ///     \left( r_t \cdot t + 1 \right)^{\frac{1}{t_s}}
+    ///   \right)^{1 - t_s}}
+    /// \right)^{1 - t_s} \left( r_t \cdot t + 1 \right)^{\frac{1}{t_s}}
     /// ```
     fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint>>(
         &self,
