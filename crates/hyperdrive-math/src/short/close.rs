@@ -35,7 +35,7 @@ impl State {
             // payment.
             //
             let curve_bonds_in = bond_amount.mul_up(normalized_time_remaining);
-            Ok(self.calculate_shares_in_given_bonds_out_up_safe(curve_bonds_in)?)
+            Ok(self.calculate_shares_in_given_bonds_out_up(curve_bonds_in)?)
         } else {
             Ok(fixed!(0))
         }

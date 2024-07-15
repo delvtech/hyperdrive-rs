@@ -227,7 +227,7 @@ impl State {
     /// \right)^{\tfrac{1}{1 - t_s}}
     /// ```
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
-        self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
+        self.calculate_shares_out_given_bonds_in_down(bond_amount)
     }
 
     /// Calculates the derivative of the short principal w.r.t. the amount of

@@ -204,7 +204,7 @@ impl State {
             Ordering::Greater => {
                 let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
                 let max_curve_trade =
-                    match self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves()) {
+                    match self.calculate_max_sell_bonds_in(self.minimum_share_reserves()) {
                         Ok(max_curve_trade) => max_curve_trade,
                         Err(_) => {
                             // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -214,7 +214,7 @@ impl State {
                     };
 
                 if max_curve_trade >= net_curve_position {
-                    match self.calculate_shares_out_given_bonds_in_down_safe(net_curve_position) {
+                    match self.calculate_shares_out_given_bonds_in_down(net_curve_position) {
                         Ok(net_curve_trade) => Ok(-I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
@@ -252,7 +252,7 @@ impl State {
             }
             Ordering::Less => {
                 let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
-                let max_curve_trade = match self.calculate_max_buy_bonds_out_safe() {
+                let max_curve_trade = match self.calculate_max_buy_bonds_out() {
                     Ok(max_curve_trade) => max_curve_trade,
                     Err(_) => {
                         // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -261,7 +261,7 @@ impl State {
                     }
                 };
                 if max_curve_trade >= net_curve_position {
-                    match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
+                    match self.calculate_shares_in_given_bonds_out_up(net_curve_position) {
                         Ok(net_curve_trade) => Ok(I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
@@ -276,7 +276,7 @@ impl State {
                         }
                     }
                 } else {
-                    let max_share_payment = match self.calculate_max_buy_shares_in_safe() {
+                    let max_share_payment = match self.calculate_max_buy_shares_in() {
                         Ok(max_share_payment) => max_share_payment,
                         Err(_) => {
                             // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -591,7 +591,7 @@ impl State {
                 // Calculate the max bond amount. If the calculation fails, we
                 // return a failure flag.
                 let max_bond_amount = match updated_state
-                    .calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())
+                    .calculate_max_sell_bonds_in(self.minimum_share_reserves())
                 {
                     Ok(max_bond_amount) => max_bond_amount,
                     // NOTE: If the max bond amount couldn't be calculated, we
@@ -638,7 +638,7 @@ impl State {
                         Err(_) => return Ok(fixed!(0)),
                     };
                     let max_bond_amount = match updated_state
-                        .calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())
+                        .calculate_max_sell_bonds_in(self.minimum_share_reserves())
                     {
                         Ok(max_bond_amount) => max_bond_amount,
                         // NOTE: Return 0 to indicate that the share proceeds
@@ -928,7 +928,7 @@ impl State {
         // Calculate the max bond amount. if the calculation fails, we return a
         // failure flag. if the calculation succeeds but the max bond amount
         // is zero, then we return a failure flag since we can't divide by zero.
-        let max_bond_amount = match self.calculate_max_buy_bonds_out_safe() {
+        let max_bond_amount = match self.calculate_max_buy_bonds_out() {
             Ok(result) => result,
             // Errors are safe from the calculation, panics are not.
             Err(_) => fixed!(0),
