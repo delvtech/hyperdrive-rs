@@ -68,7 +68,7 @@ impl State {
 
     /// Calculates the resulting share_reserves, share_adjustment, and
     /// bond_reserves when updating liquidity with a `share_reserves_delta`.
-    pub fn calculate_update_liquidity_safe(
+    pub fn calculate_update_liquidity(
         &self,
         share_reserves: FixedPoint,
         share_adjustment: I256,
@@ -87,7 +87,7 @@ impl State {
         let new_share_reserves = I256::try_from(share_reserves)? + share_reserves_delta;
         if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
             return Err(eyre!(
-                "Update would result in share reserves below minimum."
+                "update would result in share reserves below minimum."
             ));
         }
         let new_share_reserves = FixedPoint::try_from(new_share_reserves)?;

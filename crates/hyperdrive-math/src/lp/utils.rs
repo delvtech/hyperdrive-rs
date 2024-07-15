@@ -71,7 +71,7 @@ impl State {
 
         // Calculate new reserve and adjustment levels.
         let (updated_share_reserves, updated_share_adjustment, updated_bond_reserves) = match self
-            .calculate_update_liquidity_safe(
+            .calculate_update_liquidity(
                 share_reserves,
                 share_adjustment,
                 bond_reserves,

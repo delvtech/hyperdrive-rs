@@ -157,7 +157,7 @@ impl State {
         )?;
 
         // Remove the withdrawal pool proceeds from the reserves.
-        match self.calculate_update_liquidity_safe(
+        match self.calculate_update_liquidity(
             self.share_reserves(),
             self.share_adjustment(),
             self.bond_reserves(),
