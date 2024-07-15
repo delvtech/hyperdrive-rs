@@ -76,7 +76,7 @@ pub trait YieldSpace {
 
     /// Calculates the amount of shares a user must provide the pool to receive
     /// a specified amount of bonds. We overestimate the amount of shares in.
-    fn calculate_shares_in_given_bonds_out_up_safe(&self, dy: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_shares_in_given_bonds_out_up(&self, dy: FixedPoint) -> Result<FixedPoint> {
         // NOTE: We round k up to make the lhs of the equation larger.
         //
         // k = (c / µ) * (µ * z)^(1 - t) + y^(1 - t)
@@ -85,7 +85,7 @@ pub trait YieldSpace {
         // (y - dy)^(1 - t)
         if self.y() < dy {
             return Err(eyre!(
-                "calculate_shares_in_given_bonds_out_up_safe: y = {} < {} = dy",
+                "calculate_shares_in_given_bonds_out_up: y = {} < {} = dy",
                 self.y(),
                 dy,
             ));
@@ -97,7 +97,7 @@ pub trait YieldSpace {
         // ((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))
         if k < y {
             return Err(eyre!(
-                "calculate_shares_in_given_bonds_out_up_safe: k = {} < {} = y",
+                "calculate_shares_in_given_bonds_out_up: k = {} < {} = y",
                 k,
                 y,
             ));
@@ -116,7 +116,7 @@ pub trait YieldSpace {
         // Δz = (((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))) / µ - ze
         if _z < self.ze()? {
             return Err(eyre!(
-                "calculate_shares_in_given_bonds_out_up_safe: _z = {} < {} = ze",
+                "calculate_shares_in_given_bonds_out_up: _z = {} < {} = ze",
                 _z,
                 self.ze()?,
             ));
@@ -158,12 +158,6 @@ pub trait YieldSpace {
     /// integer overflow or underflow occurs. We underestimate the amount of
     /// shares out.
     fn calculate_shares_out_given_bonds_in_down(&self, dy: FixedPoint) -> Result<FixedPoint> {
-        self.calculate_shares_out_given_bonds_in_down_safe(dy)
-    }
-
-    /// Calculates the amount of shares a user will receive from the pool by
-    /// providing a specified amount of bonds. We underestimate the amount of shares out.
-    fn calculate_shares_out_given_bonds_in_down_safe(&self, dy: FixedPoint) -> Result<FixedPoint> {
         // NOTE: We round k up to make the rhs of the equation larger.
         //
         // k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
@@ -175,7 +169,7 @@ pub trait YieldSpace {
         // If k is less than y, we return with a failure flag.
         if k < y {
             return Err(eyre!(
-                "calculate_shares_out_given_bonds_in_down_safe: k = {} < {} = y",
+                "calculate_shares_out_given_bonds_in_down: k = {} < {} = y",
                 k,
                 y
             ));
@@ -205,7 +199,7 @@ pub trait YieldSpace {
 
     /// Calculates the share payment required to purchase the maximum
     /// amount of bonds from the pool.
-    fn calculate_max_buy_shares_in_safe(&self) -> Result<FixedPoint> {
+    fn calculate_max_buy_shares_in(&self) -> Result<FixedPoint> {
         // We solve for the maximum buy using the constraint that the pool's
         // spot price can never exceed 1. We do this by noting that a spot price
         // of 1, ((mu * ze) / y) ** tau = 1, implies that mu * ze = y. This
@@ -233,7 +227,7 @@ pub trait YieldSpace {
             Ok(optimal_ze - self.ze()?)
         } else {
             Err(eyre!(
-                "calculate_max_buy_shares_in_safe: optimal_ze = {} < {} = ze",
+                "calculate_max_buy_shares_in: optimal_ze = {} < {} = ze",
                 optimal_ze,
                 self.ze()?,
             ))
@@ -243,7 +237,7 @@ pub trait YieldSpace {
     /// Calculates the maximum amount of bonds that can be purchased with the
     /// specified reserves. We round so that the max buy amount is
     /// underestimated.
-    fn calculate_max_buy_bonds_out_safe(&self) -> Result<FixedPoint> {
+    fn calculate_max_buy_bonds_out(&self) -> Result<FixedPoint> {
         // We solve for the maximum buy using the constraint that the pool's
         // spot price can never exceed 1. We do this by noting that a spot price
         // of 1, (mu * ze) / y ** tau = 1, implies that mu * ze = y. This
@@ -267,7 +261,7 @@ pub trait YieldSpace {
             Ok(self.y() - optimal_y)
         } else {
             Err(eyre!(
-                "calculate_max_buy_bonds_out_safe: y = {} < {} = optimal_y",
+                "calculate_max_buy_bonds_out: y = {} < {} = optimal_y",
                 self.y(),
                 optimal_y,
             ))
@@ -277,7 +271,7 @@ pub trait YieldSpace {
     /// Calculates the maximum amount of bonds that can be sold with the
     /// specified reserves. We round so that the max sell amount is
     /// underestimated.
-    fn calculate_max_sell_bonds_in_safe(&self, mut z_min: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_max_sell_bonds_in(&self, mut z_min: FixedPoint) -> Result<FixedPoint> {
         // If the share adjustment is negative, the minimum share reserves is
         // given by `z_min - zeta`, which ensures that the share reserves never
         // fall below the minimum share reserves. Otherwise, the minimum share
@@ -311,7 +305,7 @@ pub trait YieldSpace {
             Ok(optimal_y - self.y())
         } else {
             Err(eyre!(
-                "calculate_max_sell_bonds_in_safe: optimal_y = {} < {} = y",
+                "calculate_max_sell_bonds_in: optimal_y = {} < {} = y",
                 optimal_y,
                 self.y(),
             ))
@@ -395,7 +389,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen::<FixedPoint>();
-            let actual = state.calculate_shares_in_given_bonds_out_up_safe(in_);
+            let actual = state.calculate_shares_in_given_bonds_out_up(in_);
             match chain
                 .mock_yield_space_math()
                 .calculate_shares_in_given_bonds_out_up(
@@ -465,39 +459,6 @@ mod tests {
             let actual = state.calculate_shares_out_given_bonds_in_down(in_);
             match chain
                 .mock_yield_space_math()
-                .calculate_shares_out_given_bonds_in_down(
-                    state.ze()?.into(),
-                    state.y().into(),
-                    in_.into(),
-                    (fixed!(1e18) - state.t()).into(),
-                    state.c().into(),
-                    state.mu().into(),
-                )
-                .call()
-                .await
-            {
-                Ok(expected) => {
-                    assert_eq!(actual.unwrap(), FixedPoint::from(expected));
-                }
-                Err(_) => assert!(actual.is_err()),
-            }
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn fuzz_calculate_shares_out_given_bonds_in_down_safe() -> Result<()> {
-        let chain = TestChain::new().await?;
-
-        // Fuzz the rust and solidity implementations against each other.
-        let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
-            let in_ = rng.gen::<FixedPoint>();
-            let actual = state.calculate_shares_out_given_bonds_in_down_safe(in_);
-            match chain
-                .mock_yield_space_math()
                 .calculate_shares_out_given_bonds_in_down_safe(
                     state.ze()?.into(),
                     state.y().into(),
@@ -521,14 +482,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_max_buy_shares_in_safe() -> Result<()> {
+    async fn fuzz_calculate_max_buy_shares_in() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = state.calculate_max_buy_shares_in_safe();
+            let actual = state.calculate_max_buy_shares_in();
             match chain
                 .mock_yield_space_math()
                 .calculate_max_buy_shares_in_safe(
@@ -553,14 +514,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_max_buy_bounds_out_safe() -> Result<()> {
+    async fn fuzz_calculate_max_buy_bounds_out() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let actual = state.calculate_max_buy_bonds_out_safe();
+            let actual = state.calculate_max_buy_bonds_out();
             match chain
                 .mock_yield_space_math()
                 .calculate_max_buy_bonds_out_safe(
@@ -585,7 +546,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fuzz_calculate_max_sell_bonds_in_safe() -> Result<()> {
+    async fn fuzz_calculate_max_sell_bonds_in() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
@@ -593,7 +554,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let z_min = rng.gen::<FixedPoint>();
-            let actual = panic::catch_unwind(|| state.calculate_max_sell_bonds_in_safe(z_min));
+            let actual = panic::catch_unwind(|| state.calculate_max_sell_bonds_in(z_min));
             match chain
                 .mock_yield_space_math()
                 .calculate_max_sell_bonds_in_safe(
