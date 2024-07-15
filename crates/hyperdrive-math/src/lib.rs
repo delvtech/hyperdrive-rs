@@ -160,34 +160,37 @@ impl State {
     }
 
     /// Calculates the pool reserve levels to achieve a target interest rate.
-    /// This calculation does not take Hyperdrive's solvency constraints or exposure
-    /// into account and shouldn't be used directly.
+    /// This calculation does not take into account Hyperdrive's solvency
+    /// constraints or exposure and shouldn't be used directly.
     ///
-    /// The price for a given fixed-rate is given by $p = 1 / (r \cdot t + 1)$, where
-    /// $r$ is the fixed-rate and $t$ is the annualized position duration. The
-    /// price for a given pool reserves is given by $p = \frac{\mu z}{y}^{t_{s}}$,
-    /// where $\mu$ is the initial share price and $t_{s}$ is the time stretch
-    /// constant. By setting these equal we can solve for the pool reserve levels
-    /// as a function of a target rate.
-    ///
-    /// For some target rate, $r_t$, the pool share reserves, $z_t$, must be:
+    /// The price for a given fixed-rate is given by
+    /// `$p = \tfrac{1}{r \cdot t + 1}$`, where `$r$` is the fixed-rate and
+    /// `$t$` is the annualized position duration. The price for a given pool
+    /// reserves is `$p = \left( \tfrac{\mu \cdot z}{y} \right)^{t_s}$`, where
+    /// `$\mu$` is the initial share price and `$t_s$` is the time stretch
+    /// constant. The reserve levels are related using the modified yieldspace
+    /// formula: `$k = \tfrac{\mu}{c}^{-t_s} x^{1 - t_s} + y^{1 - t_s}$`.
+    /// Using these three equations, we can solve for the pool reserve levels as
+    /// a function of a target rate.
+    //
+    /// For a target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
     ///
     /// ```math
     /// z_t = \frac{1}{\mu} \left(
     ///   \frac{k}{\frac{c}{\mu} + \left(
-    ///     (r_t \cdot t + 1)^{\frac{1}{t_{s}}}
+    ///     (r_t \cdot t + 1)^{\frac{1}{t_s}}
     ///   \right)^{1 - t_{s}}}
     /// \right)^{\frac{1}{1 - t_{s}}}
     /// ```
     ///
-    /// and the pool bond reserves, $y_t$, must be:
+    /// and the pool bond reserves, `$y_t$`, must be:
     ///
     /// ```math
     /// y_t = \left(
     ///   \frac{k}{ \frac{c}{\mu} +  \left(
-    ///     \left( r_t \cdot t + 1 \right)^{\frac{1}{t_{s}}}
-    ///   \right)^{1 - t_{s}}}
-    /// \right)^{1 - t_{s}} \left( r_t t + 1 \right)^{\frac{1}{t_{s}}}
+    ///     \left( r_t \cdot t + 1 \right)^{\frac{1}{t_s}}
+    ///   \right)^{1 - t_s}}
+    /// \right)^{1 - t_s} \left( r_t \cdot t + 1 \right)^{\frac{1}{t_s}}
     /// ```
     fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint>>(
         &self,
@@ -333,9 +336,79 @@ impl YieldSpace for State {
 
 #[cfg(test)]
 mod tests {
+    use ethers::types::I256;
+    use fixedpointmath::{fixed, uint256};
+    use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
     use rand::thread_rng;
 
     use super::*;
+
+    #[tokio::test]
+    async fn fuzz_reserves_given_rate_ignoring_exposure() -> Result<()> {
+        let test_tolerance = fixed!(1e11);
+        let mut rng = thread_rng();
+        let mut counter = 0;
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // We want a state with net zero exposure and zero fees.
+            let mut state = rng.gen::<State>();
+            // Zero exposure
+            state.info.longs_outstanding = uint256!(0);
+            state.info.long_average_maturity_time = uint256!(0);
+            state.info.long_exposure = uint256!(0);
+            state.info.shorts_outstanding = uint256!(0);
+            state.info.short_average_maturity_time = uint256!(0);
+            // Effective share reserves == share reserves
+            state.info.share_adjustment = I256::try_from(0)?;
+            // Zero fees
+            state.config.fees.curve = uint256!(0);
+            state.config.fees.flat = uint256!(0);
+            state.config.fees.governance_lp = uint256!(0);
+            state.config.fees.governance_zombie = uint256!(0);
+            // Make sure we're still solvent
+            if state.calculate_spot_price()? < state.calculate_min_price()?
+                || state.calculate_spot_price()? > fixed!(1e18)
+                || state.calculate_solvency().is_err()
+            {
+                continue;
+            }
+
+            // Pick a random target rate that is near the current rate.
+            let target_rate =
+                state.calculate_spot_rate()? * rng.gen_range(fixed!(0.1e18)..=fixed!(10e18));
+
+            // Estimate the long that achieves a target rate.
+            let (target_share_reserves, target_bond_reserves) =
+                state.reserves_given_rate_ignoring_exposure(target_rate)?;
+
+            // Verify that the new levels are solvent.
+            let mut new_state = state.clone();
+            new_state.info.share_reserves = target_share_reserves.into();
+            new_state.info.bond_reserves = target_bond_reserves.into();
+            if new_state.calculate_solvency().is_err()
+                || new_state.calculate_spot_price()? > fixed!(1e18)
+            {
+                continue;
+            }
+
+            // Fixed rate for the new state should equal the target rate.
+            let realized_rate = new_state.calculate_spot_rate()?;
+            let error = if realized_rate > target_rate {
+                realized_rate - target_rate
+            } else {
+                target_rate - realized_rate
+            };
+
+            assert!(
+                error <= test_tolerance,
+                "expected error={} <= tolerance={}",
+                error,
+                test_tolerance
+            );
+            counter += 1;
+        }
+        assert!(counter >= 1_000); // this passed at least 1,000 times
+        Ok(())
+    }
 
     #[tokio::test]
     async fn test_calculate_normalized_time_remaining() -> Result<()> {
