@@ -72,4 +72,110 @@ impl State {
         }
         Ok(fixed!(0))
     }
+
+    /// Calculate the base & bond deltas for a short trade that moves the
+    /// current state to the given desired ending reserve levels.
+    ///
+    /// Given a target ending pool share reserves, `$z_t$`, and bond reserves,
+    /// `$y_t$`, the trade deltas to achieve that state would be:
+    ///
+    /// ```math
+    /// \Delta y = y_t - y \\
+    /// \Delta x = c \cdot \left(
+    ///   z_{e,0} - z_t - (\Phi_c(\Delta y) - \Phi_g(\Delta y))
+    /// \right)
+    /// ```
+    ///
+    /// where `$c$` is the vault share price, `$\Phi_c(\Delta y)$` is the
+    /// (open_short_curve_fee)[State::open_short_curve_fee], and
+    /// `$\Phi_g(\Delta y)$` is the
+    /// (open_short_governance_fee)[State::open_short_governance_fee].
+    fn short_trade_deltas_from_reserves(
+        &self,
+        ending_share_reserves: FixedPoint,
+        ending_bond_reserves: FixedPoint,
+    ) -> Result<(FixedPoint, FixedPoint)> {
+        if ending_bond_reserves < self.bond_reserves() {
+            return Err(eyre!(
+                "Expected ending_bond_reserves={} >= bond_reserves={} for a short trade.",
+                ending_bond_reserves,
+                self.bond_reserves()
+            ));
+        }
+        let bond_delta = ending_bond_reserves - self.bond_reserves();
+        let curve_fee_base = self.open_short_curve_fee(bond_delta)?;
+        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
+        let gov_curve_fee_shares = self
+            .open_short_governance_fee(bond_delta, Some(curve_fee_base))?
+            .div_up(self.vault_share_price());
+        let fees = curve_fee_shares - gov_curve_fee_shares;
+        let shares_delta = self.effective_share_reserves()? - ending_share_reserves - fees;
+        let base_delta = self.vault_share_price() * shares_delta;
+        Ok((base_delta, bond_delta))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
+    use rand::{thread_rng, Rng};
+
+    use super::*;
+
+    #[tokio::test]
+    async fn fuzz_short_trade_deltas_from_reserves() -> Result<()> {
+        let test_tolerance = fixed!(1e7);
+        let mut rng = thread_rng();
+        let mut counter = 0;
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // Get the reserves before the short.
+            let old_state = rng.gen::<State>();
+            let base_reserves = old_state.vault_share_price() * old_state.share_reserves();
+            let bond_reserves = old_state.bond_reserves();
+            // Update the state with a random short.
+            let max_short = old_state.calculate_absolute_max_short(
+                old_state.calculate_spot_price()?,
+                I256::from(0),
+                None,
+            )?;
+            let bond_amount = rng.gen_range(old_state.minimum_transaction_amount()..=max_short);
+            let new_state = old_state.calculate_pool_state_after_open_short(bond_amount, None)?;
+            // Get the reserves after the short.
+            let target_share_reserves = new_state.share_reserves();
+            let target_bond_reserves = new_state.bond_reserves();
+            // Compute new state deltas.
+            let base_delta =
+                (new_state.vault_share_price() * target_share_reserves) - base_reserves;
+            let bond_delta = bond_reserves - target_bond_reserves;
+            // Calculate the old state deltas to achieve the short.
+            let (target_base_delta, target_bond_delta) = old_state
+                .short_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves)?;
+            // By what amount does the resulting deltas differ from the target?
+            let base_error = if base_delta > target_base_delta {
+                base_delta - target_base_delta
+            } else {
+                target_base_delta - base_delta
+            };
+            assert!(
+                base_error <= test_tolerance,
+                "expected abs(base_delta-target_base_delta)={} <= test_tolerance={}",
+                base_error,
+                test_tolerance
+            );
+            let bond_error = if bond_delta > target_bond_delta {
+                bond_delta - target_bond_delta
+            } else {
+                target_bond_delta - bond_delta
+            };
+            assert!(
+                bond_error <= test_tolerance,
+                "expected abs(bond_delta-target_bond_delta)={} <= test_tolerance={}",
+                bond_error,
+                test_tolerance
+            );
+            counter += 1;
+        }
+        assert!(counter >= 1_000); // this passed at least 1,000 times
+        Ok(())
+    }
 }
