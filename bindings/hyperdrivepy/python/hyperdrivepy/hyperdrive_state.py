@@ -221,7 +221,7 @@ def calculate_pool_deltas_after_open_long(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
     base_amount: str,
-) -> str:
+) -> tuple[str, str]:
     """Calculate the bond deltas to be applied to the pool after opening a long.
 
     Arguments
@@ -237,8 +237,8 @@ def calculate_pool_deltas_after_open_long(
 
     Returns
     -------
-    str (FixedPoint)
-        The amount of bonds to remove from the pool reserves.
+    (str (FixedPoint), str (FixedPoint))
+        The (shares, bonds) deltas to apply to the pool state.
     """
     return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_open_long(base_amount)
 

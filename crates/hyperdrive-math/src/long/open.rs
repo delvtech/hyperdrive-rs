@@ -107,32 +107,39 @@ impl State {
 
     /// Calculate an updated pool state after opening a long.
     ///
-    /// For a given base amount and bond amount, base is converted to
+    /// For a given base delta and bond delta, the base delta is converted to
     /// shares and the reserves are updated such that
-    /// `state.bond_reserves -= bond_amount` and
-    /// `state.share_reserves += base_amount / vault_share_price`.
+    /// `state.bond_reserves -= bond_delta` and
+    /// `state.share_reserves += base_delta / vault_share_price`.
     pub fn calculate_pool_state_after_open_long(
         &self,
         base_amount: FixedPoint,
-        maybe_bond_amount: Option<FixedPoint>,
+        maybe_bond_deltas: Option<FixedPoint>,
     ) -> Result<Self> {
-        let bond_amount = match maybe_bond_amount {
-            Some(bond_amount) => bond_amount,
-            None => self.calculate_open_long(base_amount)?,
-        };
+        let (share_deltas, bond_deltas) =
+            self.calculate_pool_share_bond_deltas_after_open_long(base_amount, maybe_bond_deltas)?;
         let mut state = self.clone();
-        state.info.bond_reserves -= bond_amount.into();
-        state.info.share_reserves += (base_amount / self.vault_share_price()).into();
+        state.info.bond_reserves -= bond_deltas.into();
+        state.info.share_reserves += share_deltas.into();
         Ok(state)
     }
 
     /// Calculate the share deltas to be applied to the pool after opening a long.
-    pub fn calculate_pool_deltas_after_open_long(
+    pub fn calculate_pool_share_bond_deltas_after_open_long(
         &self,
         base_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
-        let bond_amount = self.calculate_open_long(base_amount)?;
-        Ok(bond_amount)
+        maybe_bond_delta: Option<FixedPoint>,
+    ) -> Result<(FixedPoint, FixedPoint)> {
+        let bond_delta = match maybe_bond_delta {
+            Some(delta) => delta,
+            None => self.calculate_open_long(base_amount)?,
+        };
+        let total_gov_curve_fee_shares = self
+            .open_long_governance_fee(base_amount, None)?
+            .div_down(self.vault_share_price());
+        let share_delta =
+            base_amount.div_down(self.vault_share_price()) - total_gov_curve_fee_shares;
+        Ok((share_delta, bond_delta))
     }
 
     /// Calculates the spot price after opening a Hyperdrive long.
@@ -140,17 +147,10 @@ impl State {
     pub fn calculate_spot_price_after_long(
         &self,
         base_amount: FixedPoint,
-        maybe_bond_amount: Option<FixedPoint>,
+        maybe_bond_pool_delta: Option<FixedPoint>,
     ) -> Result<FixedPoint> {
-        let bond_amount = match maybe_bond_amount {
-            Some(bond_amount) => bond_amount,
-            None => self.calculate_open_long(base_amount)?,
-        };
-        let mut state: State = self.clone();
-        state.info.bond_reserves -= bond_amount.into();
-        state.info.share_reserves += (base_amount / state.vault_share_price()
-            - self.open_long_governance_fee(base_amount, None)? / state.vault_share_price())
-        .into();
+        let state =
+            self.calculate_pool_state_after_open_long(base_amount, maybe_bond_pool_delta)?;
         state.calculate_spot_price()
     }
 
@@ -189,7 +189,7 @@ mod tests {
     use fixedpointmath::fixed;
     use hyperdrive_test_utils::{
         chain::TestChain,
-        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
+        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::ihyperdrive::Options;
     use rand::{thread_rng, Rng, SeedableRng};
@@ -199,6 +199,99 @@ mod tests {
     use crate::test_utils::{
         agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
     };
+
+    #[tokio::test]
+    async fn fuzz_calculate_pool_state_after_open_long() -> Result<()> {
+        // TODO: We should not need a tolerance.
+        let share_adjustment_test_tolerance = fixed!(0);
+        let bond_reserves_test_tolerance = fixed!(1e10);
+        let share_reserves_test_tolerance = fixed!(1e10);
+        // Initialize a test chain and agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+        for _ in 0..*SLOW_FUZZ_RUNS {
+            // Snapshot the chain & run the preamble.
+            let id = chain.snapshot().await?;
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            // Reset the variable rate to zero; get the state.
+            alice.advance_time(fixed!(0), fixed!(0)).await?;
+            let original_state = alice.get_state().await?;
+            // Get a random long amount.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
+                .await?;
+            let max_long_amount =
+                original_state.calculate_max_long(U256::MAX, checkpoint_exposure, None)?;
+            let base_amount =
+                rng.gen_range(original_state.minimum_transaction_amount()..=max_long_amount);
+            // Mock the trade using Rust.
+            let rust_state =
+                original_state.calculate_pool_state_after_open_long(base_amount, None)?;
+            // Execute the trade on the contracts.
+            bob.fund(base_amount * fixed!(1.5e18)).await?;
+            bob.open_long(base_amount, None, None).await?;
+            let sol_state = alice.get_state().await?;
+            // Check that the results are the same.
+            let rust_share_adjustment = rust_state.share_adjustment();
+            let sol_share_adjustment = sol_state.share_adjustment();
+            let share_adjustment_error = if rust_share_adjustment < sol_share_adjustment {
+                FixedPoint::try_from(sol_share_adjustment - rust_share_adjustment)?
+            } else {
+                FixedPoint::try_from(rust_share_adjustment - sol_share_adjustment)?
+            };
+            assert!(
+                share_adjustment_error <= share_adjustment_test_tolerance,
+                "expected abs(rust_share_adjustment={}-sol_share_adjustment={})={} <= test_tolerance={}",
+                rust_share_adjustment, sol_share_adjustment, share_adjustment_error, share_adjustment_test_tolerance
+            );
+            let rust_bond_reserves = rust_state.bond_reserves();
+            let sol_bond_reserves = sol_state.bond_reserves();
+            let bond_reserves_error = if rust_bond_reserves < sol_bond_reserves {
+                sol_bond_reserves - rust_bond_reserves
+            } else {
+                rust_bond_reserves - sol_bond_reserves
+            };
+            assert!(
+                bond_reserves_error <= bond_reserves_test_tolerance,
+                "expected abs(rust_bond_reserves={}-sol_bond_reserves={})={} <= test_tolerance={}",
+                rust_bond_reserves,
+                sol_bond_reserves,
+                bond_reserves_error,
+                bond_reserves_test_tolerance
+            );
+            let rust_share_reserves = rust_state.share_reserves();
+            let sol_share_reserves = sol_state.share_reserves();
+            let share_reserves_error = if rust_share_reserves < sol_share_reserves {
+                sol_share_reserves - rust_share_reserves
+            } else {
+                rust_share_reserves - sol_share_reserves
+            };
+            assert!(
+                share_reserves_error <= share_reserves_test_tolerance,
+                "expected abs(rust_share_reserves={}-sol_share_reserves={})={} <= test_tolerance={}",
+                rust_share_reserves,
+                sol_share_reserves,
+                share_reserves_error,
+                share_reserves_test_tolerance
+            );
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzz_calculate_spot_price_after_long() -> Result<()> {
@@ -258,7 +351,6 @@ mod tests {
             alice.reset(Default::default()).await?;
             bob.reset(Default::default()).await?;
         }
-
         Ok(())
     }
 
@@ -323,7 +415,6 @@ mod tests {
             alice.reset(Default::default()).await?;
             bob.reset(Default::default()).await?;
         }
-
         Ok(())
     }
 
