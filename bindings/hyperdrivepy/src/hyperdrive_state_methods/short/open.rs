@@ -44,7 +44,7 @@ impl HyperdriveState {
         })?);
         let result_fp = self
             .state
-            .calculate_pool_deltas_after_open_short(bond_amount_fp)
+            .calculate_pool_share_deltas_after_open_short(bond_amount_fp)
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!(
                     "calculate_pool_deltas_after_open_short: {}",
