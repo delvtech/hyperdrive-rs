@@ -449,7 +449,6 @@ mod tests {
                 }
             };
             let max_iterations = 7;
-            // TODO: We should use calculate_absolute_max_long here because that is what we are testing.
             // We need to catch panics because of FixedPoint overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_max_long(U256::MAX, checkpoint_exposure, Some(max_iterations))

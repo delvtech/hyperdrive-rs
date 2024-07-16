@@ -372,15 +372,12 @@ mod tests {
             {
                 continue;
             }
-
             // Pick a random target rate that is near the current rate.
             let target_rate =
                 state.calculate_spot_rate()? * rng.gen_range(fixed!(0.1e18)..=fixed!(10e18));
-
             // Estimate the long that achieves a target rate.
             let (target_share_reserves, target_bond_reserves) =
                 state.reserves_given_rate_ignoring_exposure(target_rate)?;
-
             // Verify that the new levels are solvent.
             let mut new_state = state.clone();
             new_state.info.share_reserves = target_share_reserves.into();
@@ -390,7 +387,6 @@ mod tests {
             {
                 continue;
             }
-
             // Fixed rate for the new state should equal the target rate.
             let realized_rate = new_state.calculate_spot_rate()?;
             let error = if realized_rate > target_rate {
@@ -398,7 +394,6 @@ mod tests {
             } else {
                 target_rate - realized_rate
             };
-
             assert!(
                 error <= test_tolerance,
                 "expected error={} <= tolerance={}",
