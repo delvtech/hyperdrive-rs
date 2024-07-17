@@ -68,7 +68,7 @@ impl State {
 
     /// Calculates the resulting share_reserves, share_adjustment, and
     /// bond_reserves when updating liquidity with a `share_reserves_delta`.
-    pub fn calculate_update_liquidity_safe(
+    pub fn calculate_update_liquidity(
         &self,
         share_reserves: FixedPoint,
         share_adjustment: I256,
@@ -87,7 +87,7 @@ impl State {
         let new_share_reserves = I256::try_from(share_reserves)? + share_reserves_delta;
         if new_share_reserves < I256::try_from(minimum_share_reserves).unwrap() {
             return Err(eyre!(
-                "Update would result in share reserves below minimum."
+                "update would result in share reserves below minimum."
             ));
         }
         let new_share_reserves = FixedPoint::try_from(new_share_reserves)?;
@@ -148,10 +148,8 @@ impl State {
             self.short_average_maturity_time(),
             current_block_timestamp,
         );
-        let net_curve_trade = self.calculate_net_curve_trade_safe(
-            long_average_time_remaining,
-            short_average_time_remaining,
-        )?;
+        let net_curve_trade = self
+            .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
         let net_flat_trade = self
             .calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)?;
 
@@ -166,7 +164,7 @@ impl State {
         Ok(present_value.try_into()?)
     }
 
-    pub fn calculate_net_curve_trade_safe(
+    pub fn calculate_net_curve_trade(
         &self,
         long_average_time_remaining: FixedPoint,
         short_average_time_remaining: FixedPoint,
@@ -190,7 +188,7 @@ impl State {
                     self.shorts_outstanding()
                         .mul_down(short_average_time_remaining),
                 )?;
-        match self.effective_share_reserves_safe() {
+        match self.effective_share_reserves() {
             Ok(_) => {}
             // NOTE: Return 0 to indicate that the net curve trade couldn't be
             // computed.
@@ -204,7 +202,7 @@ impl State {
             Ordering::Greater => {
                 let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
                 let max_curve_trade =
-                    match self.calculate_max_sell_bonds_in_safe(self.minimum_share_reserves()) {
+                    match self.calculate_max_sell_bonds_in(self.minimum_share_reserves()) {
                         Ok(max_curve_trade) => max_curve_trade,
                         Err(_) => {
                             // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -214,7 +212,7 @@ impl State {
                     };
 
                 if max_curve_trade >= net_curve_position {
-                    match self.calculate_shares_out_given_bonds_in_down_safe(net_curve_position) {
+                    match self.calculate_shares_out_given_bonds_in_down(net_curve_position) {
                         Ok(net_curve_trade) => Ok(-I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
@@ -252,7 +250,7 @@ impl State {
             }
             Ordering::Less => {
                 let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
-                let max_curve_trade = match self.calculate_max_buy_bonds_out_safe() {
+                let max_curve_trade = match self.calculate_max_buy_bonds_out() {
                     Ok(max_curve_trade) => max_curve_trade,
                     Err(_) => {
                         // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -261,7 +259,7 @@ impl State {
                     }
                 };
                 if max_curve_trade >= net_curve_position {
-                    match self.calculate_shares_in_given_bonds_out_up_safe(net_curve_position) {
+                    match self.calculate_shares_in_given_bonds_out_up(net_curve_position) {
                         Ok(net_curve_trade) => Ok(I256::try_from(net_curve_trade)?),
                         Err(err) => {
                             // If the net curve position is smaller than the
@@ -276,7 +274,7 @@ impl State {
                         }
                     }
                 } else {
-                    let max_share_payment = match self.calculate_max_buy_shares_in_safe() {
+                    let max_share_payment = match self.calculate_max_buy_shares_in() {
                         Ok(max_share_payment) => max_share_payment,
                         Err(_) => {
                             // NOTE: Return 0 to indicate that the net curve trade couldn't
@@ -362,7 +360,7 @@ impl State {
         // debited. If the effective share reserves or the maximum share
         // reserves delta can't be calculated or if the maximum share reserves
         // delta is zero, idle can't be distributed.
-        let success = match self.effective_share_reserves_safe() {
+        let success = match self.effective_share_reserves() {
             Ok(_) => true,
             // The error is safe from the calculation, panics are not.
             Err(_) => false,
@@ -528,7 +526,7 @@ impl State {
         // If the pool is net neutral, the initial guess is equal to the final
         // result.
         let net_curve_trade =
-            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         if net_curve_trade == int256!(0) {
             return Ok(share_proceeds);
         }
@@ -591,7 +589,7 @@ impl State {
                 // Calculate the max bond amount. If the calculation fails, we
                 // return a failure flag.
                 let max_bond_amount = match updated_state
-                    .calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())
+                    .calculate_max_sell_bonds_in(self.minimum_share_reserves())
                 {
                     Ok(max_bond_amount) => max_bond_amount,
                     // NOTE: If the max bond amount couldn't be calculated, we
@@ -638,7 +636,7 @@ impl State {
                         Err(_) => return Ok(fixed!(0)),
                     };
                     let max_bond_amount = match updated_state
-                        .calculate_max_sell_bonds_in_safe(self.minimum_share_reserves())
+                        .calculate_max_sell_bonds_in(self.minimum_share_reserves())
                     {
                         Ok(max_bond_amount) => max_bond_amount,
                         // NOTE: Return 0 to indicate that the share proceeds
@@ -916,7 +914,7 @@ impl State {
         current_block_timestamp: U256,
     ) -> Result<(FixedPoint, bool)> {
         let net_curve_trade =
-            self.calculate_net_curve_trade_safe_from_timestamp(current_block_timestamp)?;
+            self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         let idle = self.calculate_idle_share_reserves();
         // If the net curve position is zero or net long, then the maximum
         // share reserves delta is equal to the pool's idle.
@@ -928,7 +926,7 @@ impl State {
         // Calculate the max bond amount. if the calculation fails, we return a
         // failure flag. if the calculation succeeds but the max bond amount
         // is zero, then we return a failure flag since we can't divide by zero.
-        let max_bond_amount = match self.calculate_max_buy_bonds_out_safe() {
+        let max_bond_amount = match self.calculate_max_buy_bonds_out() {
             Ok(result) => result,
             // Errors are safe from the calculation, panics are not.
             Err(_) => fixed!(0),
@@ -1048,7 +1046,7 @@ impl State {
         // derivative = c * (mu * z_e(x)) ** -t_s +
         //              (y / z_e) * (y(x)) ** -t_s -
         //              (y / z_e) * (y(x) + dy) ** -t_s
-        let effective_share_reserves = self.effective_share_reserves_safe()?;
+        let effective_share_reserves = self.effective_share_reserves()?;
         // NOTE: The exponent is positive and base is flipped to handle the negative value.
         let derivative = self.vault_share_price().div_up(
             self.initial_vault_share_price()
@@ -1242,7 +1240,7 @@ mod tests {
                 state.short_average_maturity_time().into(),
                 current_block_timestamp.into(),
             );
-            let actual = state.calculate_net_curve_trade_safe(
+            let actual = state.calculate_net_curve_trade(
                 long_average_time_remaining,
                 short_average_time_remaining,
             );

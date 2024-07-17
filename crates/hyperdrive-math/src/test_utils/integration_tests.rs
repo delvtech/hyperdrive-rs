@@ -136,7 +136,7 @@ mod tests {
                 let state = bob.get_state().await?;
                 let error_tolerance =
                     fixed!(1_000e18).mul_div_down(state.calculate_spot_rate()?, fixed!(0.1e18));
-                state.calculate_solvency() < error_tolerance
+                state.calculate_solvency()? < error_tolerance
             };
             let is_budget_consumed = {
                 let error_tolerance = fixed!(1e18);

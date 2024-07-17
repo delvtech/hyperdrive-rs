@@ -36,10 +36,10 @@ impl HyperdriveState {
         })?);
         let result_fp = self
             .state
-            .calculate_shares_in_given_bonds_out_up_safe(amount_in_fp)
+            .calculate_shares_in_given_bonds_out_up(amount_in_fp)
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!(
-                    "Failed to execute calculate_shares_in_given_bonds_out_up_safe: {}",
+                    "Failed to execute calculate_shares_in_given_bonds_out_up: {}",
                     err
                 ))
             })?;

@@ -87,16 +87,15 @@ impl State {
             true => contribution / self.vault_share_price(),
             false => contribution,
         };
-        let (share_reserves, share_adjustment, bond_reserves) = self
-            .calculate_update_liquidity_safe(
-                self.share_reserves(),
-                self.share_adjustment(),
-                self.bond_reserves(),
-                self.minimum_share_reserves(),
-                I256::from(0),
-            )?;
+        let (share_reserves, share_adjustment, bond_reserves) = self.calculate_update_liquidity(
+            self.share_reserves(),
+            self.share_adjustment(),
+            self.bond_reserves(),
+            self.minimum_share_reserves(),
+            I256::from(0),
+        )?;
         let (new_share_reserves, new_share_adjustment, new_bond_reserves) = self
-            .calculate_update_liquidity_safe(
+            .calculate_update_liquidity(
                 self.share_reserves(),
                 self.share_adjustment(),
                 self.bond_reserves(),

@@ -37,18 +37,9 @@ pub fn calculate_time_stretch(
         * time_stretch)
 }
 
+/// Calculates the share reserves after zeta adjustment, aka the effective share
+/// reserves: `$z_e = z - zeta$`.
 pub fn calculate_effective_share_reserves(
-    share_reserves: FixedPoint,
-    share_adjustment: I256,
-) -> Result<FixedPoint> {
-    let effective_share_reserves = I256::try_from(share_reserves)? - share_adjustment;
-    if effective_share_reserves < I256::from(0) {
-        return Err(eyre!("effective share reserves cannot be negative"));
-    }
-    effective_share_reserves.try_into()
-}
-
-pub fn calculate_effective_share_reserves_safe(
     share_reserves: FixedPoint,
     share_adjustment: I256,
 ) -> Result<FixedPoint> {

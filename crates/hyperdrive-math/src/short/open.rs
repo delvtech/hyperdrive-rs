@@ -227,7 +227,7 @@ impl State {
     /// \right)^{\tfrac{1}{1 - t_s}}
     /// ```
     pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
-        self.calculate_shares_out_given_bonds_in_down_safe(bond_amount)
+        self.calculate_shares_out_given_bonds_in_down(bond_amount)
     }
 
     /// Calculates the derivative of the short principal w.r.t. the amount of
@@ -452,7 +452,6 @@ mod tests {
                     I256::try_from(value).unwrap()
                 }
             };
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
@@ -467,7 +466,7 @@ mod tests {
                 },
                 Err(_) => continue, // Max threw a panic.
             };
-            if max_bond_amount == fixed!(0) {
+            if max_bond_amount < state.minimum_transaction_amount() + fixed!(1) {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
