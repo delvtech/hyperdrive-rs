@@ -27,7 +27,7 @@ impl State {
     /// ```math
     /// p = \left( \tfrac{\mu \cdot z_{min}}{y_{max}} \right)^{t_s}
     /// ```
-    pub fn calculate_min_price(&self) -> Result<FixedPoint> {
+    pub fn calculate_min_spot_price(&self) -> Result<FixedPoint> {
         let y_max = (self.k_up()?
             - (self.vault_share_price() / self.initial_vault_share_price())
                 * (self.initial_vault_share_price() * self.minimum_share_reserves())

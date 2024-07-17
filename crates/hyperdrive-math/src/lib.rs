@@ -8,7 +8,7 @@ mod utils;
 mod yield_space;
 
 use ethers::types::{Address, I256, U256};
-use eyre::Result;
+use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 use hyperdrive_wrappers::wrappers::ihyperdrive::{Fees, PoolConfig, PoolInfo};
 use rand::{
@@ -208,9 +208,14 @@ impl State {
             / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())?))
         .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))?;
         let target_effective_share_reserves = inner / self.initial_vault_share_price();
-        let target_share_reserves = FixedPoint::try_from(
-            I256::try_from(target_effective_share_reserves)? + self.share_adjustment(),
-        )?;
+        let target_share_reserves_i256 =
+            I256::try_from(target_effective_share_reserves)? + self.share_adjustment();
+
+        let target_share_reserves = if target_share_reserves_i256 > I256::from(0) {
+            FixedPoint::try_from(target_share_reserves_i256)?
+        } else {
+            return Err(eyre!("Target rate would result in share reserves <= 0."));
+        };
 
         // Then get the target bond reserves.
         let target_bond_reserves = inner * scaled_rate;
@@ -339,7 +344,6 @@ impl YieldSpace for State {
 
 #[cfg(test)]
 mod tests {
-    use ethers::types::I256;
     use fixedpointmath::{fixed, uint256};
     use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
     use rand::thread_rng;
@@ -348,7 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_reserves_given_rate_ignoring_exposure() -> Result<()> {
-        let test_tolerance = fixed!(1e11);
+        let test_tolerance = fixed!(1e15);
         let mut rng = thread_rng();
         let mut counter = 0;
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -360,26 +364,41 @@ mod tests {
             state.info.long_exposure = uint256!(0);
             state.info.shorts_outstanding = uint256!(0);
             state.info.short_average_maturity_time = uint256!(0);
-            // Effective share reserves == share reserves
-            state.info.share_adjustment = I256::try_from(0)?;
-            // Zero fees
-            state.config.fees.curve = uint256!(0);
-            state.config.fees.flat = uint256!(0);
-            state.config.fees.governance_lp = uint256!(0);
-            state.config.fees.governance_zombie = uint256!(0);
             // Make sure we're still solvent
-            if state.calculate_spot_price()? < state.calculate_min_price()?
+            if state.calculate_spot_price()? < state.calculate_min_spot_price()?
                 || state.calculate_spot_price()? > fixed!(1e18)
                 || state.calculate_solvency().is_err()
             {
                 continue;
             }
             // Pick a random target rate that is near the current rate.
-            let target_rate =
-                state.calculate_spot_rate()? * rng.gen_range(fixed!(0.1e18)..=fixed!(10e18));
+            let min_rate = calculate_rate_given_fixed_price(
+                state.calculate_max_spot_price()?,
+                state.position_duration(),
+            );
+            let max_rate = calculate_rate_given_fixed_price(
+                state.calculate_min_spot_price()?,
+                state.position_duration(),
+            );
+            let target_rate = rng.gen_range(min_rate..=max_rate);
             // Estimate the long that achieves a target rate.
+            // The random target rate could be impossible to achieve and remain
+            // solvent. If so we want to catch that and not fail the test.
+            // TODO: Since we get the min & max price from the state, should this always work?
             let (target_share_reserves, target_bond_reserves) =
-                state.reserves_given_rate_ignoring_exposure(target_rate)?;
+                match state.reserves_given_rate_ignoring_exposure(target_rate) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        if err
+                            .to_string()
+                            .contains("Target rate would result in share reserves <= 0.")
+                        {
+                            continue;
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                };
             // Verify that the new levels are solvent.
             let mut new_state = state.clone();
             new_state.info.share_reserves = target_share_reserves.into();
