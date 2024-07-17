@@ -51,7 +51,7 @@ impl State {
         let checkpoint_exposure = checkpoint_exposure.into();
         let allowable_error = match maybe_allowable_error {
             Some(allowable_error) => allowable_error.into(),
-            None => fixed!(1e14),
+            None => fixed!(1e15),
         };
         let current_rate = self.calculate_spot_rate()?;
         if target_rate >= current_rate {

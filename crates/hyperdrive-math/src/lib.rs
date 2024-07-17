@@ -161,23 +161,22 @@ impl State {
 
     /// Calculates the pool reserve levels to achieve a target interest rate.
     /// This calculation does not take into account Hyperdrive's solvency
-    /// constraints, share adjustments, or exposure and shouldn't be used
+    /// constraints or exposure and shouldn't be used
     /// directly.
     ///
     /// The price for a given fixed-rate is given by
     /// `$p = \tfrac{1}{r \cdot t + 1}$`, where `$r$` is the fixed-rate and
-    /// `$t$` is the annualized position duration. The price for a given pool
-    /// reserves is `$p = \left( \tfrac{\mu \cdot z}{y} \right)^{t_s}$`, where
-    /// `$\mu$` is the initial share price and `$t_s$` is the time stretch
-    /// constant. The reserve levels are related using the modified yieldspace
-    /// formula: `$k = \tfrac{\mu}{c}^{-t_s} x^{1 - t_s} + y^{1 - t_s}$`.
-    /// Using these three equations, we can solve for the pool reserve levels as
-    /// a function of a target rate.
-    //
-    /// For a target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
+    /// `$t$` is the annualized position duration. The price given pool reserves
+    /// is `$p = \left( \tfrac{\mu \cdot z_e}{y} \right)^{t_s}$`, where `$\mu$`
+    /// is the initial share price and `$t_s$` is the time stretch constant. The
+    /// reserve levels are related using the modified yieldspace formula:
+    /// `$k = \tfrac{\mu}{c}^{-t_s} z_{e}^{1 - t_s} + y^{1 - t_s}$`. Using these
+    /// three equations, we can solve for the pool reserve levels as a function
+    /// of a target rate while ensuring we remain on the same yield curve. For a
+    /// target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
     ///
     /// ```math
-    /// z_t = \frac{1}{\mu} \left(
+    /// z_t = \zeta + \frac{1}{\mu} \left(
     ///   \frac{k}{\frac{c}{\mu} + \left(
     ///     (r_t \cdot t + 1)^{\frac{1}{t_s}}
     ///   \right)^{1 - t_{s}}}
@@ -208,7 +207,10 @@ impl State {
         let inner = (self.k_down()?
             / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())?))
         .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))?;
-        let target_share_reserves = inner / self.initial_vault_share_price();
+        let target_effective_share_reserves = inner / self.initial_vault_share_price();
+        let target_share_reserves = FixedPoint::try_from(
+            I256::try_from(target_effective_share_reserves)? + self.share_adjustment(),
+        )?;
 
         // Then get the target bond reserves.
         let target_bond_reserves = inner * scaled_rate;
