@@ -105,7 +105,7 @@ impl State {
         if fees_paid > trading_proceeds {
             Ok(fixed!(0))
         } else {
-            Ok(trading_proceeds - flat_fees_paid - curve_fees_paid)
+            Ok((trading_proceeds - flat_fees_paid - curve_fees_paid) / self.vault_share_price())
         }
     }
 }
@@ -206,7 +206,7 @@ mod tests {
                 bond_amount,
                 maturity_time.into(),
                 current_time.into(),
-            )? / state.vault_share_price();
+            )?;
 
             let error = if spot_valuation > hyperdrive_valuation {
                 I256::try_from(spot_valuation / hyperdrive_valuation - fixed!(1e18))?
