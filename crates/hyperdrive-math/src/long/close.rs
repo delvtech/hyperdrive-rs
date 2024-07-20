@@ -53,6 +53,7 @@ impl State {
 
         Ok(flat + curve)
     }
+
     /// Calculates the amount of shares the trader will receive after fees for closing a long
     /// assuming no slippage, market impact, or liquidity constraints. This is the spot valuation.
     ///

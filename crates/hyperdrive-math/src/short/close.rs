@@ -234,7 +234,7 @@ impl State {
         // Ensure ending spot price is less than one
         let curve_fee = self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
         let share_curve_delta_with_fees = share_curve_delta + curve_fee
-            - self.close_short_governance_curve_fee(
+            - self.close_short_governance_fee(
                 bond_amount,
                 maturity_time,
                 current_time,
