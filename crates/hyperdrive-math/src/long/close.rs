@@ -53,29 +53,17 @@ impl State {
 
         Ok(flat + curve)
     }
-
-    /// Calculates the market value in shares of a long position.
+    /// Calculates the amount of shares the trader will receive after fees for closing a long
+    /// assuming no slippage, market impact, or liquidity constraints. This is the spot valuation.
     ///
-    /// market_estimate = trading_proceeds - flat_fees_paid - curve_fees_paid
-    /// trading_proceeds = flat_value + curve_value
-    /// ```math
-    /// \begin{aligned}
-    /// \text{trading_proceeds} &= \Delta y \cdot (1 - t) + \Delta y \cdot t \cdot p \\
-    ///                  &= \Delta y \cdot ((1 - t) + (t \cdot p)) \\
-    /// \text{flat_value} &= \Delta y \cdot (1 - t) \\
-    /// \text{curve_bonds} &= \Delta y \cdot t \\
-    /// \text{curve_value} &= \text{curve_bonds} \cdot p \\
-    /// &= \Delta y \cdot t \cdot p \\
-    /// \text{flat_fees_paid} &= \text{flat_value} \cdot \phi_f \\
-    /// &= \Delta y \cdot (1 - t) \cdot \text{flat_fee} \\
-    /// \text{curve_fees_paid} &= (\text{curve_bonds} - \text{curve_value}) \cdot \phi_c \\
-    /// &= \Delta y \cdot t \cdot (1 - p) \cdot \phi_c \\
-    /// \end{aligned}
-    /// ```
+    /// To get this value, we use the same calculations as `calculate_close_long`, except
+    /// for the curve part of the trade, where we replace `calculate_shares_out_given_bonds_in`
+    /// for the following:
+    ///
+    /// `$\text{curve} = \tfrac{\Delta y}{c} \cdot p \cdot t$`
     ///
     /// `$\Delta y = \text{bond_amount}$`
-    /// `$p  = \text{spot_price}$`
-    /// `$t  = \text{time_remaining}$`
+    /// `$c = \text{close_vault_share_price (current if non-matured)}$`
     pub fn calculate_market_value_long<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
@@ -107,8 +95,7 @@ impl State {
         if fees_paid > trading_proceeds {
             Ok(fixed!(0))
         } else {
-            // Ok((trading_proceeds - flat_fees_paid - curve_fees_paid) / self.vault_share_price())
-            Ok((trading_proceeds - flat_fees_paid - curve_fees_paid))
+            Ok(trading_proceeds - flat_fees_paid - curve_fees_paid)
         }
     }
 }
