@@ -94,7 +94,7 @@ impl State {
 
         // let flat_value = bond_amount * (fixed!(1e18) - time_remaining);
         let flat_value =
-            bond_amount.mul_div_down(fixed!(1e18) - time_remaining,self.vault_share_price());
+            bond_amount.mul_div_down(fixed!(1e18) - time_remaining, self.vault_share_price());
         let curve_bonds = bond_amount * time_remaining;
         let curve_value = curve_bonds * spot_price / self.vault_share_price();
 
