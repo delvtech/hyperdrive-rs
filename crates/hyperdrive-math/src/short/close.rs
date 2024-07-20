@@ -234,7 +234,7 @@ impl State {
         // Ensure ending spot price is less than one
         let curve_fee = self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
         let share_curve_delta_with_fees = share_curve_delta + curve_fee
-            - self.close_short_governance_fee(
+            - self.close_short_governance_curve_fee(
                 bond_amount,
                 maturity_time,
                 current_time,
@@ -270,23 +270,17 @@ impl State {
         ))
     }
 
-    /// Calculates the market value of a short position.
+    /// Calculates the amount of shares the trader will receive after fees for closing a short
+    /// assuming no slippage, market impact, or liquidity constraints. This is the spot valuation.
     ///
-    /// market_value = yield_accrued + trading_proceeds - curve_fees_paid + flat_fees_returned
-    /// ```math
-    /// \begin{aligned}
-    /// \text{yield_accrued} &= \text{closing_bond_value} - \Delta y \\
-    /// \text{closing_bond_value} = \Delta y \cdot \dfrac{c}{c_0} \\
-    /// \text{trading_proceeds} &= \Delta y \cdot (1 - p) \cdot t \\
-    /// \text{curve_fees_paid} &= \text{trading_proceeds} \cdot \phi_c \\
-    /// \text{flat_fees_returned} &= \Delta y \cdot t \cdot \phi_f \\
-    /// ```
+    /// To get this value, we use the same calculations as `calculate_close_short`, except
+    /// for the curve part of the trade, where we replace `calculate_shares_in_given_bonds_out`
+    /// for the following:
+    ///
+    /// `$\text{curve} = \tfrac{\Delta y}{c} \cdot p \cdot t$`
     ///
     /// `$\Delta y = \text{bond_amount}$`
     /// `$c = \text{close_vault_share_price (current if non-matured)}$`
-    /// `$c_0 = \text{open_vault_share_price}$`
-    /// `$p = \text{spot_price}$`
-    /// `$t = \text{time_remaining}$`
     pub fn calculate_market_value_short<F: Into<FixedPoint>>(
         &self,
         bond_amount: F,
@@ -306,18 +300,26 @@ impl State {
 
         // get the time remaining
         let time_remaining = self.calculate_normalized_time_remaining(maturity_time, current_time);
+
         // calculate_close_short_flat = dy * (1 - t) / c
         let flat = self.calculate_close_short_flat(bond_amount, maturity_time, current_time);
-        // curve = dy * p * t * c
-        // the curve trade is the only difference between this function and calculate_close_short
-        let curve = bond_amount.mul_up(spot_price).mul_up(time_remaining).div_up(self.vault_share_price());
+
+        // curve = dy * p * t / c
+        let curve = bond_amount
+            .mul_up(spot_price)
+            .mul_up(time_remaining)
+            .div_up(self.vault_share_price());
         let flat_fees_paid = self.close_short_flat_fee(bond_amount, maturity_time, current_time);
-        let curve_fees_paid = self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
+        let curve_fees_paid =
+            self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
+
+        // calculate share_reserves_delta to use it for calculate_short_proceeds_down.
         let share_reserves_delta = flat + curve;
-        let share_reserves_delta_with_fees = share_reserves_delta + flat_fees_paid + curve_fees_paid;
+        let share_reserves_delta_with_fees =
+            share_reserves_delta + flat_fees_paid + curve_fees_paid;
 
         // Calculate the share proceeds owed to the short.
-        // calculate_short_proceeds_down takes the yield accrued into account
+        // calculate_short_proceeds_down also takes the yield accrued into account
         Ok(self.calculate_short_proceeds_down(
             bond_amount,
             share_reserves_delta_with_fees,
@@ -476,27 +478,36 @@ mod tests {
         Ok(())
     }
 
-    // Tests market valuation against yield space valuation when closing a short
-    // with the minimum transaction amount.
+    // Tests market valuation against hyperdrive valuation when closing a short.
+    // This function aims to give an estimated position value without considering
+    // slippage, market impact, or any other liquidity constraints. As such, its
+    // divergence with the hyperdrive valuation will grow under low liquidity
+    // conditions. For this reason, we relax the error tolerance in such cases.
     #[tokio::test]
     async fn test_calculate_market_value_short() -> Result<()> {
-        let tolerance = int256!(1e10); //     0.00000001
-        let tolerance_lax = int256!(1e11); // 0.0000001
-        //so far, it's stayed under 1e12 which is   0.000001
+        let tolerance = int256!(1e12); // 0.000001
 
-        // Fuzz the spot valuation and yield space valuation against each other.
+        // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
-        let mut counter_fail = 0;
-        let ref runs = 100_000;
-        for _ in 0..*runs {
-            let state = rng
-                .gen::<State>();
-                // .gen::<State>()
-                // .calculate_pool_state_after_add_liquidity(fixed!(1e27), true)?;
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let mut scaled_tolerance = tolerance;
+
+            let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
             let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
-            let maturity_time = state.position_duration();
-            let current_time = rng.gen_range(fixed!(0)..=maturity_time);
+            let maturity_time = U256::try_from(state.position_duration())?;
+            let current_time = rng.gen_range(fixed!(0)..=FixedPoint::from(maturity_time));
+
+            // When the reserves ratio is too small, the market impact makes the error between
+            // the valuations larger, so we scale the test's tolerance up to make up for it,
+            // since this is meant to be an estimate that ignores liquidity constraints.
+            let reserves_ratio = state.effective_share_reserves()? / state.bond_reserves();
+            if reserves_ratio < fixed!(1e12) {
+                scaled_tolerance *= int256!(100);
+            }
+            if reserves_ratio < fixed!(1e14) {
+                scaled_tolerance *= int256!(10);
+            }
 
             let hyperdrive_valuation = state.calculate_close_short(
                 bond_amount,
@@ -514,74 +525,18 @@ mod tests {
                 current_time.into(),
             )?;
 
-            let spot_price = state.calculate_spot_price()?;
-            let base_amount = bond_amount * spot_price;
-
-            // calculate_spot_price_after_close_short doesn't exist, but should be roughly close to
-            // calculate_spot_price_after_long, scaled down to the curve portion of the trade
-            let time_remaining = state.calculate_normalized_time_remaining(maturity_time.into(), current_time.into());
-            let spot_price_after = state
-                .calculate_spot_price_after_long(
-                    base_amount * time_remaining,
-                    Some(bond_amount * time_remaining
-                    ))?;
-
-            let share_reserves = state.share_reserves();
-            let share_adjustment = state.share_adjustment();
-            let effective_share_reserves = state.effective_share_reserves()?;
-            
-            let market_curve = bond_amount.mul_up(spot_price).mul_up(time_remaining).div_up(state.vault_share_price());
-            let hyper_curve = state.calculate_close_short_curve(bond_amount, maturity_time.into(), current_time.into())?;
-
-            let market_impact_error = if spot_price_after > spot_price {
-                I256::try_from((spot_price_after - spot_price) / fixed!(2e18))?
-            } else {
-                I256::try_from((spot_price - spot_price_after) / fixed!(2e18))?
-            };
-            
             let error = if spot_valuation >= hyperdrive_valuation {
                 I256::try_from(spot_valuation - hyperdrive_valuation)?
             } else {
                 I256::try_from(hyperdrive_valuation - spot_valuation)?
             };
 
-            // let error = if valuation_error > market_impact_error {
-            //     I256::try_from(valuation_error - market_impact_error)?
-            // } else {
-            //     I256::try_from(market_impact_error - valuation_error)?
-            // };
-
-            if error >= tolerance {
-                if hyperdrive_valuation > spot_valuation {
-                    println!("==========================================");
-                    println!("spot_price:       {}", spot_price);
-                    println!("spot_price_after: {}", spot_price_after);
-                    println!("time_remaining:   {}", time_remaining);
-                    println!("bond_amount:      {}", bond_amount);
-                    println!("market_impact_error:  {}", market_impact_error);
-                    println!("valuation_error:      {}", error);
-                    if error >= tolerance_lax {
-                        println!(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-                    }
-                    println!("spot_valuation:       {}", spot_valuation);
-                    println!("hyperdrive_valuation: {}", hyperdrive_valuation);
-                    println!("market_curve: {}", market_curve);
-                    println!("hyper_curve:  {}", hyper_curve);
-                    println!("share_reserves:            {}", share_reserves);
-                    println!("share_adjustment:          {}", share_adjustment);
-                    println!("effective_share_reserves:  {}", effective_share_reserves);
-                    println!("failed        {} times.", counter_fail);
-                    println!("hyper > spot  {} times.", counter_spot_lt_hyper);
-                    println!("spot >= hyper {} times.", other_counter);
-                    println!("==========================================");
-                }
-            }
-            // assert!(
-            //     error < tolerance,
-            //     "error {:?} exceeds tolerance of {}",
-            //     error,
-            //     tolerance
-            // );
+            assert!(
+                error < scaled_tolerance,
+                "error {:?} exceeds tolerance of {}",
+                error,
+                scaled_tolerance
+            );
         }
 
         Ok(())

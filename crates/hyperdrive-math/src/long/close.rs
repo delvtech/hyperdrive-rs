@@ -92,20 +92,23 @@ impl State {
         // get the time remaining
         let time_remaining = self.calculate_normalized_time_remaining(maturity_time, current_time);
 
-        let flat_value = bond_amount * (fixed!(1e18) - time_remaining);
+        // let flat_value = bond_amount * (fixed!(1e18) - time_remaining);
+        let flat_value =
+            bond_amount.mul_div_down(fixed!(1e18) - time_remaining,self.vault_share_price());
         let curve_bonds = bond_amount * time_remaining;
-        let curve_value = curve_bonds * spot_price;
+        let curve_value = curve_bonds * spot_price / self.vault_share_price();
 
         let trading_proceeds = flat_value + curve_value;
-        let flat_fees_paid = flat_value * self.config.fees.flat.into();
-        // curve_fees_paid would only underflow if spot_price > 1, which is checked earlier
-        let curve_fees_paid = (curve_bonds - curve_value) * self.config.fees.curve.into();
+        let flat_fees_paid = self.close_long_flat_fee(bond_amount, maturity_time, current_time);
+        let curve_fees_paid =
+            self.close_long_curve_fee(bond_amount, maturity_time, current_time)?;
         let fees_paid = flat_fees_paid + curve_fees_paid;
 
         if fees_paid > trading_proceeds {
             Ok(fixed!(0))
         } else {
-            Ok((trading_proceeds - flat_fees_paid - curve_fees_paid) / self.vault_share_price())
+            // Ok((trading_proceeds - flat_fees_paid - curve_fees_paid) / self.vault_share_price())
+            Ok((trading_proceeds - flat_fees_paid - curve_fees_paid))
         }
     }
 }
@@ -173,26 +176,27 @@ mod tests {
         Ok(())
     }
 
-    // Tests market valuation against hyperdrive valuation when closing a long
-    // with the minimum transaction amount.
+    // Tests market valuation against hyperdrive valuation when closing a long.
+    // This function aims to give an estimated position value without considering
+    // slippage, market impact, or any other liquidity constraints.
     #[tokio::test]
     async fn test_calculate_market_value_long() -> Result<()> {
-        let tolerance = int256!(1e14);
+        let tolerance = int256!(1e12); // 0.000001
 
         // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng
-                .gen::<State>()
-                .calculate_pool_state_after_add_liquidity(fixed!(1e27), true)?;
+            let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
-            let maturity_time = state.position_duration();
-            let current_time = rng.gen_range(fixed!(0)..=maturity_time);
+            let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
+            let maturity_time = U256::try_from(state.position_duration())?;
+            let current_time = rng.gen_range(fixed!(0)..=FixedPoint::from(maturity_time));
 
             // Ensure curve_fee is smaller than spot_price to avoid overflows
             // on the hyperdrive valuation, as that'd mean having to pay a larger
-            // amount of fees than the current value of the long
-            if state.curve_fee() > state.calculate_spot_price()? {
+            // amount of fees than the current value of the long.
+            let spot_price = state.calculate_spot_price()?;
+            if state.curve_fee() * (fixed!(1e18) - spot_price) > spot_price {
                 continue;
             }
 
@@ -209,9 +213,9 @@ mod tests {
             )?;
 
             let error = if spot_valuation > hyperdrive_valuation {
-                I256::try_from(spot_valuation / hyperdrive_valuation - fixed!(1e18))?
+                I256::try_from(spot_valuation - hyperdrive_valuation)?
             } else {
-                -I256::try_from(fixed!(1e18) - spot_valuation / hyperdrive_valuation)?
+                I256::try_from(hyperdrive_valuation - spot_valuation)?
             };
 
             assert!(
