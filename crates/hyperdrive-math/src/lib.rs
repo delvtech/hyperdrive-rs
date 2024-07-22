@@ -161,7 +161,8 @@ impl State {
 
     /// Calculates the pool reserve levels to achieve a target interest rate.
     /// This calculation does not take into account Hyperdrive's solvency
-    /// constraints or exposure and shouldn't be used directly.
+    /// constraints, share adjustments, or exposure and shouldn't be used
+    /// directly.
     ///
     /// The price for a given fixed-rate is given by
     /// `$p = \tfrac{1}{r \cdot t + 1}$`, where `$r$` is the fixed-rate and

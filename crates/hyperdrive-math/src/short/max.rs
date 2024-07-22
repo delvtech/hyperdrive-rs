@@ -481,7 +481,7 @@ impl State {
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint> {
-        let share_deltas = self.calculate_pool_deltas_after_open_short(bond_amount)?;
+        let share_deltas = self.calculate_pool_share_deltas_after_open_short(bond_amount)?;
         if self.share_reserves() < share_deltas {
             return Err(eyre!(
                 "expected share_reserves={:#?} >= share_deltas={:#?}",

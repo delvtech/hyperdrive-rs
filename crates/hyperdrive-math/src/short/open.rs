@@ -278,7 +278,7 @@ impl State {
     ) -> Result<Self> {
         let share_amount = match maybe_share_amount {
             Some(share_amount) => share_amount,
-            None => self.calculate_pool_deltas_after_open_short(bond_amount)?,
+            None => self.calculate_pool_share_deltas_after_open_short(bond_amount)?,
         };
         let mut state = self.clone();
         state.info.bond_reserves += bond_amount.into();
@@ -287,7 +287,7 @@ impl State {
     }
 
     /// Calculate the share deltas to be applied to the pool after opening a short.
-    pub fn calculate_pool_deltas_after_open_short(
+    pub fn calculate_pool_share_deltas_after_open_short(
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
@@ -319,7 +319,7 @@ impl State {
     ) -> Result<FixedPoint> {
         let share_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
-            None => self.calculate_pool_deltas_after_open_short(bond_amount)?,
+            None => self.calculate_pool_share_deltas_after_open_short(bond_amount)?,
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
@@ -437,6 +437,102 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn fuzz_calculate_pool_state_after_open_short() -> Result<()> {
+        // TODO: There must be a rounding error; we should not need a tolerance.
+        let share_adjustment_test_tolerance = fixed!(0);
+        let bond_reserves_test_tolerance = fixed!(0);
+        let share_reserves_test_tolerance = fixed!(1);
+        // Initialize a test chain and agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+        for _ in 0..*SLOW_FUZZ_RUNS {
+            // Snapshot the chain & run the preamble.
+            let id = chain.snapshot().await?;
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            // Reset the variable rate to zero; get the state.
+            alice.advance_time(fixed!(0), fixed!(0)).await?;
+            let original_state = alice.get_state().await?;
+            // Get a random short amount.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
+                .await?;
+            let max_short_amount = original_state.calculate_max_short(
+                U256::MAX,
+                original_state.vault_share_price(),
+                checkpoint_exposure,
+                None,
+                None,
+            )?;
+            let bond_amount =
+                rng.gen_range(original_state.minimum_transaction_amount()..=max_short_amount);
+            // Mock the trade using Rust.
+            let rust_state =
+                original_state.calculate_pool_state_after_open_short(bond_amount, None)?;
+            // Execute the trade on the contracts.
+            bob.fund(bond_amount * fixed!(1.5e18)).await?;
+            bob.open_short(bond_amount, None, None).await?;
+            let sol_state = alice.get_state().await?;
+            // Check that the results are the same.
+            let rust_share_adjustment = rust_state.share_adjustment();
+            let sol_share_adjustment = sol_state.share_adjustment();
+            let share_adjustment_error = if rust_share_adjustment < sol_share_adjustment {
+                FixedPoint::try_from(sol_share_adjustment - rust_share_adjustment)?
+            } else {
+                FixedPoint::try_from(rust_share_adjustment - sol_share_adjustment)?
+            };
+            assert!(
+                share_adjustment_error <= share_adjustment_test_tolerance,
+                "expected abs(rust_share_adjustment={}-sol_share_adjustment={}) <= test_tolerance={}",
+                rust_share_adjustment, sol_share_adjustment, share_adjustment_test_tolerance
+            );
+            let rust_bond_reserves = rust_state.bond_reserves();
+            let sol_bond_reserves = sol_state.bond_reserves();
+            let bond_reserves_error = if rust_bond_reserves < sol_bond_reserves {
+                sol_bond_reserves - rust_bond_reserves
+            } else {
+                rust_bond_reserves - sol_bond_reserves
+            };
+            assert!(
+                bond_reserves_error <= bond_reserves_test_tolerance,
+                "expected abs(rust_bond_reserves={}-sol_bond_reserves={}) <= test_tolerance={}",
+                rust_bond_reserves,
+                sol_bond_reserves,
+                bond_reserves_test_tolerance
+            );
+            let rust_share_reserves = rust_state.share_reserves();
+            let sol_share_reserves = sol_state.share_reserves();
+            let share_reserves_error = if rust_share_reserves < sol_share_reserves {
+                sol_share_reserves - rust_share_reserves
+            } else {
+                rust_share_reserves - sol_share_reserves
+            };
+            assert!(
+                share_reserves_error <= share_reserves_test_tolerance,
+                "expected abs(rust_share_reserves={}-sol_share_reserves={}) <= test_tolerance={}",
+                rust_share_reserves,
+                sol_share_reserves,
+                share_reserves_test_tolerance
+            );
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn test_sol_calculate_pool_deltas_after_open_short() -> Result<()> {
         let test_tolerance = fixed!(10);
 
@@ -470,7 +566,7 @@ mod tests {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
-            let rust_pool_deltas = state.calculate_pool_deltas_after_open_short(bond_amount);
+            let rust_pool_deltas = state.calculate_pool_share_deltas_after_open_short(bond_amount);
             let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
             let gov_fee_base =
                 state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
@@ -783,7 +879,8 @@ mod tests {
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
 
             // Using a pre-calculated base amount
-            let base_amount = match state.calculate_pool_deltas_after_open_short(bond_amount) {
+            let base_amount = match state.calculate_pool_share_deltas_after_open_short(bond_amount)
+            {
                 Ok(share_amount) => Some(share_amount * state.vault_share_price()),
                 Err(_) => continue,
             };
