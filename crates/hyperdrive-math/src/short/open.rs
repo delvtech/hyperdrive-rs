@@ -278,7 +278,7 @@ impl State {
     ) -> Result<Self> {
         let share_amount = match maybe_share_amount {
             Some(share_amount) => share_amount,
-            None => self.calculate_pool_share_deltas_after_open_short(bond_amount)?,
+            None => self.calculate_pool_share_delta_after_open_short(bond_amount)?,
         };
         let mut state = self.clone();
         state.info.bond_reserves += bond_amount.into();
@@ -286,8 +286,8 @@ impl State {
         Ok(state)
     }
 
-    /// Calculate the share deltas to be applied to the pool after opening a short.
-    pub fn calculate_pool_share_deltas_after_open_short(
+    /// Calculate the share delta to be applied to the pool after opening a short.
+    pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
@@ -319,7 +319,7 @@ impl State {
     ) -> Result<FixedPoint> {
         let share_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
-            None => self.calculate_pool_share_deltas_after_open_short(bond_amount)?,
+            None => self.calculate_pool_share_delta_after_open_short(bond_amount)?,
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
@@ -328,7 +328,7 @@ impl State {
 
     /// Calculate the spot rate after a short has been opened.
     /// If a base_amount is not provided, then one is estimated
-    /// using [calculate_pool_deltas_after_open_short](State::calculate_pool_deltas_after_open_short).
+    /// using [calculate_pool_share_delta_after_open_short](State::calculate_pool_share_delta_after_open_short).
     ///
     /// We calculate the rate for a fixed length of time as:
     ///
@@ -533,7 +533,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_sol_calculate_pool_deltas_after_open_short() -> Result<()> {
+    async fn test_sol_calculate_pool_share_delta_after_open_short() -> Result<()> {
         let test_tolerance = fixed!(10);
 
         let chain = TestChain::new().await?;
@@ -566,7 +566,7 @@ mod tests {
                 continue;
             }
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
-            let rust_pool_deltas = state.calculate_pool_share_deltas_after_open_short(bond_amount);
+            let rust_pool_delta = state.calculate_pool_share_delta_after_open_short(bond_amount);
             let curve_fee_base = state.open_short_curve_fee(bond_amount)?;
             let gov_fee_base =
                 state.open_short_governance_fee(bond_amount, Some(curve_fee_base))?;
@@ -585,16 +585,16 @@ mod tests {
                 .call()
                 .await
             {
-                Ok(sol_pool_deltas) => {
-                    let sol_pool_deltas_with_fees = FixedPoint::from(sol_pool_deltas) - fees;
-                    let rust_pool_deltas_unwrapped = rust_pool_deltas.unwrap();
-                    let result_equal = sol_pool_deltas_with_fees
-                        <= rust_pool_deltas_unwrapped + test_tolerance
-                        && sol_pool_deltas_with_fees >= rust_pool_deltas_unwrapped - test_tolerance;
+                Ok(sol_pool_delta) => {
+                    let sol_pool_delta_with_fees = FixedPoint::from(sol_pool_delta) - fees;
+                    let rust_pool_delta_unwrapped = rust_pool_delta.unwrap();
+                    let result_equal = sol_pool_delta_with_fees
+                        <= rust_pool_delta_unwrapped + test_tolerance
+                        && sol_pool_delta_with_fees >= rust_pool_delta_unwrapped - test_tolerance;
                     assert!(result_equal, "Should be equal.");
                 }
                 Err(_) => {
-                    assert!(rust_pool_deltas.is_err())
+                    assert!(rust_pool_delta.is_err())
                 }
             };
         }
@@ -879,8 +879,7 @@ mod tests {
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
 
             // Using a pre-calculated base amount
-            let base_amount = match state.calculate_pool_share_deltas_after_open_short(bond_amount)
-            {
+            let base_amount = match state.calculate_pool_share_delta_after_open_short(bond_amount) {
                 Ok(share_amount) => Some(share_amount * state.vault_share_price()),
                 Err(_) => continue,
             };

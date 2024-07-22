@@ -114,18 +114,18 @@ impl State {
     pub fn calculate_pool_state_after_open_long(
         &self,
         base_amount: FixedPoint,
-        maybe_bond_deltas: Option<FixedPoint>,
+        maybe_bond_delta: Option<FixedPoint>,
     ) -> Result<Self> {
-        let (share_deltas, bond_deltas) =
-            self.calculate_pool_share_bond_deltas_after_open_long(base_amount, maybe_bond_deltas)?;
+        let (share_delta, bond_delta) =
+            self.calculate_pool_deltas_after_open_long(base_amount, maybe_bond_delta)?;
         let mut state = self.clone();
-        state.info.bond_reserves -= bond_deltas.into();
-        state.info.share_reserves += share_deltas.into();
+        state.info.bond_reserves -= bond_delta.into();
+        state.info.share_reserves += share_delta.into();
         Ok(state)
     }
 
-    /// Calculate the share deltas to be applied to the pool after opening a long.
-    pub fn calculate_pool_share_bond_deltas_after_open_long(
+    /// Calculate the share and bond deltas to be applied to the pool after opening a long.
+    pub fn calculate_pool_deltas_after_open_long(
         &self,
         base_amount: FixedPoint,
         maybe_bond_delta: Option<FixedPoint>,
