@@ -1,4 +1,4 @@
-use ethers::types::U256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -269,12 +269,71 @@ impl State {
             close_vault_share_price,
         ))
     }
+
+    /// Calculates the amount of shares the trader will receive after fees for closing a short
+    /// assuming no slippage, market impact, or liquidity constraints. This is the spot valuation.
+    ///
+    /// To get this value, we use the same calculations as `calculate_close_short`, except
+    /// for the curve part of the trade, where we replace `calculate_shares_in_given_bonds_out`
+    /// for the following:
+    ///
+    /// `$\text{curve} = \tfrac{\Delta y}{c} \cdot p \cdot t$`
+    ///
+    /// `$\Delta y = \text{bond_amount}$`
+    /// `$c = \text{close_vault_share_price (current if non-matured)}$`
+    pub fn calculate_market_value_short<F: Into<FixedPoint>>(
+        &self,
+        bond_amount: F,
+        open_vault_share_price: F,
+        close_vault_share_price: F,
+        maturity_time: U256,
+        current_time: U256,
+    ) -> Result<FixedPoint> {
+        let bond_amount = bond_amount.into();
+        let open_vault_share_price = open_vault_share_price.into();
+        let close_vault_share_price = close_vault_share_price.into();
+
+        let spot_price = self.calculate_spot_price()?;
+        if spot_price > fixed!(1e18) {
+            return Err(eyre!("Negative fixed interest!"));
+        }
+
+        // get the time remaining
+        let time_remaining = self.calculate_normalized_time_remaining(maturity_time, current_time);
+
+        // calculate_close_short_flat = dy * (1 - t) / c
+        let flat = self.calculate_close_short_flat(bond_amount, maturity_time, current_time);
+
+        // curve = dy * p * t / c
+        let curve = bond_amount
+            .mul_up(spot_price)
+            .mul_up(time_remaining)
+            .div_up(self.vault_share_price());
+        let flat_fees_paid = self.close_short_flat_fee(bond_amount, maturity_time, current_time);
+        let curve_fees_paid =
+            self.close_short_curve_fee(bond_amount, maturity_time, current_time)?;
+
+        // calculate share_reserves_delta to use it for calculate_short_proceeds_down.
+        let share_reserves_delta = flat + curve;
+        let share_reserves_delta_with_fees =
+            share_reserves_delta + flat_fees_paid + curve_fees_paid;
+
+        // Calculate the share proceeds owed to the short.
+        // calculate_short_proceeds_down also takes the yield accrued into account
+        Ok(self.calculate_short_proceeds_down(
+            bond_amount,
+            share_reserves_delta_with_fees,
+            open_vault_share_price,
+            close_vault_share_price,
+        ))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::panic;
 
+    use fixedpointmath::int256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -416,6 +475,69 @@ mod tests {
             0.into(),
         );
         assert!(result.is_err());
+        Ok(())
+    }
+
+    // Tests market valuation against hyperdrive valuation when closing a short.
+    // This function aims to give an estimated position value without considering
+    // slippage, market impact, or any other liquidity constraints. As such, its
+    // divergence with the hyperdrive valuation will grow under low liquidity
+    // conditions. For this reason, we relax the error tolerance in such cases.
+    #[tokio::test]
+    async fn test_calculate_market_value_short() -> Result<()> {
+        let tolerance = int256!(1e12); // 0.000001
+
+        // Fuzz the spot valuation and hyperdrive valuation against each other.
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let mut scaled_tolerance = tolerance;
+
+            let state = rng.gen::<State>();
+            let bond_amount = state.minimum_transaction_amount();
+            let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
+            let maturity_time = U256::try_from(state.position_duration())?;
+            let current_time = rng.gen_range(fixed!(0)..=FixedPoint::from(maturity_time));
+
+            // When the reserves ratio is too small, the market impact makes the error between
+            // the valuations larger, so we scale the test's tolerance up to make up for it,
+            // since this is meant to be an estimate that ignores liquidity constraints.
+            let reserves_ratio = state.effective_share_reserves()? / state.bond_reserves();
+            if reserves_ratio < fixed!(1e12) {
+                scaled_tolerance *= int256!(100);
+            } else if reserves_ratio < fixed!(1e14) {
+                scaled_tolerance *= int256!(10);
+            }
+
+            let hyperdrive_valuation = state.calculate_close_short(
+                bond_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                current_time.into(),
+            )?;
+
+            let spot_valuation = state.calculate_market_value_short(
+                bond_amount,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                current_time.into(),
+            )?;
+
+            let error = if spot_valuation >= hyperdrive_valuation {
+                I256::try_from(spot_valuation - hyperdrive_valuation)?
+            } else {
+                I256::try_from(hyperdrive_valuation - spot_valuation)?
+            };
+
+            assert!(
+                error < scaled_tolerance,
+                "error {:?} exceeds tolerance of {}",
+                error,
+                scaled_tolerance
+            );
+        }
+
         Ok(())
     }
 }
