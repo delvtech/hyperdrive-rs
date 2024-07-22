@@ -489,7 +489,7 @@ mod tests {
 
         // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
+        for _ in 0..(*FAST_FUZZ_RUNS * 10) {
             let mut scaled_tolerance = tolerance;
 
             let state = rng.gen::<State>();
@@ -504,8 +504,7 @@ mod tests {
             let reserves_ratio = state.effective_share_reserves()? / state.bond_reserves();
             if reserves_ratio < fixed!(1e12) {
                 scaled_tolerance *= int256!(100);
-            }
-            if reserves_ratio < fixed!(1e14) {
+            } else if reserves_ratio < fixed!(1e14) {
                 scaled_tolerance *= int256!(10);
             }
 
