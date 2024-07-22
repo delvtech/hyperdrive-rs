@@ -144,7 +144,7 @@ fn get_max_short(
         // spot price the pool can quote. We choose the weights so that this
         // is an underestimate of the worst case realized price.
         let spot_price = state.calculate_spot_price()?;
-        let min_price = state.calculate_min_price()?;
+        let min_price = state.calculate_min_spot_price()?;
 
         // Calculate the linear interpolation.
         let weight = fixed!(1e18).pow(fixed!(1e18) - state.time_stretch())?;

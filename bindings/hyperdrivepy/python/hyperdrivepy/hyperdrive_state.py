@@ -222,7 +222,7 @@ def calculate_pool_deltas_after_open_long(
     pool_info: types.PoolInfoType,
     base_amount: str,
 ) -> tuple[str, str]:
-    """Calculate the bond deltas to be applied to the pool after opening a long.
+    """Calculate the share and bond deltas to be applied to the pool after opening a long.
 
     Arguments
     ---------
@@ -309,12 +309,12 @@ def calculate_open_short(
     return _get_interface(pool_config, pool_info).calculate_open_short(bond_amount, open_vault_share_price)
 
 
-def calculate_pool_deltas_after_open_short(
+def calculate_pool_share_delta_after_open_short(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
     bond_amount: str,
 ) -> str:
-    """Calculate the share deltas to be applied to the pool after opening a short.
+    """Calculate the share delta to be applied to the pool after opening a short.
 
     Arguments
     ---------
@@ -332,7 +332,7 @@ def calculate_pool_deltas_after_open_short(
     str (FixedPoint)
         The amount of shares to add to the pool reserves.
     """
-    return _get_interface(pool_config, pool_info).calculate_pool_deltas_after_open_short(bond_amount)
+    return _get_interface(pool_config, pool_info).calculate_pool_share_delta_after_open_short(bond_amount)
 
 
 def calculate_close_short(

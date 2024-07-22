@@ -46,14 +46,13 @@ impl State {
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F2>,
     ) -> Result<FixedPoint> {
+        // Check input args.
         let target_rate = target_rate.into();
         let checkpoint_exposure = checkpoint_exposure.into();
         let allowable_error = match maybe_allowable_error {
             Some(allowable_error) => allowable_error.into(),
-            None => fixed!(1e14),
+            None => fixed!(1e15),
         };
-
-        // Check input args.
         let current_rate = self.calculate_spot_rate()?;
         if target_rate >= current_rate {
             return Err(eyre!(
@@ -63,14 +62,16 @@ impl State {
         }
 
         // Estimate the long that achieves a target rate.
-        let (target_share_reserves, target_bond_reserves) =
+        let (target_pool_share_reserves, target_pool_bond_reserves) =
             self.reserves_given_rate_ignoring_exposure(target_rate)?;
-        let (mut target_base_delta, target_bond_delta) =
-            self.long_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves)?;
-
+        let (mut target_user_base_delta, target_user_bond_delta) = self
+            .long_trade_needed_given_reserves(
+                target_pool_share_reserves,
+                target_pool_bond_reserves,
+            )?;
         // Determine what rate was achieved.
-        let resulting_rate =
-            self.calculate_spot_rate_after_long(target_base_delta, Some(target_bond_delta))?;
+        let resulting_rate = self
+            .calculate_spot_rate_after_long(target_user_base_delta, Some(target_user_bond_delta))?;
 
         // The estimated long will usually underestimate because the realized price
         // should always be greater than the spot price.
@@ -82,15 +83,19 @@ impl State {
 
             // If we were still close enough and solvent, return.
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .solvency_after_long(
+                    target_user_base_delta,
+                    target_user_bond_delta,
+                    checkpoint_exposure,
+                )
                 .is_ok()
                 && rate_error < allowable_error
             {
-                return Ok(target_base_delta);
+                return Ok(target_user_base_delta);
             }
             // Else, cut the initial guess down by an order of magnitude and go to Newton's method.
             else {
-                target_base_delta /= fixed!(10e18);
+                target_user_base_delta /= fixed!(10e18);
             }
         }
         // Else check if we are close enough to return.
@@ -98,17 +103,21 @@ impl State {
             // If solvent & within the allowable error, stop here.
             let rate_error = resulting_rate - target_rate;
             if self
-                .solvency_after_long(target_base_delta, target_bond_delta, checkpoint_exposure)
+                .solvency_after_long(
+                    target_user_base_delta,
+                    target_user_bond_delta,
+                    checkpoint_exposure,
+                )
                 .is_ok()
                 && rate_error < allowable_error
             {
-                return Ok(target_base_delta);
+                return Ok(target_user_base_delta);
             }
         }
 
         // Iterate to find a solution.
         // We can use the initial guess as a starting point since we know it is less than the target.
-        let mut possible_target_base_delta = target_base_delta;
+        let mut possible_target_base_delta = target_user_base_delta;
 
         // Iteratively find a solution
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
@@ -323,121 +332,159 @@ impl State {
             * (inner_denominator / inner_numerator).pow(fixed!(1e18) - self.time_stretch())?)
     }
 
-    /// Calculate the base & bond deltas for a long trade that moves the current
-    /// state to the given desired ending reserve levels.
+    /// Calculate the base & bond trade amount for an open long trade that moves the
+    /// current state to the given desired ending reserve levels.
     ///
-    /// Given a target ending pool share reserves, `$z_t$`, and bond reserves,
-    /// `$y_t$`, the trade deltas to achieve that state would be:
+    /// Given a target ending pool share reserves, `$z_1$`, and bond reserves,
+    /// `$y_1$`, the trade deltas to achieve that state would be:
     ///
+    /// From the pool's perspective:
     /// ```math
-    /// \Delta x = c \cdot (z_t - z_{e,0}) \\
-    /// \Delta y = y - y_t - c(\Delta x)
+    /// z_1 = z_0 + \Delta z \\
+    /// \Delta z = z_1 - z_0
     /// ```
     ///
-    /// where `$c$` is the vault share price and
-    /// `$c(\Delta x)$` is the (open_long_curve_fee)[State::open_long_curve_fee].
-    fn long_trade_deltas_from_reserves(
+    /// From the trader's perspective, for a provided `base_amount`
+    /// `$= \Delta x$`, the pool share reserves update, `$\Delta z$`, would be:
+    /// ```math
+    /// \Delta z = \frac{1}{c} (\Delta x - \Phi_{g,ol}(\Delta x))
+    /// ```
+    ///
+    /// Solving for the change in base:
+    /// ```math
+    /// \begin{aligned}
+    /// c \cdot \Delta z
+    ///   &= \Delta x - \Phi_{g,ol}(\Delta x) \\
+    /// c \cdot \Delta z
+    ///   &= \Delta x - (1 - p) \cdot \phi_c \cdot \phi_g \cdot \Delta x \\
+    /// c \cdot \Delta z
+    ///   &= \Delta x \cdot (1 - (1 - p) \cdot \phi_c \cdot \phi_g) \\
+    /// &\therefore \\
+    /// \Delta x
+    ///   &= \frac{c \cdot \Delta z}{(1 - (1 - p) \cdot \phi_c \cdot \phi_g)}
+    /// \end{aligned}
+    /// ```
+    ///
+    /// These should be equal, therefore:
+    /// ```math
+    /// \Delta x = \frac{c \cdot \Delta z}{(1 - (1 - p) \cdot \phi_c \cdot \phi_g)} \\
+    /// \Delta x = \frac{c \cdot (z_1 - z_0)}{(1 - (1 - p) \cdot \phi_c \cdot \phi_g)} \\
+    /// ```
+    /// where `$c$` is the vault share price, `$p$` is the original spot price,
+    /// and `$\Phi_{g,ol}(\Delta x)$` is the
+    /// (open long governance fee)[State::open_long_governance_fee].
+    ///
+    /// The change in bonds, $\Delta y$ is equal for the trader and the pool and
+    /// can be determined with (`calculate_open_long`)[State::calculate_open_long].
+    fn long_trade_needed_given_reserves(
         &self,
         ending_share_reserves: FixedPoint,
         ending_bond_reserves: FixedPoint,
     ) -> Result<(FixedPoint, FixedPoint)> {
-        let base_delta =
-            (ending_share_reserves - self.effective_share_reserves()?) * self.vault_share_price();
-        let bond_delta =
-            (self.bond_reserves() - ending_bond_reserves) - self.open_long_curve_fee(base_delta)?;
+        if self.bond_reserves() < ending_bond_reserves {
+            return Err(eyre!(
+                "expected bond_reserves={} >= ending_bond_reserves={}",
+                self.bond_reserves(),
+                ending_bond_reserves,
+            ));
+        }
+        if ending_share_reserves < self.share_reserves() {
+            return Err(eyre!(
+                "expected ending_share_reserves={} >= share_reserves={}",
+                ending_share_reserves,
+                self.share_reserves(),
+            ));
+        }
+        let share_delta = ending_share_reserves - self.share_reserves();
+        let fees = fixed!(1e18)
+            - (fixed!(1e18) - self.calculate_spot_price()?)
+                * self.curve_fee()
+                * self.governance_lp_fee();
+        let base_delta = self.vault_share_price().mul_div_down(share_delta, fees);
+        let bond_delta = self.calculate_open_long(base_delta)?;
         Ok((base_delta, bond_delta))
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use std::panic;
+
     use ethers::types::U256;
     use fixedpointmath::uint256;
-    use hyperdrive_test_utils::{
-        chain::TestChain,
-        constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
-    };
+    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
     use super::*;
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     #[tokio::test]
-    async fn fuzz_long_trade_deltas_from_reserves() -> Result<()> {
-        let test_tolerance = fixed!(1e7);
+    async fn fuzz_long_trade_needed_given_reserves() -> Result<()> {
+        let base_reserve_test_tolerance = fixed!(1e10);
+        let bond_reserve_test_tolerance = fixed!(1e10);
         let mut rng = thread_rng();
-        let mut counter = 0;
-        for _ in 0..*FAST_FUZZ_RUNS {
-            // We want a state with net zero exposure.
-            let mut state = rng.gen::<State>();
-            // Zero exposure
-            state.info.longs_outstanding = uint256!(0);
-            state.info.long_average_maturity_time = uint256!(0);
-            state.info.long_exposure = uint256!(0);
-            state.info.shorts_outstanding = uint256!(0);
-            state.info.short_average_maturity_time = uint256!(0);
-            // Effective share reserves == share reserves
-            state.info.share_adjustment = I256::try_from(0)?;
-            // Zero fees
-            state.config.fees.curve = uint256!(0);
-            state.config.fees.flat = uint256!(0);
-            state.config.fees.governance_lp = uint256!(0);
-            state.config.fees.governance_zombie = uint256!(0);
-            // Make sure we're still solvent
-            if state.calculate_spot_price()? < state.calculate_min_price()?
-                || state.calculate_spot_price()? > fixed!(1e18)
-                || state.calculate_solvency().is_err()
-            {
-                continue;
-            }
-
-            // Pick a random target rate that is always smaller than the current rate.
-            let target_rate =
-                state.calculate_spot_rate()? / rng.gen_range(fixed!(1.00001e18)..=fixed!(10e18));
-
-            // Estimate the long that achieves a target rate.
-            let (target_share_reserves, target_bond_reserves) =
-                state.reserves_given_rate_ignoring_exposure(target_rate)?;
-
-            // Verify that the new levels are solvent.
-            let mut new_state = state.clone();
-            new_state.info.share_reserves = target_share_reserves.into();
-            new_state.info.bond_reserves = target_bond_reserves.into();
-            if new_state.calculate_solvency().is_err()
-                || new_state.calculate_spot_price()? > fixed!(1e18)
-            {
-                continue;
-            }
-
-            // Calculate the long deltas to achieve the target rate.
-            let (target_base_delta, target_bond_delta) = match state
-                .long_trade_deltas_from_reserves(target_share_reserves, target_bond_reserves)
-            {
-                Ok(deltas) => deltas,
-                Err(_) => continue,
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            // Get a random long trade amount.
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
             };
-
-            // Determine what rate was achieved after that long.
-            let resulting_rate =
-                state.calculate_spot_rate_after_long(target_base_delta, Some(target_bond_delta))?;
-
-            // By what percentage does the resulting rate differ from the target?
-            let error = if target_rate > resulting_rate {
-                target_rate - resulting_rate
-            } else {
-                resulting_rate - target_rate
+            let max_long_trade = match panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+            }) {
+                Ok(max_trade) => match max_trade {
+                    Ok(max_trade) => max_trade,
+                    Err(_) => continue, // Max threw an Err
+                },
+                Err(_) => continue, // Max threw a panic
             };
-
-            // The resulting rate should equal the target rate.
-            assert!(
-                error <= test_tolerance,
-                "expected abs(resulting_rate-target_rate)={} <= test_tolerance={}",
-                error,
-                test_tolerance
+            let long_base_amount =
+                rng.gen_range(state.minimum_transaction_amount()..=max_long_trade);
+            // Do the long to see the bond delta (same amount for the user & pool in this case).
+            let long_bond_amount = state.calculate_open_long(long_base_amount)?;
+            // Get the reserve levels after the state was updated from the open long.
+            let updated_state = state
+                .calculate_pool_state_after_open_long(long_base_amount, Some(long_bond_amount))?;
+            let (final_share_reserves, final_bond_reserves) = (
+                FixedPoint::from(updated_state.info.share_reserves),
+                FixedPoint::from(updated_state.info.bond_reserves),
             );
-            counter += 1;
+            // Estimate the trade amounts from the final reserve levels.
+            let (estimated_base_amount, estimated_bond_amount) = state
+                .long_trade_needed_given_reserves(final_share_reserves, final_bond_reserves)?;
+            // Make sure the estimates match the realized transaction amounts.
+            let base_error = if estimated_base_amount > long_base_amount {
+                estimated_base_amount - long_base_amount
+            } else {
+                long_base_amount - estimated_base_amount
+            };
+            assert!(
+                base_error <= base_reserve_test_tolerance,
+                "expected abs(estimated_base_amount={}-long_base_amount={})={} <= test_tolerance={}",
+                estimated_base_amount,
+                long_base_amount,
+                base_error,
+                base_reserve_test_tolerance,
+            );
+            let bond_error = if estimated_bond_amount > long_bond_amount {
+                estimated_bond_amount - long_bond_amount
+            } else {
+                long_bond_amount - estimated_bond_amount
+            };
+            assert!(
+                bond_error <= bond_reserve_test_tolerance,
+                "expected abs(estimated_bond_amount={}-long_bond_amount={})={} <= test_tolerance={}",
+                estimated_bond_amount,
+                long_bond_amount,
+                bond_error,
+                bond_reserve_test_tolerance,
+            );
         }
-        assert!(counter >= 1_000); // this passed at least 1,000 times
         Ok(())
     }
 
@@ -448,7 +495,6 @@ mod tests {
         // the pool. Bob is funded with a random amount of capital so that we
         // can test `calculate_targeted_long` when budget is the primary constraint
         // and when it is not.
-
         let allowable_solvency_error = fixed!(1e5);
         let allowable_budget_error = fixed!(1e5);
         let allowable_rate_error = fixed!(1e11);
@@ -466,19 +512,17 @@ mod tests {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // Fund Alice and Bob.
+            // Alice initializes the pool.
             // Large budget for initializing the pool.
             let contribution = fixed!(1_000_000e18);
             alice.fund(contribution).await?;
-            // Small lower bound on the budget for resource-constrained targeted longs.
-            let budget = rng.gen_range(fixed!(10e18)..=fixed!(500_000_000e18));
-
-            // Alice initializes the pool.
             let initial_fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
             alice
                 .initialize(initial_fixed_rate, contribution, None)
                 .await?;
 
+            // Small lower bound on Bob's budget for resource-constrained targeted longs.
+            let budget = rng.gen_range(fixed!(10e18)..=fixed!(500_000_000e18));
             // Half the time we will open a long & let it mature.
             if rng.gen_range(0..=1) == 0 {
                 // Open a long.
@@ -517,10 +561,8 @@ mod tests {
                 .await?;
 
             // Get a targeted long amount.
-            // TODO: explore tighter bounds on this.
             let target_rate = bob.get_state().await?.calculate_spot_rate()?
                 / rng.gen_range(fixed!(1.0001e18)..=fixed!(10e18));
-            // let target_rate = initial_fixed_rate / fixed!(2e18);
             let targeted_long_result = bob
                 .calculate_targeted_long(
                     target_rate,

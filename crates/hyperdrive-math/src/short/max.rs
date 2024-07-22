@@ -27,7 +27,7 @@ impl State {
     /// ```math
     /// p = \left( \tfrac{\mu \cdot z_{min}}{y_{max}} \right)^{t_s}
     /// ```
-    pub fn calculate_min_price(&self) -> Result<FixedPoint> {
+    pub fn calculate_min_spot_price(&self) -> Result<FixedPoint> {
         let y_max = (self.k_up()?
             - (self.vault_share_price() / self.initial_vault_share_price())
                 * (self.initial_vault_share_price() * self.minimum_share_reserves())
@@ -481,15 +481,15 @@ impl State {
         bond_amount: FixedPoint,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint> {
-        let share_deltas = self.calculate_pool_share_deltas_after_open_short(bond_amount)?;
-        if self.share_reserves() < share_deltas {
+        let share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
+        if self.share_reserves() < share_delta {
             return Err(eyre!(
-                "expected share_reserves={:#?} >= share_deltas={:#?}",
+                "expected share_reserves={:#?} >= share_delta={:#?}",
                 self.share_reserves(),
-                share_deltas
+                share_delta
             ));
         }
-        let new_share_reserves = self.share_reserves() - share_deltas;
+        let new_share_reserves = self.share_reserves() - share_delta;
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {

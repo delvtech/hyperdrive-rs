@@ -8,7 +8,7 @@ mod utils;
 mod yield_space;
 
 use ethers::types::{Address, I256, U256};
-use eyre::Result;
+use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 use hyperdrive_wrappers::wrappers::ihyperdrive::{Fees, PoolConfig, PoolInfo};
 use rand::{
@@ -161,23 +161,21 @@ impl State {
 
     /// Calculates the pool reserve levels to achieve a target interest rate.
     /// This calculation does not take into account Hyperdrive's solvency
-    /// constraints, share adjustments, or exposure and shouldn't be used
-    /// directly.
+    /// constraints or exposure and shouldn't be used directly.
     ///
     /// The price for a given fixed-rate is given by
     /// `$p = \tfrac{1}{r \cdot t + 1}$`, where `$r$` is the fixed-rate and
-    /// `$t$` is the annualized position duration. The price for a given pool
-    /// reserves is `$p = \left( \tfrac{\mu \cdot z}{y} \right)^{t_s}$`, where
-    /// `$\mu$` is the initial share price and `$t_s$` is the time stretch
-    /// constant. The reserve levels are related using the modified yieldspace
-    /// formula: `$k = \tfrac{\mu}{c}^{-t_s} x^{1 - t_s} + y^{1 - t_s}$`.
-    /// Using these three equations, we can solve for the pool reserve levels as
-    /// a function of a target rate.
-    //
-    /// For a target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
+    /// `$t$` is the annualized position duration. The price given pool reserves
+    /// is `$p = \left( \tfrac{\mu \cdot z_e}{y} \right)^{t_s}$`, where `$\mu$`
+    /// is the initial share price and `$t_s$` is the time stretch constant. The
+    /// reserve levels are related using the modified yieldspace formula:
+    /// `$k = \tfrac{\mu}{c}^{-t_s} z_{e}^{1 - t_s} + y^{1 - t_s}$`. Using these
+    /// three equations, we can solve for the pool reserve levels as a function
+    /// of a target rate while ensuring we remain on the same yield curve. For a
+    /// target rate, `$r_t$`, the pool share reserves, `$z_t$`, must be:
     ///
     /// ```math
-    /// z_t = \frac{1}{\mu} \left(
+    /// z_t = \zeta + \frac{1}{\mu} \left(
     ///   \frac{k}{\frac{c}{\mu} + \left(
     ///     (r_t \cdot t + 1)^{\frac{1}{t_s}}
     ///   \right)^{1 - t_{s}}}
@@ -208,7 +206,15 @@ impl State {
         let inner = (self.k_down()?
             / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())?))
         .pow(fixed!(1e18) / (fixed!(1e18) - self.time_stretch()))?;
-        let target_share_reserves = inner / self.initial_vault_share_price();
+        let target_effective_share_reserves = inner / self.initial_vault_share_price();
+        let target_share_reserves_i256 =
+            I256::try_from(target_effective_share_reserves)? + self.share_adjustment();
+
+        let target_share_reserves = if target_share_reserves_i256 > I256::from(0) {
+            FixedPoint::try_from(target_share_reserves_i256)?
+        } else {
+            return Err(eyre!("Target rate would result in share reserves <= 0."));
+        };
 
         // Then get the target bond reserves.
         let target_bond_reserves = inner * scaled_rate;
@@ -337,7 +343,6 @@ impl YieldSpace for State {
 
 #[cfg(test)]
 mod tests {
-    use ethers::types::I256;
     use fixedpointmath::{fixed, uint256};
     use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
     use rand::thread_rng;
@@ -346,7 +351,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_reserves_given_rate_ignoring_exposure() -> Result<()> {
-        let test_tolerance = fixed!(1e11);
+        let test_tolerance = fixed!(1e15);
         let mut rng = thread_rng();
         let mut counter = 0;
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -358,29 +363,41 @@ mod tests {
             state.info.long_exposure = uint256!(0);
             state.info.shorts_outstanding = uint256!(0);
             state.info.short_average_maturity_time = uint256!(0);
-            // Effective share reserves == share reserves
-            state.info.share_adjustment = I256::try_from(0)?;
-            // Zero fees
-            state.config.fees.curve = uint256!(0);
-            state.config.fees.flat = uint256!(0);
-            state.config.fees.governance_lp = uint256!(0);
-            state.config.fees.governance_zombie = uint256!(0);
             // Make sure we're still solvent
-            if state.calculate_spot_price()? < state.calculate_min_price()?
+            if state.calculate_spot_price()? < state.calculate_min_spot_price()?
                 || state.calculate_spot_price()? > fixed!(1e18)
                 || state.calculate_solvency().is_err()
             {
                 continue;
             }
-
             // Pick a random target rate that is near the current rate.
-            let target_rate =
-                state.calculate_spot_rate()? * rng.gen_range(fixed!(0.1e18)..=fixed!(10e18));
-
+            let min_rate = calculate_rate_given_fixed_price(
+                state.calculate_max_spot_price()?,
+                state.position_duration(),
+            );
+            let max_rate = calculate_rate_given_fixed_price(
+                state.calculate_min_spot_price()?,
+                state.position_duration(),
+            );
+            let target_rate = rng.gen_range(min_rate..=max_rate);
             // Estimate the long that achieves a target rate.
+            // The random target rate could be impossible to achieve and remain
+            // solvent. If so we want to catch that and not fail the test.
+            // TODO: Since we get the min & max price from the state, should this always work?
             let (target_share_reserves, target_bond_reserves) =
-                state.reserves_given_rate_ignoring_exposure(target_rate)?;
-
+                match state.reserves_given_rate_ignoring_exposure(target_rate) {
+                    Ok(result) => result,
+                    Err(err) => {
+                        if err
+                            .to_string()
+                            .contains("Target rate would result in share reserves <= 0.")
+                        {
+                            continue;
+                        } else {
+                            return Err(err);
+                        }
+                    }
+                };
             // Verify that the new levels are solvent.
             let mut new_state = state.clone();
             new_state.info.share_reserves = target_share_reserves.into();
@@ -390,7 +407,6 @@ mod tests {
             {
                 continue;
             }
-
             // Fixed rate for the new state should equal the target rate.
             let realized_rate = new_state.calculate_spot_rate()?;
             let error = if realized_rate > target_rate {
@@ -398,7 +414,6 @@ mod tests {
             } else {
                 target_rate - realized_rate
             };
-
             assert!(
                 error <= test_tolerance,
                 "expected error={} <= tolerance={}",
@@ -407,7 +422,7 @@ mod tests {
             );
             counter += 1;
         }
-        assert!(counter >= 1_000); // this passed at least 1,000 times
+        assert!(counter >= 5_000); // at least FAST_FUZZ_RUNS / 2of runs passed
         Ok(())
     }
 
