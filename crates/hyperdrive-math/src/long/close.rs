@@ -117,8 +117,6 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
-            let mut scaled_tolerance = tolerance;
-            
             let state = rng.gen::<State>();
             let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
             let maturity_time = state.checkpoint_duration();
@@ -176,6 +174,8 @@ mod tests {
         // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
+            let mut scaled_tolerance = tolerance;
+
             let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
             let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
