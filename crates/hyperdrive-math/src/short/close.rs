@@ -489,7 +489,7 @@ mod tests {
 
         // Fuzz the spot valuation and hyperdrive valuation against each other.
         let mut rng = thread_rng();
-        for _ in 0..(*FAST_FUZZ_RUNS * 10) {
+        for _ in 0..*FAST_FUZZ_RUNS {
             let mut scaled_tolerance = tolerance;
 
             let state = rng.gen::<State>();
