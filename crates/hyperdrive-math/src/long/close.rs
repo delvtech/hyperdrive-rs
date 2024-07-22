@@ -117,6 +117,8 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
+            let mut scaled_tolerance = tolerance;
+            
             let state = rng.gen::<State>();
             let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
             let maturity_time = state.checkpoint_duration();
@@ -188,6 +190,16 @@ mod tests {
                 continue;
             }
 
+            // When the reserves ratio is too small, the market impact makes the error between
+            // the valuations larger, so we scale the test's tolerance up to make up for it,
+            // since this is meant to be an estimate that ignores liquidity constraints.
+            let reserves_ratio = state.effective_share_reserves()? / state.bond_reserves();
+            if reserves_ratio < fixed!(1e12) {
+                scaled_tolerance *= int256!(100);
+            } else if reserves_ratio < fixed!(1e14) {
+                scaled_tolerance *= int256!(10);
+            }
+
             let hyperdrive_valuation = state.calculate_close_long(
                 bond_amount,
                 maturity_time.into(),
@@ -207,10 +219,10 @@ mod tests {
             };
 
             assert!(
-                error < tolerance,
+                error < scaled_tolerance,
                 "error {:?} exceeds tolerance of {}",
                 error,
-                tolerance
+                scaled_tolerance
             );
         }
 
