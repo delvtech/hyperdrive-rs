@@ -22,10 +22,11 @@ impl State {
             .mul_up(base_amount))
     }
 
-    /// Calculates the governance fee paid when opening longs with a given base amount.
+    /// Calculates the governance fee paid when opening longs with a given base
+    /// amount.
     ///
-    /// The open long governance fee, `$\Phi_{g,ol}(\Delta x)$`, is paid in base and
-    /// is given by:
+    /// The open long governance fee, `$\Phi_{g,ol}(\Delta x)$`, is paid in base
+    /// and is given by:
     ///
     /// ```math
     /// \Phi_{g,ol}(\Delta x) = \phi_g \cdot p \cdot \Phi_{c,ol}(\Delta x)
@@ -45,10 +46,11 @@ impl State {
             .mul_down(self.calculate_spot_price()?))
     }
 
-    /// Calculates the curve fee paid when closing longs for a given bond amount.
+    /// Calculates the curve fee paid when closing longs for a given bond
+    /// amount.
     ///
-    /// The the close long curve fee, `$\Phi_{c,cl}(\Delta y)$`, is paid in shares and
-    /// is given by:
+    /// The the close long curve fee, `$\Phi_{c,cl}(\Delta y)$`, is paid in
+    /// shares and is given by:
     ///
     /// ```math
     /// \Phi_{c,cl}(\Delta y) =

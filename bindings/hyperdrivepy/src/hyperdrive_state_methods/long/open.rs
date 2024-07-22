@@ -23,24 +23,28 @@ impl HyperdriveState {
         Ok(result)
     }
 
-    pub fn calculate_pool_deltas_after_open_long(&self, base_amount: &str) -> PyResult<String> {
+    pub fn calculate_pool_deltas_after_open_long(
+        &self,
+        base_amount: &str,
+    ) -> PyResult<(String, String)> {
         let base_amount_fp = FixedPoint::from(U256::from_dec_str(base_amount).map_err(|err| {
             PyErr::new::<PyValueError, _>(format!(
                 "Failed to convert base_amount string {} to U256: {}",
                 base_amount, err
             ))
         })?);
-        let result_fp = self
+        let (share_result_fp, bond_result_fp) = self
             .state
-            .calculate_pool_deltas_after_open_long(base_amount_fp)
+            .calculate_pool_share_bond_deltas_after_open_long(base_amount_fp, None)
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!(
                     "calculate_pool_deltas_after_open_long: {:?}",
                     err
                 ))
             })?;
-        let result = U256::from(result_fp).to_string();
-        Ok(result)
+        let share_result = U256::from(share_result_fp).to_string();
+        let bond_result = U256::from(bond_result_fp).to_string();
+        Ok((share_result, bond_result))
     }
 
     pub fn calculate_spot_price_after_long(

@@ -229,7 +229,7 @@ mod tests {
                     Ok(max_long) => max_long,
                     Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
                 },
-                Err(_) => continue, // Max threw a paanic. Don't finish this fuzz iteration.
+                Err(_) => continue, // Max threw a panic. Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
 
