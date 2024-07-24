@@ -214,6 +214,17 @@ def test_calculate_close_long():
     assert int(shares_returned) > 0
 
 
+def test_calculate_market_value_long():
+    """Test for calculate_market_value_long."""
+    bond_amount = str(500 * 10**18)
+    maturity_time = str(9 * 10**17 + 10)
+    current_time = str(9 * 10**17)
+    shares_returned = hyperdrivepy.calculate_market_value_long(
+        POOL_CONFIG, POOL_INFO, bond_amount, maturity_time, current_time
+    )
+    assert int(shares_returned) > 0
+
+
 def test_calculate_open_short():
     """Test for calculate_open_short."""
     short_amount = str(50 * 10**18)
@@ -237,6 +248,25 @@ def test_calculate_close_short():
     maturity_time = str(9 * 10**17 + 10)
     current_time = str(9 * 10**17)
     shares_received = hyperdrivepy.calculate_close_short(
+        POOL_CONFIG,
+        POOL_INFO,
+        short_amount,
+        open_vault_share_price,
+        close_vault_share_price,
+        maturity_time,
+        current_time,
+    )
+    assert int(shares_received) > 0
+
+
+def test_calculate_market_value_short():
+    """Test for calculate_market_value_short."""
+    short_amount = str(50 * 10**18)
+    open_vault_share_price = str(8 * 10**17)
+    close_vault_share_price = str(9 * 10**17)
+    maturity_time = str(9 * 10**17 + 10)
+    current_time = str(9 * 10**17)
+    shares_received = hyperdrivepy.calculate_market_value_short(
         POOL_CONFIG,
         POOL_INFO,
         short_amount,
