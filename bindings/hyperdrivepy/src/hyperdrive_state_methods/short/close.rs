@@ -90,13 +90,13 @@ impl HyperdriveState {
                     close_vault_share_price, err
                 ))
             })?);
-        let maturity_time = U256::from_dec_str(maturity_time).map_err(|err| {
+        let maturity_time_int = U256::from_dec_str(maturity_time).map_err(|err| {
             PyErr::new::<PyValueError, _>(format!(
                 "Failed to convert maturity_time string {} to U256: {}",
                 maturity_time, err
             ))
         })?;
-        let current_time = U256::from_dec_str(current_time).map_err(|err| {
+        let current_time_int = U256::from_dec_str(current_time).map_err(|err| {
             PyErr::new::<PyValueError, _>(format!(
                 "Failed to convert current_time string {} to U256: {}",
                 current_time, err
@@ -108,8 +108,8 @@ impl HyperdriveState {
                 bond_amount_fp,
                 open_vault_share_price_fp,
                 close_vault_share_price_fp,
-                maturity_time,
-                current_time,
+                maturity_time_int,
+                current_time_int,
             )
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!("calculate_market_value_short: {}", err))

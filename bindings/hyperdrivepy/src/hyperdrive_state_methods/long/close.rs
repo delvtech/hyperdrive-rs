@@ -53,13 +53,13 @@ impl HyperdriveState {
                 bond_amount, err
             ))
         })?);
-        let maturity_time = U256::from_dec_str(maturity_time).map_err(|err| {
+        let maturity_time_int = U256::from_dec_str(maturity_time).map_err(|err| {
             PyErr::new::<PyValueError, _>(format!(
                 "Failed to convert maturity_time string {} to U256: {}",
                 maturity_time, err
             ))
         })?;
-        let current_time = U256::from_dec_str(current_time).map_err(|err| {
+        let current_time_int = U256::from_dec_str(current_time).map_err(|err| {
             PyErr::new::<PyValueError, _>(format!(
                 "Failed to convert current_time string {} to U256: {}",
                 current_time, err
@@ -68,7 +68,7 @@ impl HyperdriveState {
 
         let result_fp = self
             .state
-            .calculate_market_value_long(bond_amount_fp, maturity_time, current_time)
+            .calculate_market_value_long(bond_amount_fp, maturity_time_int, current_time_int)
             .map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!("calculate_market_value_long: {}", err))
             })?;
