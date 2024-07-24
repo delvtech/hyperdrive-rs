@@ -275,6 +275,38 @@ def calculate_close_long(
     return _get_interface(pool_config, pool_info).calculate_close_long(bond_amount, maturity_time, current_time)
 
 
+def calculate_market_value_long(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    bond_amount: str,
+    maturity_time: str,
+    current_time: str,
+) -> str:
+    """Estimates the current market value of an open long position.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    bond_amount: str (FixedPoint)
+        The amount of bonds to sell.
+    maturity_time: str (FixedPoint)
+        The maturity time of the long.
+    current_time: str (FixedPoint)
+        The current block time.
+
+    Returns
+    -------
+    str (FixedPoint)
+        An estimate of the amount of shares returned upon closing the long.
+    """
+    return _get_interface(pool_config, pool_info).calculate_market_value_long(bond_amount, maturity_time, current_time)
+
+
 def calculate_open_short(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
@@ -371,6 +403,46 @@ def calculate_close_short(
         The amount of shares the trader will receive for closing the short.
     """
     return _get_interface(pool_config, pool_info).calculate_close_short(
+        bond_amount, open_vault_share_price, close_vault_share_price, maturity_time, current_time
+    )
+
+
+def calculate_market_value_short(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    bond_amount: str,
+    open_vault_share_price: str,
+    close_vault_share_price: str,
+    maturity_time: str,
+    current_time: str,
+) -> str:
+    """Estimates the current market value of an open short position.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    bond_amount: str (FixedPoint)
+        The amount to of bonds provided.
+    open_vault_share_price: str (FixedPoint)
+        The share price when the short was opened.
+    close_vault_share_price: str (FixedPoint)
+        The share price when the short was closed.
+    maturity_time: str (FixedPoint)
+        The maturity time of the short.
+    current_time: str (FixedPoint)
+        The current block time.
+
+    Returns
+    -------
+    str (FixedPoint)
+        An estimate of the amount of shares returned upon closing the short.
+    """
+    return _get_interface(pool_config, pool_info).calculate_market_value_short(
         bond_amount, open_vault_share_price, close_vault_share_price, maturity_time, current_time
     )
 
@@ -683,6 +755,40 @@ def calculate_idle_share_reserves_in_base(
         The idle share reserves in base of the pool.
     """
     return _get_interface(pool_config, pool_info).calculate_idle_share_reserves_in_base()
+
+
+def calculate_scaled_normalized_time_remaining(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    scaled_maturity_time: str,
+    current_time: str,
+) -> str:
+    """Calculate the normalized time remaining with high precision.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    scaled_maturity_time: str (FixedPoint)
+        The maturity time scaled to be a FixedPoint. For example, 100 seconds
+        would be represented as FixedPoint(100) in Python or fixed!(100e18) in
+        Rust.
+    current_time: str (U256)
+        The current time as an integer. For example, 100 seconds would be 100 in
+        Python or Rust.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The idle share reserves in base of the pool.
+    """
+    return _get_interface(pool_config, pool_info).calculate_scaled_normalized_time_remaining(
+        scaled_maturity_time, current_time
+    )
 
 
 def calculate_add_liquidity(

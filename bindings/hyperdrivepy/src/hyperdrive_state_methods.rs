@@ -4,6 +4,7 @@ mod short;
 mod yield_space;
 
 use ethers::core::types::U256;
+use fixedpointmath::FixedPoint;
 use pyo3::{exceptions::PyValueError, prelude::*};
 
 pub use crate::utils::*;
@@ -62,6 +63,32 @@ impl HyperdriveState {
 
     pub fn calculate_idle_share_reserves_in_base(&self) -> PyResult<String> {
         let result_fp = self.state.calculate_idle_share_reserves_in_base();
+        let result = U256::from(result_fp).to_string();
+        Ok(result)
+    }
+
+    pub fn calculate_scaled_normalized_time_remaining(
+        &self,
+        scaled_maturity_time: &str,
+        current_time: &str,
+    ) -> PyResult<String> {
+        let scaled_maturity_time_fp =
+            FixedPoint::from(U256::from_dec_str(scaled_maturity_time).map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!(
+                    "Failed to convert scaled_amturity_time string {} to FixedPoint: {}",
+                    scaled_maturity_time, err
+                ))
+            })?);
+
+        let current_time_int = U256::from_dec_str(current_time).map_err(|err| {
+            PyErr::new::<PyValueError, _>(format!(
+                "Failed to convert current_time string {} to U256: {}",
+                current_time, err
+            ))
+        })?;
+        let result_fp = self
+            .state
+            .calculate_scaled_normalized_time_remaining(scaled_maturity_time_fp, current_time_int);
         let result = U256::from(result_fp).to_string();
         Ok(result)
     }
