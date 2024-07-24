@@ -48,6 +48,7 @@ use hyperdrive_wrappers::wrappers::{
     steth_target1_deployer::{StETHTarget1Deployer, StETHTarget1DeployerLibs},
     steth_target2_deployer::{StETHTarget2Deployer, StETHTarget2DeployerLibs},
     steth_target3_deployer::{StETHTarget3Deployer, StETHTarget3DeployerLibs},
+    steth_target4_deployer::{StETHTarget4Deployer, StETHTarget4DeployerLibs},
 };
 use test_utils::chain::{Chain, ChainClient};
 
@@ -289,6 +290,15 @@ async fn testnet_deployment(
         )?
         .send()
         .await?;
+        let target4 = StETHTarget4Deployer::link_and_deploy(
+            client.clone(),
+            (),
+            StETHTarget4DeployerLibs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
         StETHHyperdriveDeployerCoordinator::deploy(
             client.clone(),
             (
@@ -298,6 +308,7 @@ async fn testnet_deployment(
                 target1.address(),
                 target2.address(),
                 target3.address(),
+                target4.address(),
                 lido.address(),
             ),
         )?
