@@ -433,7 +433,7 @@ def calculate_market_value_short(
     close_vault_share_price: str (FixedPoint)
         The share price when the short was closed.
     maturity_time: str (FixedPoint)
-        The maturity time of the long.
+        The maturity time of the short.
     current_time: str (FixedPoint)
         The current block time.
 
