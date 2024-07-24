@@ -460,3 +460,13 @@ def test_calculate_idle_share_reserves_in_base():
     """Test calculate_idle_share_reserves_in_base."""
     idle_share_reserves = hyperdrivepy.calculate_idle_share_reserves_in_base(POOL_CONFIG, POOL_INFO)
     assert int(idle_share_reserves) > 0
+
+
+def test_calculate_scaled_normalized_time_remaining():
+    """Test calculate_scaled_normalized_time_remaining."""
+    scaled_maturity_time = str(int(100e18))
+    current_time = str(50)
+    normalized_time_remaining = hyperdrivepy.calculate_scaled_normalized_time_remaining(
+        POOL_CONFIG, POOL_INFO, scaled_maturity_time, current_time
+    )
+    assert int(normalized_time_remaining) > 0

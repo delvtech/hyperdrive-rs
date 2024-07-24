@@ -757,6 +757,40 @@ def calculate_idle_share_reserves_in_base(
     return _get_interface(pool_config, pool_info).calculate_idle_share_reserves_in_base()
 
 
+def calculate_scaled_normalized_time_remaining(
+    pool_config: types.PoolConfigType,
+    pool_info: types.PoolInfoType,
+    scaled_maturity_time: str,
+    current_time: str,
+) -> str:
+    """Calculate the normalized time remaining with high precision.
+
+    Arguments
+    ---------
+    pool_config: PoolConfig
+        Static configuration for the hyperdrive contract.
+        Set at deploy time.
+    pool_info: PoolInfo
+        Current state information of the hyperdrive contract.
+        Includes attributes like reserve levels and share prices.
+    scaled_maturity_time: str (FixedPoint)
+        The maturity time scaled to be a FixedPoint. For example, 100 seconds
+        would be represented as FixedPoint(100) in Python or fixed!(100e18) in
+        Rust.
+    current_time: str (U256)
+        The current time as an integer. For example, 100 seconds would be 100 in
+        Python or Rust.
+
+    Returns
+    -------
+    str (FixedPoint)
+        The idle share reserves in base of the pool.
+    """
+    return _get_interface(pool_config, pool_info).calculate_scaled_normalized_time_remaining(
+        scaled_maturity_time, current_time
+    )
+
+
 def calculate_add_liquidity(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
