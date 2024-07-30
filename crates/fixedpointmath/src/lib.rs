@@ -7,7 +7,6 @@ use core::panic;
 use std::{
     fmt,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
-    os::macos::raw,
 };
 
 use ethers::types::{I256, U256, U512};
@@ -85,7 +84,6 @@ impl<T: FixedPointValue> FixedPoint<T> {
                 r#"value {value:?} is out of FixedPoint range:
     min: {min:?}
     max: {max:?}"#,
-                value = value,
                 min = T::MIN,
                 max = T::MAX,
             );
@@ -367,7 +365,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
         // If the base is 0, return 0.
         if self.is_zero() {
-            return Self::from_raw(0);
+            return Ok(Self::zero());
         }
 
         // Using properties of logarithms we calculate x^y: -> ln(x^y) = y *
@@ -424,7 +422,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
 impl<T: FixedPointValue> PartialEq for FixedPoint<T> {
     fn eq(&self, other: &Self) -> bool {
-        self.sign() == other.sign() && self.raw().abs() == other.abs().raw().abs()
+        self.sign() == other.sign() && self.raw().abs() == other.raw().abs()
     }
 }
 impl<T: FixedPointValue> Eq for FixedPoint<T> {}
