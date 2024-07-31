@@ -75,7 +75,7 @@ impl HyperdriveState {
         let scaled_maturity_time_fp =
             FixedPoint::from(U256::from_dec_str(scaled_maturity_time).map_err(|err| {
                 PyErr::new::<PyValueError, _>(format!(
-                    "Failed to convert scaled_amturity_time string {} to FixedPoint: {}",
+                    "Failed to convert scaled_maturity_time string {} to FixedPoint: {}",
                     scaled_maturity_time, err
                 ))
             })?);
