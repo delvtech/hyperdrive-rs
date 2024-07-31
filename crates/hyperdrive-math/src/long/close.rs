@@ -103,7 +103,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-
+    use ethers::types::I256;
     use fixedpointmath::int256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};
