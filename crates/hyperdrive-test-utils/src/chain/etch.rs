@@ -145,7 +145,7 @@ impl TestChain {
             )?
             .send()
             .await?;
-            pairs.push((target4_address, target3_template.address()));
+            pairs.push((target4_address, target4_template.address()));
 
             // Etch the "etching vault" onto the current vault contract. The
             // etching vault implements `convertToAssets` to return the immutable
