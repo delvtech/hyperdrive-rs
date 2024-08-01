@@ -1,4 +1,4 @@
-pub use st_eth_target_3::*;
+pub use st_eth_target_4::*;
 /// This module was auto-generated with ethers-rs Abigen.
 /// More information at: <https://github.com/gakonst/ethers-rs>
 #[allow(
@@ -9,7 +9,7 @@ pub use st_eth_target_3::*;
     dead_code,
     non_camel_case_types,
 )]
-pub mod st_eth_target_3 {
+pub mod st_eth_target_4 {
     #[allow(deprecated)]
     fn __abi() -> ::ethers::core::abi::Abi {
         ::ethers::core::abi::ethabi::Contract {
@@ -54,13 +54,13 @@ pub mod st_eth_target_3 {
             }),
             functions: ::core::convert::From::from([
                 (
-                    ::std::borrow::ToOwned::to_owned("addLiquidity"),
+                    ::std::borrow::ToOwned::to_owned("checkpoint"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("addLiquidity"),
+                            name: ::std::borrow::ToOwned::to_owned("checkpoint"),
                             inputs: ::std::vec![
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_contribution"),
+                                    name: ::std::borrow::ToOwned::to_owned("_checkpointTime"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Uint(
                                         256usize,
                                     ),
@@ -69,51 +69,7 @@ pub mod st_eth_target_3 {
                                     ),
                                 },
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_minLpSharePrice"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_minApr"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_maxApr"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
-                                        256usize,
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("uint256"),
-                                    ),
-                                },
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_options"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Tuple(
-                                        ::std::vec![
-                                            ::ethers::core::abi::ethabi::ParamType::Address,
-                                            ::ethers::core::abi::ethabi::ParamType::Bool,
-                                            ::ethers::core::abi::ethabi::ParamType::Bytes,
-                                        ],
-                                    ),
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned(
-                                            "struct IHyperdrive.Options",
-                                        ),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::string::String::new(),
+                                    name: ::std::borrow::ToOwned::to_owned("_maxIterations"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Uint(
                                         256usize,
                                     ),
@@ -122,19 +78,22 @@ pub mod st_eth_target_3 {
                                     ),
                                 },
                             ],
+                            outputs: ::std::vec![],
                             constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::Payable,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                         },
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("initialize"),
+                    ::std::borrow::ToOwned::to_owned("redeemWithdrawalShares"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("initialize"),
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "redeemWithdrawalShares",
+                            ),
                             inputs: ::std::vec![
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_contribution"),
+                                    name: ::std::borrow::ToOwned::to_owned("_withdrawalShares"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Uint(
                                         256usize,
                                     ),
@@ -143,7 +102,9 @@ pub mod st_eth_target_3 {
                                     ),
                                 },
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_apr"),
+                                    name: ::std::borrow::ToOwned::to_owned(
+                                        "_minOutputPerShare",
+                                    ),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Uint(
                                         256usize,
                                     ),
@@ -177,9 +138,85 @@ pub mod st_eth_target_3 {
                                         ::std::borrow::ToOwned::to_owned("uint256"),
                                     ),
                                 },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
                             ],
                             constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::Payable,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("removeLiquidity"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("removeLiquidity"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("_lpShares"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned(
+                                        "_minOutputPerShare",
+                                    ),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("_options"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Tuple(
+                                        ::std::vec![
+                                            ::ethers::core::abi::ethabi::ParamType::Address,
+                                            ::ethers::core::abi::ethabi::ParamType::Bool,
+                                            ::ethers::core::abi::ethabi::ParamType::Bytes,
+                                        ],
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned(
+                                            "struct IHyperdrive.Options",
+                                        ),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
                         },
                     ],
                 ),
@@ -1004,56 +1041,21 @@ pub mod st_eth_target_3 {
             ]),
             errors: ::core::convert::From::from([
                 (
-                    ::std::borrow::ToOwned::to_owned("BelowMinimumContribution"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "BelowMinimumContribution",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("CircuitBreakerTriggered"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "CircuitBreakerTriggered",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned(
-                        "DecreasedPresentValueWhenAddingLiquidity",
-                    ),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "DecreasedPresentValueWhenAddingLiquidity",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("DistributeExcessIdleFailed"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "DistributeExcessIdleFailed",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("ExpInvalidExponent"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::AbiError {
                             name: ::std::borrow::ToOwned::to_owned("ExpInvalidExponent"),
+                            inputs: ::std::vec![],
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("InsufficientBalance"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::AbiError {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "InsufficientBalance",
+                            ),
                             inputs: ::std::vec![],
                         },
                     ],
@@ -1070,20 +1072,11 @@ pub mod st_eth_target_3 {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("InvalidApr"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("InvalidApr"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("InvalidEffectiveShareReserves"),
+                    ::std::borrow::ToOwned::to_owned("InvalidCheckpointTime"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::AbiError {
                             name: ::std::borrow::ToOwned::to_owned(
-                                "InvalidEffectiveShareReserves",
+                                "InvalidCheckpointTime",
                             ),
                             inputs: ::std::vec![],
                         },
@@ -1128,26 +1121,6 @@ pub mod st_eth_target_3 {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("PoolAlreadyInitialized"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "PoolAlreadyInitialized",
-                            ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("PoolIsPaused"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("PoolIsPaused"),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("ReentrancyGuardReentrantCall"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::AbiError {
@@ -1165,15 +1138,6 @@ pub mod st_eth_target_3 {
                             name: ::std::borrow::ToOwned::to_owned(
                                 "RestrictedZeroAddress",
                             ),
-                            inputs: ::std::vec![],
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("TransferFailed"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned("TransferFailed"),
                             inputs: ::std::vec![],
                         },
                     ],
@@ -1219,12 +1183,10 @@ pub mod st_eth_target_3 {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("UpdateLiquidityFailed"),
+                    ::std::borrow::ToOwned::to_owned("UnsupportedToken"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::AbiError {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "UpdateLiquidityFailed",
-                            ),
+                            name: ::std::borrow::ToOwned::to_owned("UnsupportedToken"),
                             inputs: ::std::vec![],
                         },
                     ],
@@ -1235,34 +1197,34 @@ pub mod st_eth_target_3 {
         }
     }
     ///The parsed JSON ABI of the contract.
-    pub static STETHTARGET3_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
+    pub static STETHTARGET4_ABI: ::ethers::contract::Lazy<::ethers::core::abi::Abi> = ::ethers::contract::Lazy::new(
         __abi,
     );
-    pub struct StETHTarget3<M>(::ethers::contract::Contract<M>);
-    impl<M> ::core::clone::Clone for StETHTarget3<M> {
+    pub struct StETHTarget4<M>(::ethers::contract::Contract<M>);
+    impl<M> ::core::clone::Clone for StETHTarget4<M> {
         fn clone(&self) -> Self {
             Self(::core::clone::Clone::clone(&self.0))
         }
     }
-    impl<M> ::core::ops::Deref for StETHTarget3<M> {
+    impl<M> ::core::ops::Deref for StETHTarget4<M> {
         type Target = ::ethers::contract::Contract<M>;
         fn deref(&self) -> &Self::Target {
             &self.0
         }
     }
-    impl<M> ::core::ops::DerefMut for StETHTarget3<M> {
+    impl<M> ::core::ops::DerefMut for StETHTarget4<M> {
         fn deref_mut(&mut self) -> &mut Self::Target {
             &mut self.0
         }
     }
-    impl<M> ::core::fmt::Debug for StETHTarget3<M> {
+    impl<M> ::core::fmt::Debug for StETHTarget4<M> {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
-            f.debug_tuple(::core::stringify!(StETHTarget3))
+            f.debug_tuple(::core::stringify!(StETHTarget4))
                 .field(&self.address())
                 .finish()
         }
     }
-    impl<M: ::ethers::providers::Middleware> StETHTarget3<M> {
+    impl<M: ::ethers::providers::Middleware> StETHTarget4<M> {
         /// Creates a new contract instance with the specified `ethers` client at
         /// `address`. The contract derefs to a `ethers::Contract` object.
         pub fn new<T: Into<::ethers::core::types::Address>>(
@@ -1272,36 +1234,53 @@ pub mod st_eth_target_3 {
             Self(
                 ::ethers::contract::Contract::new(
                     address.into(),
-                    STETHTARGET3_ABI.clone(),
+                    STETHTARGET4_ABI.clone(),
                     client,
                 ),
             )
         }
-        ///Calls the contract's `addLiquidity` (0x4c2ac1d9) function
-        pub fn add_liquidity(
+        ///Calls the contract's `checkpoint` (0x414f826d) function
+        pub fn checkpoint(
             &self,
-            contribution: ::ethers::core::types::U256,
-            min_lp_share_price: ::ethers::core::types::U256,
-            min_apr: ::ethers::core::types::U256,
-            max_apr: ::ethers::core::types::U256,
+            checkpoint_time: ::ethers::core::types::U256,
+            max_iterations: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([65, 79, 130, 109], (checkpoint_time, max_iterations))
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `redeemWithdrawalShares` (0x074a6de9) function
+        pub fn redeem_withdrawal_shares(
+            &self,
+            withdrawal_shares: ::ethers::core::types::U256,
+            min_output_per_share: ::ethers::core::types::U256,
             options: Options,
-        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (::ethers::core::types::U256, ::ethers::core::types::U256),
+        > {
             self.0
                 .method_hash(
-                    [76, 42, 193, 217],
-                    (contribution, min_lp_share_price, min_apr, max_apr, options),
+                    [7, 74, 109, 233],
+                    (withdrawal_shares, min_output_per_share, options),
                 )
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `initialize` (0x77d05ff4) function
-        pub fn initialize(
+        ///Calls the contract's `removeLiquidity` (0xcbc13434) function
+        pub fn remove_liquidity(
             &self,
-            contribution: ::ethers::core::types::U256,
-            apr: ::ethers::core::types::U256,
+            lp_shares: ::ethers::core::types::U256,
+            min_output_per_share: ::ethers::core::types::U256,
             options: Options,
-        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            (::ethers::core::types::U256, ::ethers::core::types::U256),
+        > {
             self.0
-                .method_hash([119, 208, 95, 244], (contribution, apr, options))
+                .method_hash(
+                    [203, 193, 52, 52],
+                    (lp_shares, min_output_per_share, options),
+                )
                 .expect("method not found (this should never happen)")
         }
         ///Gets the contract's `AddLiquidity` event
@@ -1506,83 +1485,17 @@ pub mod st_eth_target_3 {
         ) -> ::ethers::contract::builders::Event<
             ::std::sync::Arc<M>,
             M,
-            StETHTarget3Events,
+            StETHTarget4Events,
         > {
             self.0.event_with_filter(::core::default::Default::default())
         }
     }
     impl<M: ::ethers::providers::Middleware> From<::ethers::contract::Contract<M>>
-    for StETHTarget3<M> {
+    for StETHTarget4<M> {
         fn from(contract: ::ethers::contract::Contract<M>) -> Self {
             Self::new(contract.address(), contract.client())
         }
     }
-    ///Custom Error type `BelowMinimumContribution` with signature `BelowMinimumContribution()` and selector `0xabed41c4`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(name = "BelowMinimumContribution", abi = "BelowMinimumContribution()")]
-    pub struct BelowMinimumContribution;
-    ///Custom Error type `CircuitBreakerTriggered` with signature `CircuitBreakerTriggered()` and selector `0x2a958098`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(name = "CircuitBreakerTriggered", abi = "CircuitBreakerTriggered()")]
-    pub struct CircuitBreakerTriggered;
-    ///Custom Error type `DecreasedPresentValueWhenAddingLiquidity` with signature `DecreasedPresentValueWhenAddingLiquidity()` and selector `0x309b2a42`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(
-        name = "DecreasedPresentValueWhenAddingLiquidity",
-        abi = "DecreasedPresentValueWhenAddingLiquidity()"
-    )]
-    pub struct DecreasedPresentValueWhenAddingLiquidity;
-    ///Custom Error type `DistributeExcessIdleFailed` with signature `DistributeExcessIdleFailed()` and selector `0x8bdf918d`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(
-        name = "DistributeExcessIdleFailed",
-        abi = "DistributeExcessIdleFailed()"
-    )]
-    pub struct DistributeExcessIdleFailed;
     ///Custom Error type `ExpInvalidExponent` with signature `ExpInvalidExponent()` and selector `0x73a2d6b1`
     #[derive(
         Clone,
@@ -1598,6 +1511,21 @@ pub mod st_eth_target_3 {
     )]
     #[etherror(name = "ExpInvalidExponent", abi = "ExpInvalidExponent()")]
     pub struct ExpInvalidExponent;
+    ///Custom Error type `InsufficientBalance` with signature `InsufficientBalance()` and selector `0xf4d678b8`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[etherror(name = "InsufficientBalance", abi = "InsufficientBalance()")]
+    pub struct InsufficientBalance;
     ///Custom Error type `InsufficientLiquidity` with signature `InsufficientLiquidity()` and selector `0xbb55fd27`
     #[derive(
         Clone,
@@ -1613,7 +1541,7 @@ pub mod st_eth_target_3 {
     )]
     #[etherror(name = "InsufficientLiquidity", abi = "InsufficientLiquidity()")]
     pub struct InsufficientLiquidity;
-    ///Custom Error type `InvalidApr` with signature `InvalidApr()` and selector `0x76c22a22`
+    ///Custom Error type `InvalidCheckpointTime` with signature `InvalidCheckpointTime()` and selector `0xecd29e81`
     #[derive(
         Clone,
         ::ethers::contract::EthError,
@@ -1626,26 +1554,8 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    #[etherror(name = "InvalidApr", abi = "InvalidApr()")]
-    pub struct InvalidApr;
-    ///Custom Error type `InvalidEffectiveShareReserves` with signature `InvalidEffectiveShareReserves()` and selector `0x85bd2ac4`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(
-        name = "InvalidEffectiveShareReserves",
-        abi = "InvalidEffectiveShareReserves()"
-    )]
-    pub struct InvalidEffectiveShareReserves;
+    #[etherror(name = "InvalidCheckpointTime", abi = "InvalidCheckpointTime()")]
+    pub struct InvalidCheckpointTime;
     ///Custom Error type `InvalidTimestamp` with signature `InvalidTimestamp()` and selector `0xb7d09497`
     #[derive(
         Clone,
@@ -1706,36 +1616,6 @@ pub mod st_eth_target_3 {
     )]
     #[etherror(name = "OutputLimit", abi = "OutputLimit()")]
     pub struct OutputLimit;
-    ///Custom Error type `PoolAlreadyInitialized` with signature `PoolAlreadyInitialized()` and selector `0x7983c051`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(name = "PoolAlreadyInitialized", abi = "PoolAlreadyInitialized()")]
-    pub struct PoolAlreadyInitialized;
-    ///Custom Error type `PoolIsPaused` with signature `PoolIsPaused()` and selector `0x21081abf`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(name = "PoolIsPaused", abi = "PoolIsPaused()")]
-    pub struct PoolIsPaused;
     ///Custom Error type `ReentrancyGuardReentrantCall` with signature `ReentrancyGuardReentrantCall()` and selector `0x3ee5aeb5`
     #[derive(
         Clone,
@@ -1769,21 +1649,6 @@ pub mod st_eth_target_3 {
     )]
     #[etherror(name = "RestrictedZeroAddress", abi = "RestrictedZeroAddress()")]
     pub struct RestrictedZeroAddress;
-    ///Custom Error type `TransferFailed` with signature `TransferFailed()` and selector `0x90b8ec18`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthError,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[etherror(name = "TransferFailed", abi = "TransferFailed()")]
-    pub struct TransferFailed;
     ///Custom Error type `UnsafeCastToInt128` with signature `UnsafeCastToInt128()` and selector `0xa5353be5`
     #[derive(
         Clone,
@@ -1844,7 +1709,7 @@ pub mod st_eth_target_3 {
     )]
     #[etherror(name = "UnsafeCastToUint128", abi = "UnsafeCastToUint128()")]
     pub struct UnsafeCastToUint128;
-    ///Custom Error type `UpdateLiquidityFailed` with signature `UpdateLiquidityFailed()` and selector `0x5044b7f5`
+    ///Custom Error type `UnsupportedToken` with signature `UnsupportedToken()` and selector `0x6a172882`
     #[derive(
         Clone,
         ::ethers::contract::EthError,
@@ -1857,8 +1722,8 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    #[etherror(name = "UpdateLiquidityFailed", abi = "UpdateLiquidityFailed()")]
-    pub struct UpdateLiquidityFailed;
+    #[etherror(name = "UnsupportedToken", abi = "UnsupportedToken()")]
+    pub struct UnsupportedToken;
     ///Container type for all of the contract's custom errors
     #[derive(
         Clone,
@@ -1870,36 +1735,27 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    pub enum StETHTarget3Errors {
-        BelowMinimumContribution(BelowMinimumContribution),
-        CircuitBreakerTriggered(CircuitBreakerTriggered),
-        DecreasedPresentValueWhenAddingLiquidity(
-            DecreasedPresentValueWhenAddingLiquidity,
-        ),
-        DistributeExcessIdleFailed(DistributeExcessIdleFailed),
+    pub enum StETHTarget4Errors {
         ExpInvalidExponent(ExpInvalidExponent),
+        InsufficientBalance(InsufficientBalance),
         InsufficientLiquidity(InsufficientLiquidity),
-        InvalidApr(InvalidApr),
-        InvalidEffectiveShareReserves(InvalidEffectiveShareReserves),
+        InvalidCheckpointTime(InvalidCheckpointTime),
         InvalidTimestamp(InvalidTimestamp),
         LnInvalidInput(LnInvalidInput),
         MinimumTransactionAmount(MinimumTransactionAmount),
         OutputLimit(OutputLimit),
-        PoolAlreadyInitialized(PoolAlreadyInitialized),
-        PoolIsPaused(PoolIsPaused),
         ReentrancyGuardReentrantCall(ReentrancyGuardReentrantCall),
         RestrictedZeroAddress(RestrictedZeroAddress),
-        TransferFailed(TransferFailed),
         UnsafeCastToInt128(UnsafeCastToInt128),
         UnsafeCastToInt256(UnsafeCastToInt256),
         UnsafeCastToUint112(UnsafeCastToUint112),
         UnsafeCastToUint128(UnsafeCastToUint128),
-        UpdateLiquidityFailed(UpdateLiquidityFailed),
+        UnsupportedToken(UnsupportedToken),
         /// The standard solidity revert string, with selector
         /// Error(string) -- 0x08c379a0
         RevertString(::std::string::String),
     }
-    impl ::ethers::core::abi::AbiDecode for StETHTarget3Errors {
+    impl ::ethers::core::abi::AbiDecode for StETHTarget4Errors {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
@@ -1909,45 +1765,25 @@ pub mod st_eth_target_3 {
             ) {
                 return Ok(Self::RevertString(decoded));
             }
-            if let Ok(decoded) = <BelowMinimumContribution as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::BelowMinimumContribution(decoded));
-            }
-            if let Ok(decoded) = <CircuitBreakerTriggered as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::CircuitBreakerTriggered(decoded));
-            }
-            if let Ok(decoded) = <DecreasedPresentValueWhenAddingLiquidity as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::DecreasedPresentValueWhenAddingLiquidity(decoded));
-            }
-            if let Ok(decoded) = <DistributeExcessIdleFailed as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::DistributeExcessIdleFailed(decoded));
-            }
             if let Ok(decoded) = <ExpInvalidExponent as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
                 return Ok(Self::ExpInvalidExponent(decoded));
+            }
+            if let Ok(decoded) = <InsufficientBalance as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::InsufficientBalance(decoded));
             }
             if let Ok(decoded) = <InsufficientLiquidity as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
                 return Ok(Self::InsufficientLiquidity(decoded));
             }
-            if let Ok(decoded) = <InvalidApr as ::ethers::core::abi::AbiDecode>::decode(
+            if let Ok(decoded) = <InvalidCheckpointTime as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
-                return Ok(Self::InvalidApr(decoded));
-            }
-            if let Ok(decoded) = <InvalidEffectiveShareReserves as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::InvalidEffectiveShareReserves(decoded));
+                return Ok(Self::InvalidCheckpointTime(decoded));
             }
             if let Ok(decoded) = <InvalidTimestamp as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -1969,16 +1805,6 @@ pub mod st_eth_target_3 {
             ) {
                 return Ok(Self::OutputLimit(decoded));
             }
-            if let Ok(decoded) = <PoolAlreadyInitialized as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::PoolAlreadyInitialized(decoded));
-            }
-            if let Ok(decoded) = <PoolIsPaused as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::PoolIsPaused(decoded));
-            }
             if let Ok(decoded) = <ReentrancyGuardReentrantCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -1988,11 +1814,6 @@ pub mod st_eth_target_3 {
                 data,
             ) {
                 return Ok(Self::RestrictedZeroAddress(decoded));
-            }
-            if let Ok(decoded) = <TransferFailed as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::TransferFailed(decoded));
             }
             if let Ok(decoded) = <UnsafeCastToInt128 as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -2014,39 +1835,27 @@ pub mod st_eth_target_3 {
             ) {
                 return Ok(Self::UnsafeCastToUint128(decoded));
             }
-            if let Ok(decoded) = <UpdateLiquidityFailed as ::ethers::core::abi::AbiDecode>::decode(
+            if let Ok(decoded) = <UnsupportedToken as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
-                return Ok(Self::UpdateLiquidityFailed(decoded));
+                return Ok(Self::UnsupportedToken(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for StETHTarget3Errors {
+    impl ::ethers::core::abi::AbiEncode for StETHTarget4Errors {
         fn encode(self) -> ::std::vec::Vec<u8> {
             match self {
-                Self::BelowMinimumContribution(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::CircuitBreakerTriggered(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::DecreasedPresentValueWhenAddingLiquidity(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::DistributeExcessIdleFailed(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::ExpInvalidExponent(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::InsufficientBalance(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::InsufficientLiquidity(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::InvalidApr(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::InvalidEffectiveShareReserves(element) => {
+                Self::InvalidCheckpointTime(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::InvalidTimestamp(element) => {
@@ -2061,19 +1870,10 @@ pub mod st_eth_target_3 {
                 Self::OutputLimit(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::PoolAlreadyInitialized(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::PoolIsPaused(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::ReentrancyGuardReentrantCall(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::RestrictedZeroAddress(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::TransferFailed(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::UnsafeCastToInt128(element) => {
@@ -2088,35 +1888,23 @@ pub mod st_eth_target_3 {
                 Self::UnsafeCastToUint128(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::UpdateLiquidityFailed(element) => {
+                Self::UnsupportedToken(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::RevertString(s) => ::ethers::core::abi::AbiEncode::encode(s),
             }
         }
     }
-    impl ::ethers::contract::ContractRevert for StETHTarget3Errors {
+    impl ::ethers::contract::ContractRevert for StETHTarget4Errors {
         fn valid_selector(selector: [u8; 4]) -> bool {
             match selector {
                 [0x08, 0xc3, 0x79, 0xa0] => true,
                 _ if selector
-                    == <BelowMinimumContribution as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
-                    == <CircuitBreakerTriggered as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
-                    == <DecreasedPresentValueWhenAddingLiquidity as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
-                    == <DistributeExcessIdleFailed as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
                     == <ExpInvalidExponent as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
+                    == <InsufficientBalance as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ if selector
@@ -2124,9 +1912,7 @@ pub mod st_eth_target_3 {
                     true
                 }
                 _ if selector
-                    == <InvalidApr as ::ethers::contract::EthError>::selector() => true,
-                _ if selector
-                    == <InvalidEffectiveShareReserves as ::ethers::contract::EthError>::selector() => {
+                    == <InvalidCheckpointTime as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ if selector
@@ -2144,21 +1930,11 @@ pub mod st_eth_target_3 {
                 _ if selector
                     == <OutputLimit as ::ethers::contract::EthError>::selector() => true,
                 _ if selector
-                    == <PoolAlreadyInitialized as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
-                    == <PoolIsPaused as ::ethers::contract::EthError>::selector() => true,
-                _ if selector
                     == <ReentrancyGuardReentrantCall as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ if selector
                     == <RestrictedZeroAddress as ::ethers::contract::EthError>::selector() => {
-                    true
-                }
-                _ if selector
-                    == <TransferFailed as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ if selector
@@ -2178,36 +1954,26 @@ pub mod st_eth_target_3 {
                     true
                 }
                 _ if selector
-                    == <UpdateLiquidityFailed as ::ethers::contract::EthError>::selector() => {
+                    == <UnsupportedToken as ::ethers::contract::EthError>::selector() => {
                     true
                 }
                 _ => false,
             }
         }
     }
-    impl ::core::fmt::Display for StETHTarget3Errors {
+    impl ::core::fmt::Display for StETHTarget4Errors {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                Self::BelowMinimumContribution(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::CircuitBreakerTriggered(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::DecreasedPresentValueWhenAddingLiquidity(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::DistributeExcessIdleFailed(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
                 Self::ExpInvalidExponent(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::InsufficientBalance(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::InsufficientLiquidity(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::InvalidApr(element) => ::core::fmt::Display::fmt(element, f),
-                Self::InvalidEffectiveShareReserves(element) => {
+                Self::InvalidCheckpointTime(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::InvalidTimestamp(element) => ::core::fmt::Display::fmt(element, f),
@@ -2216,17 +1982,12 @@ pub mod st_eth_target_3 {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::OutputLimit(element) => ::core::fmt::Display::fmt(element, f),
-                Self::PoolAlreadyInitialized(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::PoolIsPaused(element) => ::core::fmt::Display::fmt(element, f),
                 Self::ReentrancyGuardReentrantCall(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::RestrictedZeroAddress(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::TransferFailed(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UnsafeCastToInt128(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -2239,127 +2000,89 @@ pub mod st_eth_target_3 {
                 Self::UnsafeCastToUint128(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::UpdateLiquidityFailed(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
+                Self::UnsupportedToken(element) => ::core::fmt::Display::fmt(element, f),
                 Self::RevertString(s) => ::core::fmt::Display::fmt(s, f),
             }
         }
     }
-    impl ::core::convert::From<::std::string::String> for StETHTarget3Errors {
+    impl ::core::convert::From<::std::string::String> for StETHTarget4Errors {
         fn from(value: String) -> Self {
             Self::RevertString(value)
         }
     }
-    impl ::core::convert::From<BelowMinimumContribution> for StETHTarget3Errors {
-        fn from(value: BelowMinimumContribution) -> Self {
-            Self::BelowMinimumContribution(value)
-        }
-    }
-    impl ::core::convert::From<CircuitBreakerTriggered> for StETHTarget3Errors {
-        fn from(value: CircuitBreakerTriggered) -> Self {
-            Self::CircuitBreakerTriggered(value)
-        }
-    }
-    impl ::core::convert::From<DecreasedPresentValueWhenAddingLiquidity>
-    for StETHTarget3Errors {
-        fn from(value: DecreasedPresentValueWhenAddingLiquidity) -> Self {
-            Self::DecreasedPresentValueWhenAddingLiquidity(value)
-        }
-    }
-    impl ::core::convert::From<DistributeExcessIdleFailed> for StETHTarget3Errors {
-        fn from(value: DistributeExcessIdleFailed) -> Self {
-            Self::DistributeExcessIdleFailed(value)
-        }
-    }
-    impl ::core::convert::From<ExpInvalidExponent> for StETHTarget3Errors {
+    impl ::core::convert::From<ExpInvalidExponent> for StETHTarget4Errors {
         fn from(value: ExpInvalidExponent) -> Self {
             Self::ExpInvalidExponent(value)
         }
     }
-    impl ::core::convert::From<InsufficientLiquidity> for StETHTarget3Errors {
+    impl ::core::convert::From<InsufficientBalance> for StETHTarget4Errors {
+        fn from(value: InsufficientBalance) -> Self {
+            Self::InsufficientBalance(value)
+        }
+    }
+    impl ::core::convert::From<InsufficientLiquidity> for StETHTarget4Errors {
         fn from(value: InsufficientLiquidity) -> Self {
             Self::InsufficientLiquidity(value)
         }
     }
-    impl ::core::convert::From<InvalidApr> for StETHTarget3Errors {
-        fn from(value: InvalidApr) -> Self {
-            Self::InvalidApr(value)
+    impl ::core::convert::From<InvalidCheckpointTime> for StETHTarget4Errors {
+        fn from(value: InvalidCheckpointTime) -> Self {
+            Self::InvalidCheckpointTime(value)
         }
     }
-    impl ::core::convert::From<InvalidEffectiveShareReserves> for StETHTarget3Errors {
-        fn from(value: InvalidEffectiveShareReserves) -> Self {
-            Self::InvalidEffectiveShareReserves(value)
-        }
-    }
-    impl ::core::convert::From<InvalidTimestamp> for StETHTarget3Errors {
+    impl ::core::convert::From<InvalidTimestamp> for StETHTarget4Errors {
         fn from(value: InvalidTimestamp) -> Self {
             Self::InvalidTimestamp(value)
         }
     }
-    impl ::core::convert::From<LnInvalidInput> for StETHTarget3Errors {
+    impl ::core::convert::From<LnInvalidInput> for StETHTarget4Errors {
         fn from(value: LnInvalidInput) -> Self {
             Self::LnInvalidInput(value)
         }
     }
-    impl ::core::convert::From<MinimumTransactionAmount> for StETHTarget3Errors {
+    impl ::core::convert::From<MinimumTransactionAmount> for StETHTarget4Errors {
         fn from(value: MinimumTransactionAmount) -> Self {
             Self::MinimumTransactionAmount(value)
         }
     }
-    impl ::core::convert::From<OutputLimit> for StETHTarget3Errors {
+    impl ::core::convert::From<OutputLimit> for StETHTarget4Errors {
         fn from(value: OutputLimit) -> Self {
             Self::OutputLimit(value)
         }
     }
-    impl ::core::convert::From<PoolAlreadyInitialized> for StETHTarget3Errors {
-        fn from(value: PoolAlreadyInitialized) -> Self {
-            Self::PoolAlreadyInitialized(value)
-        }
-    }
-    impl ::core::convert::From<PoolIsPaused> for StETHTarget3Errors {
-        fn from(value: PoolIsPaused) -> Self {
-            Self::PoolIsPaused(value)
-        }
-    }
-    impl ::core::convert::From<ReentrancyGuardReentrantCall> for StETHTarget3Errors {
+    impl ::core::convert::From<ReentrancyGuardReentrantCall> for StETHTarget4Errors {
         fn from(value: ReentrancyGuardReentrantCall) -> Self {
             Self::ReentrancyGuardReentrantCall(value)
         }
     }
-    impl ::core::convert::From<RestrictedZeroAddress> for StETHTarget3Errors {
+    impl ::core::convert::From<RestrictedZeroAddress> for StETHTarget4Errors {
         fn from(value: RestrictedZeroAddress) -> Self {
             Self::RestrictedZeroAddress(value)
         }
     }
-    impl ::core::convert::From<TransferFailed> for StETHTarget3Errors {
-        fn from(value: TransferFailed) -> Self {
-            Self::TransferFailed(value)
-        }
-    }
-    impl ::core::convert::From<UnsafeCastToInt128> for StETHTarget3Errors {
+    impl ::core::convert::From<UnsafeCastToInt128> for StETHTarget4Errors {
         fn from(value: UnsafeCastToInt128) -> Self {
             Self::UnsafeCastToInt128(value)
         }
     }
-    impl ::core::convert::From<UnsafeCastToInt256> for StETHTarget3Errors {
+    impl ::core::convert::From<UnsafeCastToInt256> for StETHTarget4Errors {
         fn from(value: UnsafeCastToInt256) -> Self {
             Self::UnsafeCastToInt256(value)
         }
     }
-    impl ::core::convert::From<UnsafeCastToUint112> for StETHTarget3Errors {
+    impl ::core::convert::From<UnsafeCastToUint112> for StETHTarget4Errors {
         fn from(value: UnsafeCastToUint112) -> Self {
             Self::UnsafeCastToUint112(value)
         }
     }
-    impl ::core::convert::From<UnsafeCastToUint128> for StETHTarget3Errors {
+    impl ::core::convert::From<UnsafeCastToUint128> for StETHTarget4Errors {
         fn from(value: UnsafeCastToUint128) -> Self {
             Self::UnsafeCastToUint128(value)
         }
     }
-    impl ::core::convert::From<UpdateLiquidityFailed> for StETHTarget3Errors {
-        fn from(value: UpdateLiquidityFailed) -> Self {
-            Self::UpdateLiquidityFailed(value)
+    impl ::core::convert::From<UnsupportedToken> for StETHTarget4Errors {
+        fn from(value: UnsupportedToken) -> Self {
+            Self::UnsupportedToken(value)
         }
     }
     #[derive(
@@ -2837,7 +2560,7 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    pub enum StETHTarget3Events {
+    pub enum StETHTarget4Events {
         AddLiquidityFilter(AddLiquidityFilter),
         ApprovalFilter(ApprovalFilter),
         ApprovalForAllFilter(ApprovalForAllFilter),
@@ -2859,74 +2582,74 @@ pub mod st_eth_target_3 {
         SweepCollectorUpdatedFilter(SweepCollectorUpdatedFilter),
         TransferSingleFilter(TransferSingleFilter),
     }
-    impl ::ethers::contract::EthLogDecode for StETHTarget3Events {
+    impl ::ethers::contract::EthLogDecode for StETHTarget4Events {
         fn decode_log(
             log: &::ethers::core::abi::RawLog,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::Error> {
             if let Ok(decoded) = AddLiquidityFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::AddLiquidityFilter(decoded));
+                return Ok(StETHTarget4Events::AddLiquidityFilter(decoded));
             }
             if let Ok(decoded) = ApprovalFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::ApprovalFilter(decoded));
+                return Ok(StETHTarget4Events::ApprovalFilter(decoded));
             }
             if let Ok(decoded) = ApprovalForAllFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::ApprovalForAllFilter(decoded));
+                return Ok(StETHTarget4Events::ApprovalForAllFilter(decoded));
             }
             if let Ok(decoded) = CheckpointRewarderUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::CheckpointRewarderUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::CheckpointRewarderUpdatedFilter(decoded));
             }
             if let Ok(decoded) = CloseLongFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::CloseLongFilter(decoded));
+                return Ok(StETHTarget4Events::CloseLongFilter(decoded));
             }
             if let Ok(decoded) = CloseShortFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::CloseShortFilter(decoded));
+                return Ok(StETHTarget4Events::CloseShortFilter(decoded));
             }
             if let Ok(decoded) = CollectGovernanceFeeFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::CollectGovernanceFeeFilter(decoded));
+                return Ok(StETHTarget4Events::CollectGovernanceFeeFilter(decoded));
             }
             if let Ok(decoded) = CreateCheckpointFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::CreateCheckpointFilter(decoded));
+                return Ok(StETHTarget4Events::CreateCheckpointFilter(decoded));
             }
             if let Ok(decoded) = FeeCollectorUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::FeeCollectorUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::FeeCollectorUpdatedFilter(decoded));
             }
             if let Ok(decoded) = GovernanceUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::GovernanceUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::GovernanceUpdatedFilter(decoded));
             }
             if let Ok(decoded) = InitializeFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::InitializeFilter(decoded));
+                return Ok(StETHTarget4Events::InitializeFilter(decoded));
             }
             if let Ok(decoded) = OpenLongFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::OpenLongFilter(decoded));
+                return Ok(StETHTarget4Events::OpenLongFilter(decoded));
             }
             if let Ok(decoded) = OpenShortFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::OpenShortFilter(decoded));
+                return Ok(StETHTarget4Events::OpenShortFilter(decoded));
             }
             if let Ok(decoded) = PauseStatusUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::PauseStatusUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::PauseStatusUpdatedFilter(decoded));
             }
             if let Ok(decoded) = PauserUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::PauserUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::PauserUpdatedFilter(decoded));
             }
             if let Ok(decoded) = RedeemWithdrawalSharesFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::RedeemWithdrawalSharesFilter(decoded));
+                return Ok(StETHTarget4Events::RedeemWithdrawalSharesFilter(decoded));
             }
             if let Ok(decoded) = RemoveLiquidityFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::RemoveLiquidityFilter(decoded));
+                return Ok(StETHTarget4Events::RemoveLiquidityFilter(decoded));
             }
             if let Ok(decoded) = SweepFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::SweepFilter(decoded));
+                return Ok(StETHTarget4Events::SweepFilter(decoded));
             }
             if let Ok(decoded) = SweepCollectorUpdatedFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::SweepCollectorUpdatedFilter(decoded));
+                return Ok(StETHTarget4Events::SweepCollectorUpdatedFilter(decoded));
             }
             if let Ok(decoded) = TransferSingleFilter::decode_log(log) {
-                return Ok(StETHTarget3Events::TransferSingleFilter(decoded));
+                return Ok(StETHTarget4Events::TransferSingleFilter(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData)
         }
     }
-    impl ::core::fmt::Display for StETHTarget3Events {
+    impl ::core::fmt::Display for StETHTarget4Events {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
                 Self::AddLiquidityFilter(element) => {
@@ -2978,107 +2701,125 @@ pub mod st_eth_target_3 {
             }
         }
     }
-    impl ::core::convert::From<AddLiquidityFilter> for StETHTarget3Events {
+    impl ::core::convert::From<AddLiquidityFilter> for StETHTarget4Events {
         fn from(value: AddLiquidityFilter) -> Self {
             Self::AddLiquidityFilter(value)
         }
     }
-    impl ::core::convert::From<ApprovalFilter> for StETHTarget3Events {
+    impl ::core::convert::From<ApprovalFilter> for StETHTarget4Events {
         fn from(value: ApprovalFilter) -> Self {
             Self::ApprovalFilter(value)
         }
     }
-    impl ::core::convert::From<ApprovalForAllFilter> for StETHTarget3Events {
+    impl ::core::convert::From<ApprovalForAllFilter> for StETHTarget4Events {
         fn from(value: ApprovalForAllFilter) -> Self {
             Self::ApprovalForAllFilter(value)
         }
     }
-    impl ::core::convert::From<CheckpointRewarderUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<CheckpointRewarderUpdatedFilter> for StETHTarget4Events {
         fn from(value: CheckpointRewarderUpdatedFilter) -> Self {
             Self::CheckpointRewarderUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<CloseLongFilter> for StETHTarget3Events {
+    impl ::core::convert::From<CloseLongFilter> for StETHTarget4Events {
         fn from(value: CloseLongFilter) -> Self {
             Self::CloseLongFilter(value)
         }
     }
-    impl ::core::convert::From<CloseShortFilter> for StETHTarget3Events {
+    impl ::core::convert::From<CloseShortFilter> for StETHTarget4Events {
         fn from(value: CloseShortFilter) -> Self {
             Self::CloseShortFilter(value)
         }
     }
-    impl ::core::convert::From<CollectGovernanceFeeFilter> for StETHTarget3Events {
+    impl ::core::convert::From<CollectGovernanceFeeFilter> for StETHTarget4Events {
         fn from(value: CollectGovernanceFeeFilter) -> Self {
             Self::CollectGovernanceFeeFilter(value)
         }
     }
-    impl ::core::convert::From<CreateCheckpointFilter> for StETHTarget3Events {
+    impl ::core::convert::From<CreateCheckpointFilter> for StETHTarget4Events {
         fn from(value: CreateCheckpointFilter) -> Self {
             Self::CreateCheckpointFilter(value)
         }
     }
-    impl ::core::convert::From<FeeCollectorUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<FeeCollectorUpdatedFilter> for StETHTarget4Events {
         fn from(value: FeeCollectorUpdatedFilter) -> Self {
             Self::FeeCollectorUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<GovernanceUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<GovernanceUpdatedFilter> for StETHTarget4Events {
         fn from(value: GovernanceUpdatedFilter) -> Self {
             Self::GovernanceUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<InitializeFilter> for StETHTarget3Events {
+    impl ::core::convert::From<InitializeFilter> for StETHTarget4Events {
         fn from(value: InitializeFilter) -> Self {
             Self::InitializeFilter(value)
         }
     }
-    impl ::core::convert::From<OpenLongFilter> for StETHTarget3Events {
+    impl ::core::convert::From<OpenLongFilter> for StETHTarget4Events {
         fn from(value: OpenLongFilter) -> Self {
             Self::OpenLongFilter(value)
         }
     }
-    impl ::core::convert::From<OpenShortFilter> for StETHTarget3Events {
+    impl ::core::convert::From<OpenShortFilter> for StETHTarget4Events {
         fn from(value: OpenShortFilter) -> Self {
             Self::OpenShortFilter(value)
         }
     }
-    impl ::core::convert::From<PauseStatusUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<PauseStatusUpdatedFilter> for StETHTarget4Events {
         fn from(value: PauseStatusUpdatedFilter) -> Self {
             Self::PauseStatusUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<PauserUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<PauserUpdatedFilter> for StETHTarget4Events {
         fn from(value: PauserUpdatedFilter) -> Self {
             Self::PauserUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<RedeemWithdrawalSharesFilter> for StETHTarget3Events {
+    impl ::core::convert::From<RedeemWithdrawalSharesFilter> for StETHTarget4Events {
         fn from(value: RedeemWithdrawalSharesFilter) -> Self {
             Self::RedeemWithdrawalSharesFilter(value)
         }
     }
-    impl ::core::convert::From<RemoveLiquidityFilter> for StETHTarget3Events {
+    impl ::core::convert::From<RemoveLiquidityFilter> for StETHTarget4Events {
         fn from(value: RemoveLiquidityFilter) -> Self {
             Self::RemoveLiquidityFilter(value)
         }
     }
-    impl ::core::convert::From<SweepFilter> for StETHTarget3Events {
+    impl ::core::convert::From<SweepFilter> for StETHTarget4Events {
         fn from(value: SweepFilter) -> Self {
             Self::SweepFilter(value)
         }
     }
-    impl ::core::convert::From<SweepCollectorUpdatedFilter> for StETHTarget3Events {
+    impl ::core::convert::From<SweepCollectorUpdatedFilter> for StETHTarget4Events {
         fn from(value: SweepCollectorUpdatedFilter) -> Self {
             Self::SweepCollectorUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<TransferSingleFilter> for StETHTarget3Events {
+    impl ::core::convert::From<TransferSingleFilter> for StETHTarget4Events {
         fn from(value: TransferSingleFilter) -> Self {
             Self::TransferSingleFilter(value)
         }
     }
-    ///Container type for all input parameters for the `addLiquidity` function with signature `addLiquidity(uint256,uint256,uint256,uint256,(address,bool,bytes))` and selector `0x4c2ac1d9`
+    ///Container type for all input parameters for the `checkpoint` function with signature `checkpoint(uint256,uint256)` and selector `0x414f826d`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "checkpoint", abi = "checkpoint(uint256,uint256)")]
+    pub struct CheckpointCall {
+        pub checkpoint_time: ::ethers::core::types::U256,
+        pub max_iterations: ::ethers::core::types::U256,
+    }
+    ///Container type for all input parameters for the `redeemWithdrawalShares` function with signature `redeemWithdrawalShares(uint256,uint256,(address,bool,bytes))` and selector `0x074a6de9`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -3092,17 +2833,15 @@ pub mod st_eth_target_3 {
         Hash
     )]
     #[ethcall(
-        name = "addLiquidity",
-        abi = "addLiquidity(uint256,uint256,uint256,uint256,(address,bool,bytes))"
+        name = "redeemWithdrawalShares",
+        abi = "redeemWithdrawalShares(uint256,uint256,(address,bool,bytes))"
     )]
-    pub struct AddLiquidityCall {
-        pub contribution: ::ethers::core::types::U256,
-        pub min_lp_share_price: ::ethers::core::types::U256,
-        pub min_apr: ::ethers::core::types::U256,
-        pub max_apr: ::ethers::core::types::U256,
+    pub struct RedeemWithdrawalSharesCall {
+        pub withdrawal_shares: ::ethers::core::types::U256,
+        pub min_output_per_share: ::ethers::core::types::U256,
         pub options: Options,
     }
-    ///Container type for all input parameters for the `initialize` function with signature `initialize(uint256,uint256,(address,bool,bytes))` and selector `0x77d05ff4`
+    ///Container type for all input parameters for the `removeLiquidity` function with signature `removeLiquidity(uint256,uint256,(address,bool,bytes))` and selector `0xcbc13434`
     #[derive(
         Clone,
         ::ethers::contract::EthCall,
@@ -3116,12 +2855,12 @@ pub mod st_eth_target_3 {
         Hash
     )]
     #[ethcall(
-        name = "initialize",
-        abi = "initialize(uint256,uint256,(address,bool,bytes))"
+        name = "removeLiquidity",
+        abi = "removeLiquidity(uint256,uint256,(address,bool,bytes))"
     )]
-    pub struct InitializeCall {
-        pub contribution: ::ethers::core::types::U256,
-        pub apr: ::ethers::core::types::U256,
+    pub struct RemoveLiquidityCall {
+        pub lp_shares: ::ethers::core::types::U256,
+        pub min_output_per_share: ::ethers::core::types::U256,
         pub options: Options,
     }
     ///Container type for all of the contract's call
@@ -3135,59 +2874,76 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    pub enum StETHTarget3Calls {
-        AddLiquidity(AddLiquidityCall),
-        Initialize(InitializeCall),
+    pub enum StETHTarget4Calls {
+        Checkpoint(CheckpointCall),
+        RedeemWithdrawalShares(RedeemWithdrawalSharesCall),
+        RemoveLiquidity(RemoveLiquidityCall),
     }
-    impl ::ethers::core::abi::AbiDecode for StETHTarget3Calls {
+    impl ::ethers::core::abi::AbiDecode for StETHTarget4Calls {
         fn decode(
             data: impl AsRef<[u8]>,
         ) -> ::core::result::Result<Self, ::ethers::core::abi::AbiError> {
             let data = data.as_ref();
-            if let Ok(decoded) = <AddLiquidityCall as ::ethers::core::abi::AbiDecode>::decode(
+            if let Ok(decoded) = <CheckpointCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
-                return Ok(Self::AddLiquidity(decoded));
+                return Ok(Self::Checkpoint(decoded));
             }
-            if let Ok(decoded) = <InitializeCall as ::ethers::core::abi::AbiDecode>::decode(
+            if let Ok(decoded) = <RedeemWithdrawalSharesCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
-                return Ok(Self::Initialize(decoded));
+                return Ok(Self::RedeemWithdrawalShares(decoded));
+            }
+            if let Ok(decoded) = <RemoveLiquidityCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::RemoveLiquidity(decoded));
             }
             Err(::ethers::core::abi::Error::InvalidData.into())
         }
     }
-    impl ::ethers::core::abi::AbiEncode for StETHTarget3Calls {
+    impl ::ethers::core::abi::AbiEncode for StETHTarget4Calls {
         fn encode(self) -> Vec<u8> {
             match self {
-                Self::AddLiquidity(element) => {
+                Self::Checkpoint(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::Initialize(element) => {
+                Self::RedeemWithdrawalShares(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::RemoveLiquidity(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
             }
         }
     }
-    impl ::core::fmt::Display for StETHTarget3Calls {
+    impl ::core::fmt::Display for StETHTarget4Calls {
         fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
             match self {
-                Self::AddLiquidity(element) => ::core::fmt::Display::fmt(element, f),
-                Self::Initialize(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Checkpoint(element) => ::core::fmt::Display::fmt(element, f),
+                Self::RedeemWithdrawalShares(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::RemoveLiquidity(element) => ::core::fmt::Display::fmt(element, f),
             }
         }
     }
-    impl ::core::convert::From<AddLiquidityCall> for StETHTarget3Calls {
-        fn from(value: AddLiquidityCall) -> Self {
-            Self::AddLiquidity(value)
+    impl ::core::convert::From<CheckpointCall> for StETHTarget4Calls {
+        fn from(value: CheckpointCall) -> Self {
+            Self::Checkpoint(value)
         }
     }
-    impl ::core::convert::From<InitializeCall> for StETHTarget3Calls {
-        fn from(value: InitializeCall) -> Self {
-            Self::Initialize(value)
+    impl ::core::convert::From<RedeemWithdrawalSharesCall> for StETHTarget4Calls {
+        fn from(value: RedeemWithdrawalSharesCall) -> Self {
+            Self::RedeemWithdrawalShares(value)
         }
     }
-    ///Container type for all return fields from the `addLiquidity` function with signature `addLiquidity(uint256,uint256,uint256,uint256,(address,bool,bytes))` and selector `0x4c2ac1d9`
+    impl ::core::convert::From<RemoveLiquidityCall> for StETHTarget4Calls {
+        fn from(value: RemoveLiquidityCall) -> Self {
+            Self::RemoveLiquidity(value)
+        }
+    }
+    ///Container type for all return fields from the `redeemWithdrawalShares` function with signature `redeemWithdrawalShares(uint256,uint256,(address,bool,bytes))` and selector `0x074a6de9`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -3200,8 +2956,11 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    pub struct AddLiquidityReturn(pub ::ethers::core::types::U256);
-    ///Container type for all return fields from the `initialize` function with signature `initialize(uint256,uint256,(address,bool,bytes))` and selector `0x77d05ff4`
+    pub struct RedeemWithdrawalSharesReturn(
+        pub ::ethers::core::types::U256,
+        pub ::ethers::core::types::U256,
+    );
+    ///Container type for all return fields from the `removeLiquidity` function with signature `removeLiquidity(uint256,uint256,(address,bool,bytes))` and selector `0xcbc13434`
     #[derive(
         Clone,
         ::ethers::contract::EthAbiType,
@@ -3214,7 +2973,10 @@ pub mod st_eth_target_3 {
         Eq,
         Hash
     )]
-    pub struct InitializeReturn(pub ::ethers::core::types::U256);
+    pub struct RemoveLiquidityReturn(
+        pub ::ethers::core::types::U256,
+        pub ::ethers::core::types::U256,
+    );
     ///`Fees(uint256,uint256,uint256,uint256)`
     #[derive(
         Clone,
@@ -3285,22 +3047,22 @@ pub mod st_eth_target_3 {
     }
 }
 
-pub struct StETHTarget3Libs {
+pub struct StETHTarget4Libs {
     pub lp_math: ::ethers::types::Address,
 }
 
-impl<M: ::ethers::providers::Middleware> StETHTarget3<M> {
+impl<M: ::ethers::providers::Middleware> StETHTarget4<M> {
     pub fn link_and_deploy<T: ::ethers::core::abi::Tokenize>(
         client: ::std::sync::Arc<M>,
         constructor_args: T,
-        libs: StETHTarget3Libs,
+        libs: StETHTarget4Libs,
     ) -> ::core::result::Result<
         ::ethers::contract::builders::ContractDeployer<M, Self>,
         ::ethers::contract::ContractError<M>,
     > {
         let factory = crate::linked_factory::create(
-            STETHTARGET3_ABI.clone(),
-            "0x6102606040523480156200001257600080fd5b5060405162003ee338038062003ee3833981016040819052620000359162000202565b600160005580516001600160a01b039081166080908152602080840151831660a0908152918401516101a0908152918401516101c090815260c0808601516101e090815260e0808801516102005261012080890151909352610100808901519091526101408089015190915290870180515190925281519093015190925281516040908101516101609081529251606090810151610180908152918701518616610220528601516102405291850151600980546001600160a01b031990811692871692909217905591850151600a8054841691861691909117905591840151600b80548316918516919091179055920151600c8054909316911617905562000315565b60405161020081016001600160401b03811182821017156200016a57634e487b7160e01b600052604160045260246000fd5b60405290565b80516001600160a01b03811681146200018857600080fd5b919050565b600060808284031215620001a057600080fd5b604051608081016001600160401b0381118282101715620001d157634e487b7160e01b600052604160045260246000fd5b8060405250809150825181526020830151602082015260408301516040820152606083015160608201525092915050565b600061026082840312156200021657600080fd5b6200022062000138565b6200022b8362000170565b81526200023b6020840162000170565b60208201526200024e6040840162000170565b6040820152606083015160608201526080830151608082015260a083015160a082015260c083015160c082015260e083015160e0820152610100808401518183015250610120808401518183015250610140808401518183015250610160620002b981850162000170565b90820152610180620002cd84820162000170565b908201526101a0620002e184820162000170565b908201526101c0620002f584820162000170565b908201526101e06200030a858583016200018d565b908201529392505050565b60805160a05160c05160e05161010051610120516101405161016051610180516101a0516101c0516101e051610200516102205161024051613a06620004dd6000396000505060005050600081816102fb0152818161032a015261035701526000818160d6015281816105a1015261166801526000818161084601528181610931015281816109c401528181610acd015281816115390152818161164201528181612096015281816120f9015281816129d801528181612d430152612d7f015260008181610137015281816108b601528181610e76015281816113fd01528181611461015281816114a8015261161c01526000611c9b015260008181611df60152612fd801526000818161103a0152611dca01526000612f8e0152600081816101790152818161090901528181610e97015281816113cd01528181611431015281816114c9015261168e01526000818161015801528181610230015281816102d0015281816106eb015281816108e301528181610f72015261296e01526000818161028f01528181610d3501528181610db001528181610e2601528181610ef20152610f2a01526000818161194d015281816119e90152612bd1015260005050613a066000f3fe6080604052600436106100295760003560e01c80634c2ac1d91461002e57806377d05ff414610053575b600080fd5b61004161003c36600461349c565b610066565b60405190815260200160405180910390f35b610041610061366004613500565b610081565b60006100758686868686610098565b90505b95945050505050565b600061008e8484846107f8565b90505b9392505050565b60006100a2610ba9565b600654610100900460ff16156100cb576040516321081abf60e01b815260040160405180910390fd5b6100d482610bd3565b7f00000000000000000000000000000000000000000000000000000000000000008610156101155760405163211ddda360e11b815260040160405180910390fd5b600061019d610122610c0c565b600254600160801b90046001600160801b03167f00000000000000000000000000000000000000000000000000000000000000007f00000000000000000000000000000000000000000000000000000000000000007f0000000000000000000000000000000000000000000000000000000000000000610c32565b9050848110806101ac57508381115b156101ca57604051633b61151160e11b815260040160405180910390fd5b6000806101d78986610c58565b9150915060006101e5610d2d565b90506101f5818360046001610d59565b50600254600454600354600092839261025f926001600160801b0380841693600f9390930b92600160801b900481169189911661025a6102557f00000000000000000000000000000000000000000000000000000000000000008b613566565b611350565b61139a565b915091508061028157604051630552b01360e31b815260040160405180910390fd5b8b60006102f46008826102b47f000000000000000000000000000000000000000000000000000000000000000089613579565b81526020810191909152604001600020546001600160801b03167f00000000000000000000000000000000000000000000000000000000000000006115a7565b90506103207f000000000000000000000000000000000000000000000000000000000000000082613566565b88118061037f57507f00000000000000000000000000000000000000000000000000000000000000008111801561037f575061037c7f000000000000000000000000000000000000000000000000000000000000000082613579565b88105b1561039d57604051630552b01360e31b815260040160405180910390fd5b50600754600360f81b600090815260106020527fd6f7110f7a6485ce27c724322bdc9b60c9b2518194eace178d55653f1be730215490916103e9916001600160801b0390911690613579565b600080805260106020527f6e0956cda88cad152e89927e53611735b61a5c762d1428573c6931b0a5efcb015491925090610424908390613566565b905060008060006104348a6115d3565b604051635f9d50ab60e11b815290915073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__9063bf3aa1569061046e90849060040161360a565b602060405180830381865af415801561048b573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906104af9190613619565b91506104c26104bd8c61170d565b61173b565b6002546001600160801b03808216835260048054600f0b6020850152600160801b9092041660408084019190915251635f9d50ab60e11b815273__$2b4fa6f02a36eedfe41c65e8dd342257d3$__9163bf3aa156916105239185910161360a565b602060405180830381865af4158015610540573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906105649190613619565b9250818310156105875760405163184d952160e11b815260040160405180910390fd5b61059d84836105968187613579565b9190611761565b9c507f00000000000000000000000000000000000000000000000000000000000000008d10156105e05760405163211ddda360e11b815260040160405180910390fd5b508f6105ec868e61177f565b101561060b5760405163c972651760e01b815260040160405180910390fd5b61062960008e60000160208101906106239190613632565b8e611794565b6106328961183c565b95508561065257604051638bdf918d60e01b815260040160405180910390fd5b600088905060008d9050368f905060008c90506000610715600260000160009054906101000a90046001600160801b03166001600160801b03166002800160009054906101000a9004600f0b600f0b600260000160109054906101000a90046001600160801b03166001600160801b031685600260010160009054906101000a90046001600160801b03166001600160801b031661025a7f00000000000000000000000000000000000000000000000000000000000000008c6102559190613566565b9b5090508a158061072f575061072c8c6000611849565b81125b1561074d57604051630552b01360e31b815260040160405180910390fd5b600088156107655761076087848b611761565b610768565b60005b90506107776020850185613632565b6001600160a01b03167fdcc4a01cea4510bd52201cebc8cd2d47d60429b35d68329abc591a70aa2efabf868d866107b460408a0160208b01613669565b866107c260408c018c613686565b6040516107d597969594939291906136cd565b60405180910390a250505050505050505050505050505050506100786001600055565b6000610802610ba9565b61080b82610bd3565b60065460ff161561082f57604051637983c05160e01b815260040160405180910390fd5b60008061083c8685610c58565b909250905061086c7f00000000000000000000000000000000000000000000000000000000000000006002613721565b82101561088c57604051632afb507160e21b815260040160405180910390fd5b6006805460ff1916600117905560405163594f0e8f60e11b815260048101839052602481018290527f00000000000000000000000000000000000000000000000000000000000000006044820152606481018690527f000000000000000000000000000000000000000000000000000000000000000060848201527f000000000000000000000000000000000000000000000000000000000000000060a482015260027f000000000000000000000000000000000000000000000000000000000000000002830393506000908190819073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__9063b29e1d1e9060c401606060405180830381865af4158015610998573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906109bc9190613738565b9250925092507f00000000000000000000000000000000000000000000000000000000000000006109ed848461185e565b1015610a0c5760405163216f4ab160e21b815260040160405180910390fd5b600080610a1e8585858960008061139a565b91509150801580610a2f5750600082125b15610a4d57604051630552b01360e31b815260040160405180910390fd5b610a5685611884565b600280546001600160801b0319166001600160801b0392909216919091179055610a7f846118ae565b600480546001600160801b0319166001600160801b0392909216919091179055610aa883611884565b600280546001600160801b03928316600160801b029216919091179055610af16000807f0000000000000000000000000000000000000000000000000000000000000000611794565b610b096000610b0360208c018c613632565b8a611794565b610b1e610b14610d2d565b8760046001610d59565b508a8a8a610b2f6020820182613632565b6001600160a01b03167f4931b9953a65531203c17d9abe77870a3e49d8b13af522ec3321c18b5abb8af38c858c610b6c6040870160208801613669565b87610b7a6040890189613686565b604051610b8d97969594939291906136cd565b60405180910390a2505050505050505050506100916001600055565b600260005403610bcc57604051633ee5aeb560e01b815260040160405180910390fd5b6002600055565b6000610be26020830183613632565b6001600160a01b031603610c095760405163f0dd15fd60e01b815260040160405180910390fd5b50565b600254600454600091610c2d916001600160801b0390911690600f0b61185e565b905090565b600080610c41878787866118ea565b9050610c4d81856115a7565b979650505050505050565b81600080610c6c6040850160208601613669565b15610c9157610c8785610c826040870187613686565b611901565b9093509050610ca9565b5034610ca985610ca46040870187613686565b6119c7565b610cb1611a64565b91508015610d2457604051600090339083908381818185875af1925050503d8060008114610cfb576040519150601f19603f3d011682016040523d82523d6000602084013e610d00565b606091505b5050905080610d22576040516312171d8360e31b815260040160405180910390fd5b505b505b9250929050565b6000610c2d427f0000000000000000000000000000000000000000000000000000000000000000611a77565b600084815260086020526040812060018101546001600160801b0316151580610d8157504286115b15610d9a57600101546001600160801b03169050611348565b6000806000610da7610d2d565b90506000610dd57f00000000000000000000000000000000000000000000000000000000000000008b613566565b90505b81811015610e4b576000818152600860205260409020600101546001600160801b03168015610e23576000828152600860205260409020549094506001600160801b03169250610e4b565b507f000000000000000000000000000000000000000000000000000000000000000001610dd8565b83600003610ebe57889350610ebb610e61610c0c565b600254600160801b90046001600160801b03167f00000000000000000000000000000000000000000000000000000000000000007f00000000000000000000000000000000000000000000000000000000000000006118ea565b92505b50610ec883611884565b6001850180546001600160801b0319166001600160801b0392909216919091179055610f1e610f177f00000000000000000000000000000000000000000000000000000000000000008b613579565b8a84611a8d565b610f5c89610f56610f4f7f000000000000000000000000000000000000000000000000000000000000000083613566565b4290611bcb565b84611a8d565b610f6588611bda565b5060009050600881610f977f00000000000000000000000000000000000000000000000000000000000000008d613579565b815260208101919091526040016000908120600101546001600160801b03169150610fc360028c611d7e565b6000818152601060205260408120549192508c8c83156111095760019250600080610ff286898d866000611db3565b9150915080600d60008282546110089190613566565b9091555061102490508660008461101e8161170d565b88611e82565b61102e8183613566565b915061105e86838a8e877f0000000000000000000000000000000000000000000000000000000000000000611ffc565b915061107261106d8385612040565b612055565b600680546002906110939084906201000090046001600160701b0316613766565b92506101000a8154816001600160701b0302191690836001600160701b031602179055506110c082611884565b600680546010906110e2908490600160801b90046001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555050505b6000611116600184611d7e565b60008181526010602052604090205490915080156112255760019450600080611143838b8f886001611db3565b9150915080600d60008282546111599190613566565b9091555061117590508360008461116f8161170d565b8a61207f565b61117f8183613579565b915061118e61106d8387612040565b600680546002906111af9084906201000090046001600160701b0316613766565b92506101000a8154816001600160701b0302191690836001600160701b031602179055506111dc82611884565b600680546010906111fe908490600160801b90046001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555050505b841561125f576112516112378761170d565b6112408361170d565b61124a91906137a6565b6000612270565b8e61125c84826122af565b50505b600061126a846124a9565b50604080518e815260208101879052908101899052606081018490526080810182905290915085907fff888cf98d2696e95c8c39aa98c9ad55a5378008f7a56614c9353b7137a57ab79060a00160405180910390a2600c546001600160a01b031615611338578e6113345a604051336024820152604481018990528315156064820152600090819060840160408051601f198184030181529190526020810180516001600160e01b0316633488a6a760e11b179052600c546001600160a01b0316939291906125f5565b5050505b50999b5050505050505050505050505b949350505050565b600061137860106000611364600286611d7e565b81526020019081526020016000205461170d565b61138a60106000611364600187611d7e565b61139491906137a6565b92915050565b6000806000806113aa8a8a612682565b91509150806113c15760008093509350505061159c565b6000611421838a6113fa7f0000000000000000000000000000000000000000000000000000000000000000670de0b6b3a7640000613579565b8b7f00000000000000000000000000000000000000000000000000000000000000006126be565b5090506000611485848b8461145e7f0000000000000000000000000000000000000000000000000000000000000000670de0b6b3a7640000613579565b8d7f000000000000000000000000000000000000000000000000000000000000000061277b565b509050811580611493575080155b1561149f575060009050805b60006114ed858c7f00000000000000000000000000000000000000000000000000000000000000007f00000000000000000000000000000000000000000000000000000000000000006118ea565b90506114fb83838c84612839565b509093506000905061150d848f613566565b9050600061152e8b8b61151f8761170d565b611529908e6137c6565b612885565b90508b61156361155e7f0000000000000000000000000000000000000000000000000000000000000000836128ec565b61170d565b61156c8361170d565b61157961155e8685612040565b61158391906137a6565b61158d91906137a6565b60019950995050505050505050505b965096945050505050565b60006100916115bb84846301e133806128fd565b6115cd85670de0b6b3a7640000613579565b9061177f565b6115db6133d7565b60408051610180810182526002546001600160801b038082168352600454600f0b6020840152600160801b91829004811693830193909352606082018590527f000000000000000000000000000000000000000000000000000000000000000060808301527f000000000000000000000000000000000000000000000000000000000000000060a08301527f000000000000000000000000000000000000000000000000000000000000000060c08301527f000000000000000000000000000000000000000000000000000000000000000060e083015260035404821661010082015260055490916101208301916116d39116612923565b81526004546001600160801b03600160801b918290048116602084015260055460409093019261170592900416612923565b905292915050565b60006001600160ff1b038211156117375760405163396ea70160e11b815260040160405180910390fd5b5090565b61174481612992565b610c0957604051635044b7f560e01b815260040160405180910390fd5b600082600019048411830215820261177857600080fd5b5091020490565b600061009183670de0b6b3a764000084611761565b6000838152600f602090815260408083206001600160a01b0386168452909152812080548392906117c6908490613566565b9091555050600083815260106020526040812080548392906117e9908490613566565b909155505060408051848152602081018390526001600160a01b0384169160009133917fc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f62910160405180910390a4505050565b60006113948260046122af565b60008183136118585782610091565b50919050565b60008061186b8484612682565b90925090508061187d5761187d612b2a565b5092915050565b60006001600160801b0382111561173757604051630f0af95160e11b815260040160405180910390fd5b600060016001607f1b03198212806118cc575060016001607f1b0382135b156117375760405163a5353be560e01b815260040160405180910390fd5b6000610078826118fb858888611761565b90612b43565b60008084341015611925576040516312171d8360e31b815260040160405180910390fd5b50600a5460405163a1903eab60e01b81526001600160a01b03918216600482015234869003917f0000000000000000000000000000000000000000000000000000000000000000169063a1903eab90879060240160206040518083038185885af1158015611997573d6000803e3d6000fd5b50505050506040513d601f19601f820116820180604052508101906119bc9190613619565b91505b935093915050565b604051636d78045960e01b8152336004820152306024820152604481018490527f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690636d780459906064016020604051808303816000875af1158015611a3a573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190611a5e9190613619565b50505050565b6000610c2d670de0b6b3a7640000612bb8565b6000611a838284613804565b6100919084613579565b600083815260086020526040902054600160801b90046001600160801b0316808303611ab95750505050565b6000848152600860205260408120546001600160801b031690819003611b1357611ae283611884565b600086815260086020526040902080546001600160801b0319166001600160801b0392909216919091179055611b91565b611b64611b5f670de0b6b3a7640000611b2c8886613579565b611b369190613721565b85670de0b6b3a7640000611b4a878a613579565b611b549190613721565b859291906001612c44565b611884565b600086815260086020526040902080546001600160801b0319166001600160801b03929092169190911790555b611b9a84611884565b60009586526008602052604090952080546001600160801b03968716600160801b0296169590951790945550505050565b60008183116118585782610091565b6006546000908190611bfd908490600160801b90046001600160801b0316612040565b6006546201000090046001600160701b03169250905081811115611d79576000611c278383613579565b9050611c36611b5f8286612ce2565b60068054601090611c58908490600160801b90046001600160801b0316613818565b92506101000a8154816001600160801b0302191690836001600160801b031602179055506000611c91858361177f90919063ffffffff16565b90506000611cbf827f0000000000000000000000000000000000000000000000000000000000000000612040565b905080600d6000828254611cd39190613566565b90915550611ce390508183613579565b9150611cee82611884565b60028054600090611d099084906001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550611d3682612cf7565b60048054600090611d4b908490600f0b613838565b92506101000a8154816001600160801b030219169083600f0b6001600160801b031602179055508493505050505b915091565b60006001600160f81b03821115611da85760405163b7d0949760e01b815260040160405180910390fd5b5060f89190911b1790565b600080611dc0878561177f565b91506000611dee837f0000000000000000000000000000000000000000000000000000000000000000612040565b9050611e1a817f0000000000000000000000000000000000000000000000000000000000000000612040565b91508315611e3d57611e2c8282613579565b611e369084613579565b9250611e54565b611e478282613579565b611e519084613566565b92505b86861015611e7757611e67838789611761565b9250611e74828789611761565b91505b509550959350505050565b600454600160801b90046001600160801b0316611ecb611b5f82611eae670de0b6b3a764000086613721565b600554600160801b90046001600160801b031691908a6000612c44565b600580546001600160801b03928316600160801b029216919091179055611ef186611884565b611efb9082613818565b600480546001600160801b03928316600160801b029216919091179055611f2184611884565b60028054600090611f3c9084906001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550611f69836118ae565b60048054600090611f7e908490600f0b613838565b92506101000a8154816001600160801b030219169083600f0b6001600160801b03160217905550611fae85611884565b60028054601090611fd0908490600160801b90046001600160801b0316613818565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550505050505050565b60008061200e846115cd8a888a611761565b905061201b888486611761565b6120259082613566565b9050868111156120355786810391505b509695505050505050565b60006100918383670de0b6b3a7640000611761565b60006001600160701b038211156117375760405163086b151760e11b815260040160405180910390fd5b6002546001600160801b0316838110806120c157507f00000000000000000000000000000000000000000000000000000000000000006120bf8583613579565b105b156120ce576120ce612b2a565b6004549084900390600f0b6120e384826137a6565b9050836120ef8661170d565b13801561212457507f0000000000000000000000000000000000000000000000000000000000000000612122838361185e565b105b1561213157612131612b2a565b600354600160801b90046001600160801b0316612173611b5f8261215d670de0b6b3a764000088613721565b6005546001600160801b031691908c6000612c44565b600580546001600160801b0319166001600160801b039290921691909117905561219d8882613579565b90506121a881611884565b600380546001600160801b03928316600160801b0292169190911790556121ce83611884565b600280546001600160801b0319166001600160801b03929092169190911790556121f7826118ae565b600480546001600160801b0319166001600160801b039290921691909117905561222087611884565b60028054601090612242908490600160801b90046001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b031602179055505050505050505050565b60035461228b90611b5f906001600160801b03168484612885565b600380546001600160801b0319166001600160801b03929092169190911790555050565b600754600360f81b600090815260106020527fd6f7110f7a6485ce27c724322bdc9b60c9b2518194eace178d55653f1be7302154909182916122fa916001600160801b031690613579565b90508060000361230e576001915050611394565b600061231985612d21565b90508060000361232e57600192505050611394565b60008061233c838589612dbd565b9150915080612352576000945050505050611394565b60008073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__632c03ef68858a6040518363ffffffff1660e01b815260040161238e929190613865565b6040805180830381865af41580156123aa573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906123ce91906138db565b915091506123ec6123de8261170d565b6123e7906138ff565b612992565b9250826124025760009650505050505050611394565b61240b82611884565b600780546000906124269084906001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555061245381611884565b60078054601090612475908490600160801b90046001600160801b0316613786565b92506101000a8154816001600160801b0302191690836001600160801b031602179055506001965050505050505092915050565b60008060008073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__635a1b419e6124d2876115d3565b6040518263ffffffff1660e01b81526004016124ee919061360a565b6040805180830381865af415801561250a573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061252e919061391b565b9150915080612544575060009485945092505050565b60075460106020527fd6f7110f7a6485ce27c724322bdc9b60c9b2518194eace178d55653f1be730215460008080527f6e0956cda88cad152e89927e53611735b61a5c762d1428573c6931b0a5efcb015490926001600160801b0316916125aa91613566565b6125b49190613579565b9050806000036125cc57506000958695509350505050565b60008087116125dc5760006125e7565b6125e7848884611761565b976001975095505050505050565b6000606060008060008661ffff1667ffffffffffffffff81111561261b5761261b61394b565b6040519080825280601f01601f191660200182016040528015612645576020820181803683370190505b5090506000808751602089018b8e8ef191503d925086831115612666578692505b828152826000602083013e9093509150505b9550959350505050565b6000806000836126918661170d565b61269b91906137a6565b905060008112156126b3576000809250925050610d26565b946001945092505050565b60008060006126d08888888888612f2c565b905060006126fb670de0b6b3a76400006126ea8888612ce2565b6126f49190613566565b839061177f565b9050670de0b6b3a7640000811061272f57612728612721670de0b6b3a76400008961177f565b8290612b43565b9050612747565b612744612721670de0b6b3a764000089612ce2565b90505b612751818661177f565b90508881101561276957600080935093505050612678565b97909703976001975095505050505050565b600080600061278d8989888888612f5b565b90506127a7866118fb6127a08a8d613566565b8790612040565b98506127b4858a86611761565b9850888110156127cb57600080925092505061159c565b888103670de0b6b3a764000081106127f9576127f2612721670de0b6b3a764000089612ce2565b9050612811565b61280e612721670de0b6b3a76400008961177f565b90505b808910156128275760008093509350505061159c565b90970398600198509650505050505050565b600080600080600061284c898789612f80565b909250905061285b8289613579565b9750600061286a82888a611761565b9050612876818b613579565b9a989950979650505050505050565b600080612893846000613006565b61289e846000613006565b6128a891906137a6565b905060008113156128c4576128bd8186613566565b94506128e3565b60008112156128e3576128d6816138ff565b6128e09086613579565b94505b50929392505050565b60006100918383670de0b6b3a76400005b600082600019048411830215820261291457600080fd5b50910281810615159190040190565b600080670de0b6b3a7640000612937610d2d565b6129419190613721565b905080831161295157600061295b565b61295b8184613579565b91506100916126f4670de0b6b3a76400007f0000000000000000000000000000000000000000000000000000000000000000613721565b6002546004805460405163685a2be760e11b81526001600160801b03808516938201849052600f9290920b60248201819052600160801b909404909116604482018190527f000000000000000000000000000000000000000000000000000000000000000060648301526084820185905260009391849081908190819073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__9063d0b457ce9060a401608060405180830381865af4158015612a4b573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190612a6f9190613961565b935093509350935080612a8b5750600098975050505050505050565b868414612abc57612a9b84611884565b600280546001600160801b0319166001600160801b03929092169190911790555b858314612aed57612acc836118ae565b600480546001600160801b0319166001600160801b03929092169190911790555b848214612b1b57612afd82611884565b600280546001600160801b03928316600160801b0292169190911790555b50600198975050505050505050565b60405163bb55fd2760e01b815260040160405180910390fd5b600081600003612b5c5750670de0b6b3a7640000611394565b82600003612b6c57506000611394565b6000612b778361170d565b90506000612b8c612b878661170d565b61301c565b9050818102612ba3670de0b6b3a7640000826139a2565b9050612bae81613242565b9695505050505050565b604051630f451f7160e31b8152600481018290526000907f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690637a28fb8890602401602060405180830381865afa158015612c20573d6000803e3d6000fd5b505050506040513d601f19601f820116820180604052508101906113949190613619565b600082600003612c55575084610078565b8115612ca857612c86612c688487613566565b612c728587612040565b612c7c888a612040565b6115cd9190613566565b90506000612c948588611bcb565b905080821015612ca2578091505b50610078565b828503612cb757506000610078565b610075612cc48487613579565b612cce85876128ec565b612cd8888a612040565b6115cd9190613579565b600061009183670de0b6b3a7640000846128fd565b600060016001607f1b038211156117375760405163a5353be560e01b815260040160405180910390fd5b6003546000908190612d3c906001600160801b031684612ce2565b9050612d687f000000000000000000000000000000000000000000000000000000000000000082613566565b6002546001600160801b03161115611858576002547f000000000000000000000000000000000000000000000000000000000000000090612db39083906001600160801b0316613579565b6100919190613579565b612dc5613438565b600080612dd1846115d3565b9050600073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__635a1b419e836040518263ffffffff1660e01b8152600401612e0c919061360a565b6040805180830381865af4158015612e28573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190612e4c919061391b565b9350905082612e615750600091506119bf9050565b6000612e8361155e84610160015185610140015161204090919063ffffffff16565b612ea361155e8561012001518661010001516128ec90919063ffffffff16565b612ead91906137a6565b604080516101208101825285815260208082019590955260008052601085527f6e0956cda88cad152e89927e53611735b61a5c762d1428573c6931b0a5efcb0154818301526060810199909952608089019990995260a088015250815160c087015281015160e086015290940151610100840152509092600192509050565b6000612f388585612b43565b612f51612f49866118fb868b612040565b859085611761565b6100759190613566565b6000612f678585612b43565b612f51612f78866118fb868b6128ec565b8590856128fd565b600080612fd085612fca85817f0000000000000000000000000000000000000000000000000000000000000000670de0b6b3a7640000612fc0818c612ce2565b612fca9190613579565b906128ec565b9150612ffc827f0000000000000000000000000000000000000000000000000000000000000000612040565b9050935093915050565b60008183136130155781610091565b5090919050565b600080821361303e5760405163e61b497560e01b815260040160405180910390fd5b506001600160801b03811160071b81811c67ffffffffffffffff1060061b1781811c63ffffffff1060051b1781811c61ffff1060041b1781811c60ff10600390811b90911782811c600f1060021b1782811c909110600190811b90911782811c90911017609f8181036060019290921b91605f198201906130c19084901c61170d565b6c465772b2bbbb5f824b15207a3081018102606090811d6d0388eaa27412d5aca026815d636e018202811d6d0df99ac502031bf953eff472fdcc018202811d6d13cdffb29d51d99322bdff5f2211018202811d6d0a0f742023def783a307a986912e018202811d6d01920d8043ca89b5239253284e42018202811d6c0b7a86d7375468fac667a0a527016c29508e458543d8aa4df2abee7883018302821d6d0139601a2efabe717e604cbb4894018302821d6d02247f7a7b6594320649aa03aba1018302821d6c8c3f38e95a6b1ff2ab1c3b343619018302821d6d02384773bdf1ac5676facced60901901830290911d6cb9a025d814b29c212b8b1a07cd1901909102780a09507084cc699bb0e71ea869ffffffffffffffffffffffff190105711340daa0d5f769dba1915cef59f0815a5506027d0267a36c0c95b3975ab3ee5b203a7614a3f75373f047d803ae7b6687f2b391909102017d57115e47018c7177eebf7cd370a3356a1b7863008a5ae8028c72b88642840160ae1d92915050565b6000680248ce36a70cb26b3e19821361325d57506000919050565b680755bf798b4a1bf1e58212613286576040516373a2d6b160e01b815260040160405180910390fd5b6503782dace9d9604e83901b059150600060606bb17217f7d1cf79abc9e3b39884821b056001605f1b01901d6bb17217f7d1cf79abc9e3b3988102909303926c240c330e9fb2d9cbaf0fd5aafb1984018402606090811d6d0277594991cfc85f6e2461837cd9018502811d6d1a521255e34f6a5061b25ef1c9c319018502811d6db1bbb201f443cf962f1a1d3db4a5018502811d6e02c72388d9f74f51a9331fed693f1419018502811d6e05180bb14799ab47a8a8cb2a527d57016d02d16720577bd19bf614176fe9ea6c10fe68e7fd37d0007b713f765087018702831d9081019087016d01d3967ed30fc4f89c02bab570811901810290921d6e0587f503bb6ea29d25fcb7401964500186026d360d7aeea093263ecc6e0ecb291760621b018181059550929350909190612bae74029d9dc38563c32e5c2f6dc192ee70ef65f9978af3860260c38690031c61170d565b6040518061018001604052806000815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081525090565b60405180610120016040528061344c6133d7565b815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081525090565b60006060828403121561185857600080fd5b600080600080600060a086880312156134b457600080fd5b85359450602086013593506040860135925060608601359150608086013567ffffffffffffffff8111156134e757600080fd5b6134f38882890161348a565b9150509295509295909350565b60008060006060848603121561351557600080fd5b8335925060208401359150604084013567ffffffffffffffff81111561353a57600080fd5b6135468682870161348a565b9150509250925092565b634e487b7160e01b600052601160045260246000fd5b8082018082111561139457611394613550565b8181038181111561139457611394613550565b805182526020810151602083015260408101516040830152606081015160608301526080810151608083015260a081015160a083015260c081015160c083015260e081015160e08301526101008082015181840152506101208082015181840152506101408082015181840152506101608082015181840152505050565b6101808101611394828461358c565b60006020828403121561362b57600080fd5b5051919050565b60006020828403121561364457600080fd5b81356001600160a01b038116811461009157600080fd5b8015158114610c0957600080fd5b60006020828403121561367b57600080fd5b81356100918161365b565b6000808335601e1984360301811261369d57600080fd5b83018035915067ffffffffffffffff8211156136b857600080fd5b602001915036819003821315610d2657600080fd5b878152866020820152856040820152841515606082015283608082015260c060a08201528160c0820152818360e0830137600081830160e090810191909152601f909201601f191601019695505050505050565b808202811582820484141761139457611394613550565b60008060006060848603121561374d57600080fd5b8351925060208401519150604084015190509250925092565b6001600160701b0381811683821601908082111561187d5761187d613550565b6001600160801b0381811683821601908082111561187d5761187d613550565b818103600083128015838313168383128216171561187d5761187d613550565b80820182811260008312801582168215821617156137e6576137e6613550565b505092915050565b634e487b7160e01b600052601260045260246000fd5b600082613813576138136137ee565b500690565b6001600160801b0382811682821603908082111561187d5761187d613550565b600f81810b9083900b0160016001607f1b03811360016001607f1b03198212171561139457611394613550565b60006102a08201905061387982855161358c565b602084015161018083015260408401516101a083015260608401516101c083015260808401516101e083015260a084015161020083015260c084015161022083015260e084015161024083015261010090930151610260820152610280015290565b600080604083850312156138ee57600080fd5b505080516020909101519092909150565b6000600160ff1b820161391457613914613550565b5060000390565b6000806040838503121561392e57600080fd5b8251915060208301516139408161365b565b809150509250929050565b634e487b7160e01b600052604160045260246000fd5b6000806000806080858703121561397757600080fd5b84519350602085015192506040850151915060608501516139978161365b565b939692955090935050565b6000826139b1576139b16137ee565b600160ff1b8214600019841416156139cb576139cb613550565b50059056fea2646970667358221220a8b8f85106c76fafdd8897d79554ff0e794ea77570e3cef3f2f544a060bd04f364736f6c63430008140033",
+            STETHTARGET4_ABI.clone(),
+            "0x6102606040523480156200001257600080fd5b506040516200321138038062003211833981016040819052620000359162000202565b600160005580516001600160a01b039081166080908152602080840151831660a0908152918401516101a0908152918401516101c090815260c0808601516101e090815260e0808801516102005261012080890151909352610100808901519091526101408089015190915290870180515190925281519093015190925281516040908101516101609081529251606090810151610180908152918701518616610220528601516102405291850151600980546001600160a01b031990811692871692909217905591850151600a8054841691861691909117905591840151600b80548316918516919091179055920151600c8054909316911617905562000315565b60405161020081016001600160401b03811182821017156200016a57634e487b7160e01b600052604160045260246000fd5b60405290565b80516001600160a01b03811681146200018857600080fd5b919050565b600060808284031215620001a057600080fd5b604051608081016001600160401b0381118282101715620001d157634e487b7160e01b600052604160045260246000fd5b8060405250809150825181526020830151602082015260408301516040820152606083015160608201525092915050565b600061026082840312156200021657600080fd5b6200022062000138565b6200022b8362000170565b81526200023b6020840162000170565b60208201526200024e6040840162000170565b6040820152606083015160608201526080830151608082015260a083015160a082015260c083015160c082015260e083015160e0820152610100808401518183015250610120808401518183015250610140808401518183015250610160620002b981850162000170565b90820152610180620002cd84820162000170565b908201526101a0620002e184820162000170565b908201526101c0620002f584820162000170565b908201526101e06200030a858583016200018d565b908201529392505050565b60805160a05160c05160e05161010051610120516101405161016051610180516101a0516101c0516101e051610200516102205161024051612de1620004306000396000505060005050600050506000818161026d0152611f5f0152600081816117a50152818161180801528181611b4401528181611b8001528181611d780152611f3901526000818161056f0152611f130152600061137a015260006114d501526000818161073301526114a9015260005050600081816105900152611f8501526000818161066b01526123c30152600081816101ed0152818161042e015281816104a90152818161051f015281816105eb01526106230152600081816110660152818161226601526122de015260005050612de16000f3fe608060405234801561001057600080fd5b50600436106100415760003560e01c8063074a6de914610046578063414f826d14610072578063cbc1343414610087575b600080fd5b6100596100543660046128b1565b61009a565b6040805192835260208301919091520160405180910390f35b610085610080366004612908565b6100b5565b005b6100596100953660046128b1565b6100c3565b6000806100a88585856100d1565b915091505b935093915050565b6100bf8282610196565b5050565b6000806100a8858585610257565b6000806100dc6103ab565b6100e5836103d5565b60006100ef61040e565b90506101066100fc610426565b8260046001610452565b506101143387838888610a49565b9093509150610126602085018561292a565b6001600160a01b0316337f07210cf9a89fae8012341fdc131255728787856379269f07c2e41c23b3c09b5884868561016460408b0160208c01612961565b61017160408c018c61297e565b604051610183969594939291906129ee565b60405180910390a3506100ad6001600055565b61019e6103ab565b60006101a861040e565b6000848152600860205260409020600101549091506001600160801b0316156101dc576101d58183610b8c565b505061024d565b60006101e6610426565b90506102127f000000000000000000000000000000000000000000000000000000000000000085612a3e565b15158061021e57508381105b1561023c5760405163ecd29e8160e01b815260040160405180910390fd5b6102498483856000610452565b5050505b6100bf6001600055565b6000806102626103ab565b61026b836103d5565b7f00000000000000000000000000000000000000000000000000000000000000008510156102ac5760405163211ddda360e11b815260040160405180910390fd5b60006102b661040e565b90506102c36100fc610426565b506102d060003388610d87565b6102eb600360f81b6102e5602087018761292a565b88610e61565b60006103066102fd602087018761292a565b88848989610a49565b90945090506103158188612a68565b9250600061032283610f01565b509050610332602087018761292a565b6001600160a01b0316337f1c7999deb68182de77ce89d32f82d0e13eb042921b2bfa9f35aa1c43f62f261e8a888761037060408d0160208e01612961565b8a888e8060400190610382919061297e565b604051610396989796959493929190612a7b565b60405180910390a35050506100ad6001600055565b6002600054036103ce57604051633ee5aeb560e01b815260040160405180910390fd5b6002600055565b60006103e4602083018361292a565b6001600160a01b03160361040b5760405163f0dd15fd60e01b815260040160405180910390fd5b50565b6000610421670de0b6b3a764000061104d565b905090565b6000610421427f00000000000000000000000000000000000000000000000000000000000000006110da565b600084815260086020526040812060018101546001600160801b031615158061047a57504286115b1561049357600101546001600160801b03169050610a41565b60008060006104a0610426565b905060006104ce7f00000000000000000000000000000000000000000000000000000000000000008b612ac3565b90505b81811015610544576000818152600860205260409020600101546001600160801b0316801561051c576000828152600860205260409020549094506001600160801b03169250610544565b507f0000000000000000000000000000000000000000000000000000000000000000016104d1565b836000036105b7578893506105b461055a6110f7565b600254600160801b90046001600160801b03167f00000000000000000000000000000000000000000000000000000000000000007f0000000000000000000000000000000000000000000000000000000000000000611118565b92505b506105c183611138565b6001850180546001600160801b0319166001600160801b03929092169190911790556106176106107f00000000000000000000000000000000000000000000000000000000000000008b612a68565b8a84611166565b6106558961064f6106487f000000000000000000000000000000000000000000000000000000000000000083612ac3565b42906112a4565b84611166565b61065e886112b9565b50600090506008816106907f00000000000000000000000000000000000000000000000000000000000000008d612a68565b815260208101919091526040016000908120600101546001600160801b031691506106bc60028c61145d565b6000818152601060205260408120549192508c8c831561080257600192506000806106eb86898d866000611492565b9150915080600d60008282546107019190612ac3565b9091555061071d90508660008461071781611561565b8861158b565b6107278183612ac3565b915061075786838a8e877f0000000000000000000000000000000000000000000000000000000000000000611705565b915061076b610766838561174f565b611764565b6006805460029061078c9084906201000090046001600160701b0316612ad6565b92506101000a8154816001600160701b0302191690836001600160701b031602179055506107b982611138565b600680546010906107db908490600160801b90046001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555050505b600061080f60018461145d565b600081815260106020526040902054909150801561091e576001945060008061083c838b8f886001611492565b9150915080600d60008282546108529190612ac3565b9091555061086e90508360008461086881611561565b8a61178e565b6108788183612a68565b9150610887610766838761174f565b600680546002906108a89084906201000090046001600160701b0316612ad6565b92506101000a8154816001600160701b0302191690836001600160701b031602179055506108d582611138565b600680546010906108f7908490600160801b90046001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555050505b84156109585761094a61093087611561565b61093983611561565b6109439190612b16565b600061197f565b8e6109558482610b8c565b50505b600061096384610f01565b50604080518e815260208101879052908101899052606081018490526080810182905290915085907fff888cf98d2696e95c8c39aa98c9ad55a5378008f7a56614c9353b7137a57ab79060a00160405180910390a2600c546001600160a01b031615610a31578e610a2d5a604051336024820152604481018990528315156064820152600090819060840160408051601f198184030181529190526020810180516001600160e01b0316633488a6a760e11b179052600c546001600160a01b0316939291906119be565b5050505b50999b5050505050505050505050505b949350505050565b600080610a5585611a49565b505060075485906001600160801b031680821115610a7a57806001600160801b031691505b81600003610a8f576000809250925050610b82565b610a9e600360f81b8984610d87565b600754600090610ac49084906001600160801b03600160801b9091048116908516611a56565b9050610acf83611138565b610ad99083612b36565b600780546001600160801b0319166001600160801b0392909216919091179055610b0281611138565b60078054601090610b24908490600160801b90046001600160801b0316612b36565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550610b53818887611a74565b9350610b5f8684611b0d565b841015610b7f5760405163c972651760e01b815260040160405180910390fd5b50505b9550959350505050565b600754600360f81b600090815260106020527fd6f7110f7a6485ce27c724322bdc9b60c9b2518194eace178d55653f1be730215490918291610bd7916001600160801b031690612a68565b905080600003610beb576001915050610d81565b6000610bf685611b22565b905080600003610c0b57600192505050610d81565b600080610c19838589611bbe565b9150915080610c2f576000945050505050610d81565b60008073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__632c03ef68858a6040518363ffffffff1660e01b8152600401610c6b929190612bd4565b6040805180830381865af4158015610c87573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610cab9190612c4a565b91509150610cc9610cbb82611561565b610cc490612c6e565b611d32565b925082610cdf5760009650505050505050610d81565b610ce882611138565b60078054600090610d039084906001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550610d3081611138565b60078054601090610d52908490600160801b90046001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550600196505050505050505b92915050565b6000838152600f602090815260408083206001600160a01b0386168452909152902054811115610dca57604051631e9acf1760e31b815260040160405180910390fd5b6000838152600f602090815260408083206001600160a01b0386168452825280832080548590039055858352601090915281208054839290610e0d908490612a68565b909155505060408051848152602081018390526000916001600160a01b0385169133917fc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f6291015b60405180910390a4505050565b6000838152600f602090815260408083206001600160a01b038616845290915281208054839290610e93908490612ac3565b909155505060008381526010602052604081208054839290610eb6908490612ac3565b909155505060408051848152602081018390526001600160a01b0384169160009133917fc3d58168c5ae7397731d063d5bbf3d657854427343f4c083240f7aacaa2d0f629101610e54565b60008060008073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__635a1b419e610f2a87611eca565b6040518263ffffffff1660e01b8152600401610f469190612c8a565b6040805180830381865af4158015610f62573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610f869190612c99565b9150915080610f9c575060009485945092505050565b60075460106020527fd6f7110f7a6485ce27c724322bdc9b60c9b2518194eace178d55653f1be730215460008080527f6e0956cda88cad152e89927e53611735b61a5c762d1428573c6931b0a5efcb015490926001600160801b03169161100291612ac3565b61100c9190612a68565b90508060000361102457506000958695509350505050565b600080871161103457600061103f565b61103f848884611a56565b976001975095505050505050565b604051630f451f7160e31b8152600481018290526000907f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690637a28fb88906024015b602060405180830381865afa1580156110b6573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190610d819190612cc9565b60006110e68284612a3e565b6110f09084612a68565b9392505050565b600254600454600091610421916001600160801b0390911690600f0b612004565b600061112f82611129858888611a56565b9061202a565b95945050505050565b60006001600160801b0382111561116257604051630f0af95160e11b815260040160405180910390fd5b5090565b600083815260086020526040902054600160801b90046001600160801b03168083036111925750505050565b6000848152600860205260408120546001600160801b0316908190036111ec576111bb83611138565b600086815260086020526040902080546001600160801b0319166001600160801b039290921691909117905561126a565b61123d611238670de0b6b3a76400006112058886612a68565b61120f9190612ce2565b85670de0b6b3a7640000611223878a612a68565b61122d9190612ce2565b85929190600161209f565b611138565b600086815260086020526040902080546001600160801b0319166001600160801b03929092169190911790555b61127384611138565b60009586526008602052604090952080546001600160801b03968716600160801b0296169590951790945550505050565b60008183116112b357826110f0565b50919050565b60065460009081906112dc908490600160801b90046001600160801b031661174f565b6006546201000090046001600160701b031692509050818111156114585760006113068383612a68565b9050611315611238828661213d565b60068054601090611337908490600160801b90046001600160801b0316612b36565b92506101000a8154816001600160801b0302191690836001600160801b031602179055506000611370858361215290919063ffffffff16565b9050600061139e827f000000000000000000000000000000000000000000000000000000000000000061174f565b905080600d60008282546113b29190612ac3565b909155506113c290508183612a68565b91506113cd82611138565b600280546000906113e89084906001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555061141582612167565b6004805460009061142a908490600f0b612cf9565b92506101000a8154816001600160801b030219169083600f0b6001600160801b031602179055508493505050505b915091565b60006001600160f81b038211156114875760405163b7d0949760e01b815260040160405180910390fd5b5060f89190911b1790565b60008061149f8785612152565b915060006114cd837f000000000000000000000000000000000000000000000000000000000000000061174f565b90506114f9817f000000000000000000000000000000000000000000000000000000000000000061174f565b9150831561151c5761150b8282612a68565b6115159084612a68565b9250611533565b6115268282612a68565b6115309084612ac3565b92505b8686101561155657611546838789611a56565b9250611553828789611a56565b91505b509550959350505050565b60006001600160ff1b038211156111625760405163396ea70160e11b815260040160405180910390fd5b600454600160801b90046001600160801b03166115d4611238826115b7670de0b6b3a764000086612ce2565b600554600160801b90046001600160801b031691908a600061209f565b600580546001600160801b03928316600160801b0292169190911790556115fa86611138565b6116049082612b36565b600480546001600160801b03928316600160801b02921691909117905561162a84611138565b600280546000906116459084906001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b0316021790555061167283612191565b60048054600090611687908490600f0b612cf9565b92506101000a8154816001600160801b030219169083600f0b6001600160801b031602179055506116b785611138565b600280546010906116d9908490600160801b90046001600160801b0316612b36565b92506101000a8154816001600160801b0302191690836001600160801b03160217905550505050505050565b60008061171d846117178a888a611a56565b90612152565b905061172a888486611a56565b6117349082612ac3565b9050868111156117445786810391505b509695505050505050565b60006110f08383670de0b6b3a7640000611a56565b60006001600160701b038211156111625760405163086b151760e11b815260040160405180910390fd5b6002546001600160801b0316838110806117d057507f00000000000000000000000000000000000000000000000000000000000000006117ce8583612a68565b105b156117dd576117dd6121cd565b6004549084900390600f0b6117f28482612b16565b9050836117fe86611561565b13801561183357507f00000000000000000000000000000000000000000000000000000000000000006118318383612004565b105b15611840576118406121cd565b600354600160801b90046001600160801b03166118826112388261186c670de0b6b3a764000088612ce2565b6005546001600160801b031691908c600061209f565b600580546001600160801b0319166001600160801b03929092169190911790556118ac8882612a68565b90506118b781611138565b600380546001600160801b03928316600160801b0292169190911790556118dd83611138565b600280546001600160801b0319166001600160801b039290921691909117905561190682612191565b600480546001600160801b0319166001600160801b039290921691909117905561192f87611138565b60028054601090611951908490600160801b90046001600160801b0316612af6565b92506101000a8154816001600160801b0302191690836001600160801b031602179055505050505050505050565b60035461199a90611238906001600160801b031684846121e6565b600380546001600160801b0319166001600160801b03929092169190911790555050565b6000606060008060008661ffff1667ffffffffffffffff8111156119e4576119e4612d26565b6040519080825280601f01601f191660200182016040528015611a0e576020820181803683370190505b5090506000808751602089018b8e8ef191503d925086831115611a2f578692505b828152826000602083013e90999098509650505050505050565b6000610d81826004610b8c565b6000826000190484118302158202611a6d57600080fd5b5091020490565b600080611a81858561174f565b9050611a8c8161224d565b945084600003611aa05760009150506110f0565b849150611ab36040840160208501612961565b15611ae257611adb85611ac9602086018661292a565b611ad6604087018761297e565b61229d565b9150611b05565b611b0585611af3602086018661292a565b611b00604087018761297e565b6122b8565b509392505050565b60006110f08383670de0b6b3a7640000612352565b6003546000908190611b3d906001600160801b03168461213d565b9050611b697f000000000000000000000000000000000000000000000000000000000000000082612ac3565b6002546001600160801b031611156112b3576002547f000000000000000000000000000000000000000000000000000000000000000090611bb49083906001600160801b0316612a68565b6110f09190612a68565b611bc66127fe565b600080611bd284611eca565b9050600073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__635a1b419e836040518263ffffffff1660e01b8152600401611c0d9190612c8a565b6040805180830381865af4158015611c29573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190611c4d9190612c99565b9350905082611c625750600091506100ad9050565b6000611c89611c8484610160015185610140015161174f90919063ffffffff16565b611561565b611ca9611c84856101200151866101000151611b0d90919063ffffffff16565b611cb39190612b16565b604080516101208101825285815260208082019590955260008052601085527f6e0956cda88cad152e89927e53611735b61a5c762d1428573c6931b0a5efcb0154818301526060810199909952608089019990995260a088015250815160c087015281015160e086015290940151610100840152509092600192509050565b6002546004805460405163685a2be760e11b81526001600160801b03808516938201849052600f9290920b60248201819052600160801b909404909116604482018190527f000000000000000000000000000000000000000000000000000000000000000060648301526084820185905260009391849081908190819073__$2b4fa6f02a36eedfe41c65e8dd342257d3$__9063d0b457ce9060a401608060405180830381865af4158015611deb573d6000803e3d6000fd5b505050506040513d601f19601f82011682018060405250810190611e0f9190612d3c565b935093509350935080611e2b5750600098975050505050505050565b868414611e5c57611e3b84611138565b600280546001600160801b0319166001600160801b03929092169190911790555b858314611e8d57611e6c83612191565b600480546001600160801b0319166001600160801b03929092169190911790555b848214611ebb57611e9d82611138565b600280546001600160801b03928316600160801b0292169190911790555b50600198975050505050505050565b611ed2612850565b60408051610180810182526002546001600160801b038082168352600454600f0b6020840152600160801b91829004811693830193909352606082018590527f000000000000000000000000000000000000000000000000000000000000000060808301527f000000000000000000000000000000000000000000000000000000000000000060a08301527f000000000000000000000000000000000000000000000000000000000000000060c08301527f000000000000000000000000000000000000000000000000000000000000000060e08301526003540482166101008201526005549091610120830191611fca9116612378565b81526004546001600160801b03600160801b9182900481166020840152600554604090930192611ffc92900416612378565b905292915050565b60008061201184846123ee565b909250905080612023576120236121cd565b5092915050565b6000816000036120435750670de0b6b3a7640000610d81565b8260000361205357506000610d81565b600061205e83611561565b9050600061207361206e86611561565b61242d565b905081810261208a670de0b6b3a764000082612d7d565b905061209581612653565b9695505050505050565b6000826000036120b057508461112f565b8115612103576120e16120c38487612ac3565b6120cd858761174f565b6120d7888a61174f565b6117179190612ac3565b905060006120ef85886112a4565b9050808210156120fd578091505b5061112f565b8285036121125750600061112f565b61209561211f8487612a68565b6121298587611b0d565b612133888a61174f565b6117179190612a68565b60006110f083670de0b6b3a764000084612352565b60006110f083670de0b6b3a764000084611a56565b600060016001607f1b038211156111625760405163a5353be560e01b815260040160405180910390fd5b600060016001607f1b03198212806121af575060016001607f1b0382135b156111625760405163a5353be560e01b815260040160405180910390fd5b60405163bb55fd2760e01b815260040160405180910390fd5b6000806121f48460006127e8565b6121ff8460006127e8565b6122099190612b16565b905060008113156122255761221e8186612ac3565b9450612244565b60008112156122445761223781612c6e565b6122419086612a68565b94505b50929392505050565b604051631920845160e01b8152600481018290526000907f00000000000000000000000000000000000000000000000000000000000000006001600160a01b031690631920845190602401611099565b600060405163350b944160e11b815260040160405180910390fd5b604051638fcb4e5b60e01b81526001600160a01b038481166004830152602482018690527f00000000000000000000000000000000000000000000000000000000000000001690638fcb4e5b906044016020604051808303816000875af1158015612327573d6000803e3d6000fd5b505050506040513d601f19601f8201168201806040525081019061234b9190612cc9565b5050505050565b600082600019048411830215820261236957600080fd5b50910281810615159190040190565b600080670de0b6b3a764000061238c610426565b6123969190612ce2565b90508083116123a65760006123b0565b6123b08184612a68565b91506110f06123e7670de0b6b3a76400007f0000000000000000000000000000000000000000000000000000000000000000612ce2565b8390612152565b6000806000836123fd86611561565b6124079190612b16565b9050600081121561241f576000809250925050612426565b9150600190505b9250929050565b600080821361244f5760405163e61b497560e01b815260040160405180910390fd5b506001600160801b03811160071b81811c67ffffffffffffffff1060061b1781811c63ffffffff1060051b1781811c61ffff1060041b1781811c60ff10600390811b90911782811c600f1060021b1782811c909110600190811b90911782811c90911017609f8181036060019290921b91605f198201906124d29084901c611561565b6c465772b2bbbb5f824b15207a3081018102606090811d6d0388eaa27412d5aca026815d636e018202811d6d0df99ac502031bf953eff472fdcc018202811d6d13cdffb29d51d99322bdff5f2211018202811d6d0a0f742023def783a307a986912e018202811d6d01920d8043ca89b5239253284e42018202811d6c0b7a86d7375468fac667a0a527016c29508e458543d8aa4df2abee7883018302821d6d0139601a2efabe717e604cbb4894018302821d6d02247f7a7b6594320649aa03aba1018302821d6c8c3f38e95a6b1ff2ab1c3b343619018302821d6d02384773bdf1ac5676facced60901901830290911d6cb9a025d814b29c212b8b1a07cd1901909102780a09507084cc699bb0e71ea869ffffffffffffffffffffffff190105711340daa0d5f769dba1915cef59f0815a5506027d0267a36c0c95b3975ab3ee5b203a7614a3f75373f047d803ae7b6687f2b391909102017d57115e47018c7177eebf7cd370a3356a1b7863008a5ae8028c72b88642840160ae1d92915050565b6000680248ce36a70cb26b3e19821361266e57506000919050565b680755bf798b4a1bf1e58212612697576040516373a2d6b160e01b815260040160405180910390fd5b6503782dace9d9604e83901b059150600060606bb17217f7d1cf79abc9e3b39884821b056001605f1b01901d6bb17217f7d1cf79abc9e3b3988102909303926c240c330e9fb2d9cbaf0fd5aafb1984018402606090811d6d0277594991cfc85f6e2461837cd9018502811d6d1a521255e34f6a5061b25ef1c9c319018502811d6db1bbb201f443cf962f1a1d3db4a5018502811d6e02c72388d9f74f51a9331fed693f1419018502811d6e05180bb14799ab47a8a8cb2a527d57016d02d16720577bd19bf614176fe9ea6c10fe68e7fd37d0007b713f765087018702831d9081019087016d01d3967ed30fc4f89c02bab570811901810290921d6e0587f503bb6ea29d25fcb7401964500186026d360d7aeea093263ecc6e0ecb291760621b01818105955092935090919061209574029d9dc38563c32e5c2f6dc192ee70ef65f9978af3860260c38690031c611561565b60008183136127f757816110f0565b5090919050565b604051806101200160405280612812612850565b815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081525090565b6040518061018001604052806000815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081526020016000815260200160008152602001600081525090565b6000806000606084860312156128c657600080fd5b8335925060208401359150604084013567ffffffffffffffff8111156128eb57600080fd5b8401606081870312156128fd57600080fd5b809150509250925092565b6000806040838503121561291b57600080fd5b50508035926020909101359150565b60006020828403121561293c57600080fd5b81356001600160a01b03811681146110f057600080fd5b801515811461040b57600080fd5b60006020828403121561297357600080fd5b81356110f081612953565b6000808335601e1984360301811261299557600080fd5b83018035915067ffffffffffffffff8211156129b057600080fd5b60200191503681900382131561242657600080fd5b81835281816020850137506000828201602090810191909152601f909101601f19169091010190565b868152856020820152846040820152831515606082015260a060808201526000612a1c60a0830184866129c5565b98975050505050505050565b634e487b7160e01b600052601260045260246000fd5b600082612a4d57612a4d612a28565b500690565b634e487b7160e01b600052601160045260246000fd5b81810381811115610d8157610d81612a52565b88815287602082015286604082015285151560608201528460808201528360a082015260e060c08201526000612ab560e0830184866129c5565b9a9950505050505050505050565b80820180821115610d8157610d81612a52565b6001600160701b0381811683821601908082111561202357612023612a52565b6001600160801b0381811683821601908082111561202357612023612a52565b818103600083128015838313168383128216171561202357612023612a52565b6001600160801b0382811682821603908082111561202357612023612a52565b805182526020810151602083015260408101516040830152606081015160608301526080810151608083015260a081015160a083015260c081015160c083015260e081015160e08301526101008082015181840152506101208082015181840152506101408082015181840152506101608082015181840152505050565b60006102a082019050612be8828551612b56565b602084015161018083015260408401516101a083015260608401516101c083015260808401516101e083015260a084015161020083015260c084015161022083015260e084015161024083015261010090930151610260820152610280015290565b60008060408385031215612c5d57600080fd5b505080516020909101519092909150565b6000600160ff1b8201612c8357612c83612a52565b5060000390565b6101808101610d818284612b56565b60008060408385031215612cac57600080fd5b825191506020830151612cbe81612953565b809150509250929050565b600060208284031215612cdb57600080fd5b5051919050565b8082028115828204841417610d8157610d81612a52565b600f81810b9083900b0160016001607f1b03811360016001607f1b031982121715610d8157610d81612a52565b634e487b7160e01b600052604160045260246000fd5b60008060008060808587031215612d5257600080fd5b8451935060208501519250604085015191506060850151612d7281612953565b939692955090935050565b600082612d8c57612d8c612a28565b600160ff1b821460001984141615612da657612da6612a52565b50059056fea26469706673582212207c4886953dd0e283b76eb2c9e1802d43cff9683f6561c10583244567442a176d64736f6c63430008140033",
             [
                 (
                     "contracts/src/libraries/LPMath.sol:LPMath",

@@ -24,6 +24,8 @@ use hyperdrive_wrappers::wrappers::{
     erc4626_target2_deployer::{ERC4626Target2Deployer, ERC4626Target2DeployerLibs},
     erc4626_target3::{ERC4626Target3, ERC4626Target3Libs},
     erc4626_target3_deployer::{ERC4626Target3Deployer, ERC4626Target3DeployerLibs},
+    erc4626_target4::{ERC4626Target4, ERC4626Target4Libs},
+    erc4626_target4_deployer::{ERC4626Target4Deployer, ERC4626Target4DeployerLibs},
     hyperdrive_factory::{
         self, FactoryConfig, Fees as FactoryFees, HyperdriveFactory, HyperdriveFactoryEvents,
         Options, PoolDeployConfig,
@@ -39,6 +41,7 @@ use hyperdrive_wrappers::wrappers::{
     steth_target1_deployer::{StETHTarget1Deployer, StETHTarget1DeployerLibs},
     steth_target2_deployer::{StETHTarget2Deployer, StETHTarget2DeployerLibs},
     steth_target3_deployer::{StETHTarget3Deployer, StETHTarget3DeployerLibs},
+    steth_target4_deployer::{StETHTarget4Deployer, StETHTarget4DeployerLibs},
 };
 use serde::{Deserialize, Deserializer, Serialize};
 use test_utils::{chain::Chain, constants::ETH};
@@ -385,6 +388,15 @@ impl TestnetDeploy for Chain {
         )?
         .send()
         .await?;
+        let target4 = ERC4626Target4::link_and_deploy(
+            client.clone(),
+            (config.clone(),),
+            ERC4626Target4Libs {
+                lp_math: lp_math.address(),
+            },
+        )?
+        .send()
+        .await?;
         let erc4626_hyperdrive = ERC4626Hyperdrive::deploy(
             client.clone(),
             (
@@ -394,6 +406,7 @@ impl TestnetDeploy for Chain {
                 target1.address(),
                 target2.address(),
                 target3.address(),
+                target4.address(),
             ),
         )?
         .send()
@@ -586,6 +599,15 @@ impl TestnetDeploy for Chain {
             )?
             .send()
             .await?;
+            let target4 = ERC4626Target4Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                ERC4626Target4DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             ERC4626HyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -596,6 +618,7 @@ impl TestnetDeploy for Chain {
                     target1.address(),
                     target2.address(),
                     target3.address(),
+                    target4.address(),
                 ),
             )?
             .send()
@@ -691,6 +714,19 @@ impl TestnetDeploy for Chain {
                 )
                 .send()
                 .await?;
+            factory
+                .deploy_target(
+                    [0x01; 32],
+                    erc4626_deployer_coordinator.address(),
+                    pool_config.clone(),
+                    Vec::new().into(),
+                    config.erc4626_hyperdrive_fixed_apr,
+                    config.erc4626_hyperdrive_time_stretch_apr,
+                    U256::from(4),
+                    [0x01; 32],
+                )
+                .send()
+                .await?;
             let tx = factory
                 .deploy_and_initialize(
                     [0x01; 32],
@@ -769,6 +805,15 @@ impl TestnetDeploy for Chain {
             )?
             .send()
             .await?;
+            let target4 = StETHTarget4Deployer::link_and_deploy(
+                client.clone(),
+                (),
+                StETHTarget4DeployerLibs {
+                    lp_math: lp_math.address(),
+                },
+            )?
+            .send()
+            .await?;
             StETHHyperdriveDeployerCoordinator::deploy(
                 client.clone(),
                 (
@@ -779,6 +824,7 @@ impl TestnetDeploy for Chain {
                     target1.address(),
                     target2.address(),
                     target3.address(),
+                    target4.address(),
                     lido.address(),
                 ),
             )?
@@ -864,6 +910,19 @@ impl TestnetDeploy for Chain {
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
                     U256::from(3),
+                    [0x02; 32],
+                )
+                .send()
+                .await?;
+            factory
+                .deploy_target(
+                    [0x02; 32],
+                    steth_deployer_coordinator.address(),
+                    pool_config.clone(),
+                    Vec::new().into(),
+                    config.steth_hyperdrive_fixed_apr,
+                    config.steth_hyperdrive_time_stretch_apr,
+                    U256::from(4),
                     [0x02; 32],
                 )
                 .send()

@@ -421,6 +421,70 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("convertToBase"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("convertToBase"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("_shareAmount"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("convertToShares"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("convertToShares"),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned("_baseAmount"),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("decimals"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -1718,6 +1782,26 @@ pub mod i_hyperdrive {
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
                             name: ::std::borrow::ToOwned::to_owned("target3"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("address"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("target4"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("target4"),
                             inputs: ::std::vec![],
                             outputs: ::std::vec![
                                 ::ethers::core::abi::ethabi::Param {
@@ -3266,6 +3350,24 @@ pub mod i_hyperdrive {
                 .method_hash([62, 105, 29, 185], (options,))
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `convertToBase` (0xb88fed9f) function
+        pub fn convert_to_base(
+            &self,
+            share_amount: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([184, 143, 237, 159], share_amount)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `convertToShares` (0xc6e6f592) function
+        pub fn convert_to_shares(
+            &self,
+            base_amount: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([198, 230, 245, 146], base_amount)
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `decimals` (0x313ce567) function
         pub fn decimals(&self) -> ::ethers::contract::builders::ContractCall<M, u8> {
             self.0
@@ -3658,6 +3760,17 @@ pub mod i_hyperdrive {
         > {
             self.0
                 .method_hash([216, 153, 225, 18], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `target4` (0xf3f70707) function
+        pub fn target_4(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::ethers::core::types::Address,
+        > {
+            self.0
+                .method_hash([243, 247, 7, 7], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `totalSupply` (0xbd85b039) function
@@ -6218,6 +6331,40 @@ pub mod i_hyperdrive {
     pub struct CollectGovernanceFeeCall {
         pub options: Options,
     }
+    ///Container type for all input parameters for the `convertToBase` function with signature `convertToBase(uint256)` and selector `0xb88fed9f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "convertToBase", abi = "convertToBase(uint256)")]
+    pub struct ConvertToBaseCall {
+        pub share_amount: ::ethers::core::types::U256,
+    }
+    ///Container type for all input parameters for the `convertToShares` function with signature `convertToShares(uint256)` and selector `0xc6e6f592`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "convertToShares", abi = "convertToShares(uint256)")]
+    pub struct ConvertToSharesCall {
+        pub base_amount: ::ethers::core::types::U256,
+    }
     ///Container type for all input parameters for the `decimals` function with signature `decimals()` and selector `0x313ce567`
     #[derive(
         Clone,
@@ -6893,6 +7040,21 @@ pub mod i_hyperdrive {
     )]
     #[ethcall(name = "target3", abi = "target3()")]
     pub struct Target3Call;
+    ///Container type for all input parameters for the `target4` function with signature `target4()` and selector `0xf3f70707`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "target4", abi = "target4()")]
+    pub struct Target4Call;
     ///Container type for all input parameters for the `totalSupply` function with signature `totalSupply(uint256)` and selector `0xbd85b039`
     #[derive(
         Clone,
@@ -7008,6 +7170,8 @@ pub mod i_hyperdrive {
         CloseLong(CloseLongCall),
         CloseShort(CloseShortCall),
         CollectGovernanceFee(CollectGovernanceFeeCall),
+        ConvertToBase(ConvertToBaseCall),
+        ConvertToShares(ConvertToSharesCall),
         Decimals(DecimalsCall),
         DomainSeparator(DomainSeparatorCall),
         GetCheckpoint(GetCheckpointCall),
@@ -7046,6 +7210,7 @@ pub mod i_hyperdrive {
         Target1(Target1Call),
         Target2(Target2Call),
         Target3(Target3Call),
+        Target4(Target4Call),
         TotalSupply(TotalSupplyCall),
         TransferFrom(TransferFromCall),
         TransferFromBridge(TransferFromBridgeCall),
@@ -7101,6 +7266,16 @@ pub mod i_hyperdrive {
                 data,
             ) {
                 return Ok(Self::CollectGovernanceFee(decoded));
+            }
+            if let Ok(decoded) = <ConvertToBaseCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::ConvertToBase(decoded));
+            }
+            if let Ok(decoded) = <ConvertToSharesCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::ConvertToShares(decoded));
             }
             if let Ok(decoded) = <DecimalsCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -7292,6 +7467,11 @@ pub mod i_hyperdrive {
             ) {
                 return Ok(Self::Target3(decoded));
             }
+            if let Ok(decoded) = <Target4Call as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::Target4(decoded));
+            }
             if let Ok(decoded) = <TotalSupplyCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -7348,6 +7528,12 @@ pub mod i_hyperdrive {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::CollectGovernanceFee(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::ConvertToBase(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::ConvertToShares(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::Decimals(element) => {
@@ -7442,6 +7628,7 @@ pub mod i_hyperdrive {
                 Self::Target1(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Target2(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Target3(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::Target4(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::TotalSupply(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -7472,6 +7659,8 @@ pub mod i_hyperdrive {
                 Self::CollectGovernanceFee(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::ConvertToBase(element) => ::core::fmt::Display::fmt(element, f),
+                Self::ConvertToShares(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Decimals(element) => ::core::fmt::Display::fmt(element, f),
                 Self::DomainSeparator(element) => ::core::fmt::Display::fmt(element, f),
                 Self::GetCheckpoint(element) => ::core::fmt::Display::fmt(element, f),
@@ -7518,6 +7707,7 @@ pub mod i_hyperdrive {
                 Self::Target1(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Target2(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Target3(element) => ::core::fmt::Display::fmt(element, f),
+                Self::Target4(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TotalSupply(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferFrom(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferFromBridge(element) => {
@@ -7571,6 +7761,16 @@ pub mod i_hyperdrive {
     impl ::core::convert::From<CollectGovernanceFeeCall> for IHyperdriveCalls {
         fn from(value: CollectGovernanceFeeCall) -> Self {
             Self::CollectGovernanceFee(value)
+        }
+    }
+    impl ::core::convert::From<ConvertToBaseCall> for IHyperdriveCalls {
+        fn from(value: ConvertToBaseCall) -> Self {
+            Self::ConvertToBase(value)
+        }
+    }
+    impl ::core::convert::From<ConvertToSharesCall> for IHyperdriveCalls {
+        fn from(value: ConvertToSharesCall) -> Self {
+            Self::ConvertToShares(value)
         }
     }
     impl ::core::convert::From<DecimalsCall> for IHyperdriveCalls {
@@ -7763,6 +7963,11 @@ pub mod i_hyperdrive {
             Self::Target3(value)
         }
     }
+    impl ::core::convert::From<Target4Call> for IHyperdriveCalls {
+        fn from(value: Target4Call) -> Self {
+            Self::Target4(value)
+        }
+    }
     impl ::core::convert::From<TotalSupplyCall> for IHyperdriveCalls {
         fn from(value: TotalSupplyCall) -> Self {
             Self::TotalSupply(value)
@@ -7894,6 +8099,34 @@ pub mod i_hyperdrive {
     pub struct CollectGovernanceFeeReturn {
         pub proceeds: ::ethers::core::types::U256,
     }
+    ///Container type for all return fields from the `convertToBase` function with signature `convertToBase(uint256)` and selector `0xb88fed9f`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct ConvertToBaseReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `convertToShares` function with signature `convertToShares(uint256)` and selector `0xc6e6f592`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct ConvertToSharesReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `decimals` function with signature `decimals()` and selector `0x313ce567`
     #[derive(
         Clone,
@@ -8286,6 +8519,20 @@ pub mod i_hyperdrive {
         Hash
     )]
     pub struct Target3Return(pub ::ethers::core::types::Address);
+    ///Container type for all return fields from the `target4` function with signature `target4()` and selector `0xf3f70707`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct Target4Return(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `totalSupply` function with signature `totalSupply(uint256)` and selector `0xbd85b039`
     #[derive(
         Clone,
