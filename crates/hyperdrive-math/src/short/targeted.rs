@@ -382,10 +382,17 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use hyperdrive_test_utils::constants::FAST_FUZZ_RUNS;
-    use rand::{thread_rng, Rng};
+    use hyperdrive_test_utils::{
+        chain::TestChain,
+        constants::{FAST_FUZZ_RUNS, SLOW_FUZZ_RUNS},
+    };
+    use rand::{thread_rng, Rng, SeedableRng};
+    use rand_chacha::ChaCha8Rng;
 
     use super::*;
+    use crate::test_utils::{
+        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+    };
 
     #[tokio::test]
     async fn fuzz_short_trade_deltas_from_reserves() -> Result<()> {
@@ -481,7 +488,7 @@ mod tests {
             // Run the preamble and get state information.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
             let current_state = alice.get_state().await?;
-            let min_spot_price_before_short = current_state.calculate_min_price()?;
+            let min_spot_price_before_short = current_state.calculate_min_spot_price()?;
 
             // Get a targeted short amount.
             let target_rate = current_state.calculate_spot_rate()?
