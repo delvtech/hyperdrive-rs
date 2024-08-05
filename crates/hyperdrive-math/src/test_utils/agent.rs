@@ -1,6 +1,10 @@
 use std::{cmp::min, collections::btree_map::Entry};
 
-use ethers::{prelude::EthLogDecode, signers::LocalWallet, types::U256};
+use ethers::{
+    prelude::EthLogDecode,
+    signers::LocalWallet,
+    types::{I256, U256},
+};
 use eyre::Result;
 use fixedpointmath::{fixed, uint256, FixedPoint};
 use hyperdrive_test_utils::{
@@ -35,6 +39,14 @@ pub trait HyperdriveMathAgent {
 
     /// Gets the long that moves the fixed rate to a target value.
     async fn calculate_targeted_long(
+        &self,
+        target_rate: FixedPoint,
+        maybe_max_iterations: Option<usize>,
+        maybe_allowable_error: Option<FixedPoint>,
+    ) -> Result<FixedPoint>;
+
+    /// Gets the short that moves the fixed rate to a target value.
+    async fn calculate_targeted_short(
         &self,
         target_rate: FixedPoint,
         maybe_max_iterations: Option<usize>,
@@ -145,6 +157,31 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             .calculate_targeted_long_with_budget(
                 self.wallet.base,
                 target_rate,
+                checkpoint_exposure,
+                maybe_max_iterations,
+                maybe_allowable_error,
+            )
+            .unwrap())
+    }
+
+    /// Gets the short that moves the fixed rate to a target value.
+    async fn calculate_targeted_short(
+        &self,
+        target_rate: FixedPoint,
+        maybe_max_iterations: Option<usize>,
+        maybe_allowable_error: Option<FixedPoint>,
+    ) -> Result<FixedPoint> {
+        let state = self.get_state().await?;
+        let open_vault_share_price = state.vault_share_price();
+        let checkpoint_exposure = self
+            .hyperdrive()
+            .get_checkpoint_exposure(state.to_checkpoint(self.now().await?))
+            .await?;
+        Ok(state
+            .calculate_targeted_short_with_budget(
+                self.wallet.base,
+                target_rate,
+                open_vault_share_price,
                 checkpoint_exposure,
                 maybe_max_iterations,
                 maybe_allowable_error,
