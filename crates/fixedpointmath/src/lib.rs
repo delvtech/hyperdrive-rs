@@ -27,8 +27,8 @@ pub use value::*;
 ///  `mul_div_up` via `U512`.
 ///
 /// Each of the functions is fuzz tested against the Solidity implementation to
-/// ensure that the behavior is identical given values bounded by both the
-/// Solidity and Rust limits.
+/// ensure that the behavior is identical given values bounded by the Solidity
+/// implementation's limits.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct FixedPoint<T: FixedPointValue> {
     value: T,
