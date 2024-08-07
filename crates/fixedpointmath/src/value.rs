@@ -17,7 +17,7 @@ macro_rules! try_from_into {
                 Self::try_from(value).map_err(|_| {
                     eyre!(
         r#"Failed to convert {type} to underlying FixedPointValue:
-    {type} value: {value}
+    {type} value: {value:?}
     Underlying range: {min:?} to {max:?}
 "#,
                         type = stringify!($type_name),
@@ -109,7 +109,7 @@ pub trait FixedPointValue:
         if Self::is_signed() {
             return Self::from(0) - self;
         } else {
-            panic!("Cannot flip sign of unsigned value: {:?}", self);
+            panic!("Cannot flip sign of unsigned value: {self:?}");
         }
     }
 

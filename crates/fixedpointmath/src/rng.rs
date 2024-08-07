@@ -33,7 +33,11 @@ impl<T: FixedPointValue> UniformSampler for UniformFixedPoint<T> {
         let low = *low_b.borrow();
         let high = *high_b.borrow() - FixedPoint::from(1);
         if low >= high {
-            panic!("UniformFixedPoint::new called with invalid range");
+            panic!(
+                r#"UniformFixedPoint::new_inclusive called with invalid range:
+    low: {low:?}
+    high: {high:?}"#
+            );
         }
         UniformFixedPoint { low, high }
     }
@@ -47,7 +51,11 @@ impl<T: FixedPointValue> UniformSampler for UniformFixedPoint<T> {
         let low = *low_b.borrow();
         let high = *high_b.borrow();
         if low >= high {
-            panic!("UniformFixedPoint::new_inclusive called with invalid range");
+            panic!(
+                r#"UniformFixedPoint::new_inclusive called with invalid range:
+    low: {low:?}
+    high: {high:?}"#
+            );
         }
         UniformFixedPoint { low, high }
     }
@@ -56,7 +64,7 @@ impl<T: FixedPointValue> UniformSampler for UniformFixedPoint<T> {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FixedPoint<T> {
         let size = self.high.abs_diff(self.low);
         if size.is_zero() {
-            panic!("UniformFixedPoint::sample called with size zero");
+            panic!("UniformFixedPoint::sample called with size zero.");
         }
         let value = FixedPoint::from(rng.gen::<[u8; 32]>());
         let narrowed = value % size;

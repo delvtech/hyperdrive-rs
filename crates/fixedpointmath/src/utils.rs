@@ -1,7 +1,7 @@
 use std::ops::Shr;
 
 use ethers::types::{I256, U256};
-use eyre::{eyre, Result};
+use eyre::{bail, Result};
 
 use crate::{int256, uint256};
 
@@ -41,7 +41,7 @@ pub fn u256_from_str(s: &str) -> Result<U256> {
         } else if digit == '.' && !found_dot {
             found_dot = true;
         } else if digit != '_' {
-            return Err(eyre!("Unexpected character: {digit}"));
+            bail!("Unexpected character in U256: {digit}");
         }
     }
 
@@ -50,7 +50,7 @@ pub fn u256_from_str(s: &str) -> Result<U256> {
     // the final result is an integer.
     let decimals = ethers::types::U256::from(decimals);
     if exponent < decimals {
-        return Err(eyre!("Exponent is too small: {exponent}"));
+        bail!("Exponent {exponent} is too small for U256: {s}");
     }
 
     Ok(mantissa * ethers::types::U256::from(10).pow(exponent - decimals))
@@ -95,7 +95,7 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
         } else if digit == '.' && !found_dot {
             found_dot = true;
         } else if digit != '_' {
-            return Err(eyre!("Unexpected character: {digit}"));
+            bail!("Unexpected character in I256: {digit}");
         }
     }
 
@@ -103,7 +103,7 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
     // overflow if the exponent is too large. We also need to make sure that
     // the final result is an integer.
     if exponent < decimals {
-        return Err(eyre!("Exponent is too small: {exponent}"));
+        bail!("Exponent {exponent} is too small for I256: {s}");
     }
 
     Ok(sign * mantissa * ethers::types::I256::from(10).pow(exponent - decimals))
@@ -121,7 +121,7 @@ pub fn exp(mut x: I256) -> Result<I256> {
     // When the result is > (2**255 - 1) / 1e18 we can not represent it as an
     // int. This happens when x >= floor(log((2**255 - 1) / 1e18) * 1e18) ~ 135.
     if x >= int256!(135305999368893231589) {
-        return Err(eyre!("invalid exponent {x}"));
+        bail!("invalid exponent {x}");
     }
 
     // x is now in the range (-42, 136) * 1e18. Convert to (-42, 136) * 2**96
@@ -202,7 +202,7 @@ pub fn exp(mut x: I256) -> Result<I256> {
 
 pub fn ln(mut x: I256) -> Result<I256> {
     if x <= I256::zero() {
-        return Err(eyre!("ln of negative number or zero"));
+        bail!("Cannot calculate ln of of negative number or zero.");
     }
 
     // We want to convert x from 10**18 fixed point to 2**96 fixed point.

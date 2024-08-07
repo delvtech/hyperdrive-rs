@@ -66,7 +66,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
         if (value > T::MAX) || (value < T::MIN) {
             bail!(
-                r#"value {value:?} is out of FixedPoint range:
+                r#"Value {value:?} is out of FixedPoint range:
     min: {min:?}
     max: {max:?}"#,
                 min = T::MIN,
@@ -134,57 +134,6 @@ impl<T: FixedPointValue> FixedPoint<T> {
         self.raw().is_zero()
     }
 
-    // Conversion to unsigned & signed ethers types //
-
-    pub fn to_u256(&self) -> Result<U256> {
-        if self.is_negative() {
-            bail!(
-                "cannot convert negative FixedPoint {} to U256",
-                self.to_scaled_string(),
-            );
-        }
-        self.raw().to_u256()
-    }
-
-    pub fn to_i256(&self) -> Result<I256> {
-        let abs = self.unsigned_abs().raw();
-        let abs_max = FixedPoint::<I256>::saturate_sign(self.sign())
-            .raw()
-            .unsigned_abs();
-        if abs > abs_max {
-            bail!(
-                "FixedPoint {} is too large to convert to I256",
-                self.to_scaled_string()
-            );
-        }
-        I256::checked_from_sign_and_abs(self.sign().into(), abs).ok_or(eyre!(
-            "failed to convert FixedPoint {} to I256",
-            self.to_scaled_string()
-        ))
-    }
-
-    // Conversion to unsigned and signed std types //
-
-    pub fn to_u128(&self) -> Result<u128> {
-        if self.is_negative() {
-            bail!(
-                "cannot convert negative FixedPoint {} to u128",
-                self.to_scaled_string(),
-            );
-        }
-        self.raw().to_u128()
-    }
-
-    pub fn to_i128(&self) -> Result<i128> {
-        let i256 = self.to_i256()?;
-        i128::try_from(i256).or_else(|_| {
-            bail!(
-                "FixedPoint {} is too large to convert to i128",
-                self.to_scaled_string()
-            )
-        })
-    }
-
     // Math //
 
     /// One with the same scale as this fixed point number, i.e., `1.0`.
@@ -227,7 +176,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     pub fn mul_div_down(&self, other: Self, divisor: Self) -> Result<Self> {
         if divisor.is_zero() {
-            bail!("cannot divide by zero");
+            bail!("Cannot divide by zero.");
         }
         let u256 = U256::try_from(
             self.raw()
@@ -236,14 +185,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
                 .full_mul(other.raw().abs().to_u256()?.into())
                 .div(divisor.raw().abs().to_u256()?),
         )
-        .or_else(|_| {
-            bail!(
-                "FixedPoint operation overflowed: {} * {} / {}",
-                self.to_scaled_string(),
-                other.to_scaled_string(),
-                divisor.to_scaled_string(),
-            )
-        })?;
+        .or_else(|_| bail!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))?;
         let sign = self.sign().flip_if(other.sign() != divisor.sign());
         let raw = T::from_u256(u256)?.flip_sign_if(sign.is_negative());
         Self::new(raw)
@@ -251,7 +193,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     pub fn mul_div_up(&self, other: Self, divisor: Self) -> Result<Self> {
         if divisor.is_zero() {
-            bail!("cannot divide by zero");
+            bail!("Cannot divide by zero.");
         }
         let (u512, remainder) = self
             .raw()
@@ -259,15 +201,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
             .to_u256()?
             .full_mul(other.raw().abs().to_u256()?.into())
             .div_mod(divisor.raw().abs().to_u256()?.into());
-        let rounded_u256 =
-            U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128)).or_else(|_| {
-                bail!(
-                    "FixedPoint operation overflowed: {} * {} / {}",
-                    self.to_scaled_string(),
-                    other.to_scaled_string(),
-                    divisor.to_scaled_string()
-                )
-            })?;
+        let rounded_u256 = U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128))
+            .or_else(|_| bail!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))?;
         let sign = self.sign().flip_if(other.sign() != divisor.sign());
         let raw = T::from_u256(rounded_u256)?.flip_sign_if(sign.is_negative());
         Self::new(raw)
@@ -329,6 +264,44 @@ impl<T: FixedPointValue> FixedPoint<T> {
         let raw = T::from_u256(abs)?.flip_sign_if(sign.is_negative());
         Self::new(raw)
     }
+
+    // Conversion to unsigned & signed ethers types //
+
+    pub fn to_u256(&self) -> Result<U256> {
+        if self.is_negative() {
+            bail!("Cannot convert negative FixedPoint {self} to U256.");
+        }
+        self.raw().to_u256()
+    }
+
+    pub fn to_i256(&self) -> Result<I256> {
+        let abs = self.unsigned_abs().raw();
+        let abs_max = FixedPoint::<I256>::saturate_sign(self.sign())
+            .raw()
+            .unsigned_abs();
+        if abs > abs_max {
+            bail!("FixedPoint {self} is too large to convert to I256.");
+        }
+        I256::checked_from_sign_and_abs(self.sign().into(), abs)
+            .ok_or(eyre!("Failed to convert FixedPoint {self} to I256."))
+    }
+
+    // Conversion to unsigned and signed std types //
+
+    pub fn to_u128(&self) -> Result<u128> {
+        if self.is_negative() {
+            bail!("Cannot convert negative FixedPoint {self} to u128.");
+        }
+        self.raw().to_u128()
+    }
+
+    pub fn to_i128(&self) -> Result<i128> {
+        let i256 = self.to_i256()?;
+        i128::try_from(i256)
+            .or_else(|_| bail!("FixedPoint {self} is too large to convert to i128."))
+    }
+
+    // Formatting //
 
     pub fn to_scaled_string(&self) -> String {
         let decimals = (self.decimals()) as usize;
