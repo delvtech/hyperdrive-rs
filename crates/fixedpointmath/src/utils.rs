@@ -303,29 +303,21 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_exp_narrow() -> Result<()> {
-        // let chain = Chain::connect(None, None).await?;
-        // chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-        // let client = chain.client(DEPLOYER.clone()).await?;
-        // let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-        let mut rng = thread_rng();
-        let foo: FixedPoint<u128> = rng.gen_range(fixed!(0)..fixed!(1e18));
-
-        assert!(foo > fixed!(0));
-        assert!(foo < fixed!(1e18));
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
         // Fuzz the rust and solidity implementations against each other.
-        // for _ in 0..10_000 {
-        //     let mut rng = thread_rng();
-        //     let x = rng
-        //         .gen_range(FixedPoint::<I256>::zero()..=fixed!(1e18))
-        //         .to_i256()?;
-        //     let actual = ln(x);
-        //     match mock_fixed_point_math.ln(x).call().await {
-        //         Ok(expected) => assert_eq!(actual.unwrap(), expected),
-        //         Err(_) => assert!(actual.is_err()),
-        //     }
-        // }
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let x: FixedPoint<I256> = rng.gen_range(fixed!(0)..=fixed!(1e18));
+            let actual = ln(x.raw());
+            match mock_fixed_point_math.ln(x.raw()).call().await {
+                Ok(expected) => assert_eq!(actual.unwrap(), expected),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
 
         Ok(())
     }
@@ -340,11 +332,9 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..10_000 {
-            let x = rng
-                .gen_range(FixedPoint::<I256>::zero()..I256::MAX.into())
-                .to_i256()?;
-            let actual = exp(x);
-            match mock_fixed_point_math.exp(x).call().await {
+            let x: FixedPoint<I256> = rng.gen_range(fixed!(0)..FixedPoint::<I256>::MAX);
+            let actual = exp(x.raw());
+            match mock_fixed_point_math.exp(x.raw()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -363,11 +353,9 @@ mod tests {
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..10_000 {
-            let x = rng
-                .gen_range(FixedPoint::<I256>::zero()..=fixed!(1e18))
-                .to_i256()?;
-            let actual = ln(x);
-            match mock_fixed_point_math.ln(x).call().await {
+            let x: FixedPoint<I256> = rng.gen_range(fixed!(0)..=fixed!(1e18));
+            let actual = ln(x.raw());
+            match mock_fixed_point_math.ln(x.raw()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }
@@ -385,12 +373,10 @@ mod tests {
 
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
-        for _ in 0..10 {
-            let x =
-                I256::try_from(rng.gen_range(FixedPoint::<I256>::zero()..FixedPoint::<I256>::MAX))
-                    .unwrap();
-            let actual = ln(x);
-            match mock_fixed_point_math.ln(x).call().await {
+        for _ in 0..10_000 {
+            let x: FixedPoint<I256> = rng.gen_range(fixed!(0)..FixedPoint::<I256>::MAX);
+            let actual = ln(x.raw());
+            match mock_fixed_point_math.ln(x.raw()).call().await {
                 Ok(expected) => assert_eq!(actual.unwrap(), expected),
                 Err(_) => assert!(actual.is_err()),
             }

@@ -23,11 +23,50 @@ macro_rules! int256 {
     }};
 }
 
+/// Creates a `FixedPoint<T>` from a decimal number. Infers the type of `T` from
+/// the context. If the context is ambiguous, use a typed alternative such as
+/// [`fixed_u256!`] or [`fixed_i256!`].
 #[macro_export]
 macro_rules! fixed {
     ($number:expr) => {{
         let str = stringify!($number);
         $crate::FixedPoint::from_dec_str(str).unwrap()
+    }};
+}
+
+/// Creates a `FixedPoint<U256>` from a decimal number.
+#[macro_export]
+macro_rules! fixed_u256 {
+    ($number:expr) => {{
+        let str = stringify!($number);
+        $crate::FixedPoint::<ethers::types::U256>::from_dec_str(str).unwrap()
+    }};
+}
+
+/// Creates a `FixedPoint<I256>` from a decimal number.
+#[macro_export]
+macro_rules! fixed_i256 {
+    ($number:expr) => {{
+        let str = stringify!($number);
+        $crate::FixedPoint::<ethers::types::I256>::from_dec_str(str).unwrap()
+    }};
+}
+
+/// Creates a `FixedPoint<u128>` from a decimal number.
+#[macro_export]
+macro_rules! fixed_u128 {
+    ($number:expr) => {{
+        let str = stringify!($number);
+        $crate::FixedPoint::<u128>::from_dec_str(str).unwrap()
+    }};
+}
+
+/// Creates a `FixedPoint<i128>` from a decimal number.
+#[macro_export]
+macro_rules! fixed_i128 {
+    ($number:expr) => {{
+        let str = stringify!($number);
+        $crate::FixedPoint::<i128>::from_dec_str(str).unwrap()
     }};
 }
 
@@ -125,9 +164,10 @@ mod tests {
             fixed!(333_333.555_555e18),
             FixedPoint::<i128>::from(333_333_555_555_i128 * 10_i128.pow(12))
         );
+
         assert_eq!(
             fixed!(-333_333.555_555e18),
-            -FixedPoint::<I256>::from(333_333_555_555_i128 * 10_i128.pow(12))
+            -FixedPoint::<i128>::from(333_333_555_555_i128 * 10_i128.pow(12))
         );
 
         Ok(())

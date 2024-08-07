@@ -3,18 +3,19 @@ use std::fmt;
 use ethers::types::Sign;
 
 /// The sign associated with a fixed point number.
+// NOTE: Order is important for the `PartialOrd` and `Ord` traits.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum FixedPointSign {
-    Positive,
     Negative,
+    Positive,
 }
 
 impl FixedPointSign {
     /// Returns the sign's opposite.
     pub fn flip(self) -> FixedPointSign {
         match self {
-            FixedPointSign::Positive => FixedPointSign::Negative,
             FixedPointSign::Negative => FixedPointSign::Positive,
+            FixedPointSign::Positive => FixedPointSign::Negative,
         }
     }
 
@@ -26,6 +27,14 @@ impl FixedPointSign {
             self
         }
     }
+
+    pub fn is_negative(self) -> bool {
+        self == FixedPointSign::Negative
+    }
+
+    pub fn is_positive(self) -> bool {
+        !self.is_negative()
+    }
 }
 
 // Formatting //
@@ -33,8 +42,8 @@ impl FixedPointSign {
 impl fmt::Display for FixedPointSign {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FixedPointSign::Positive => write!(f, ""),
             FixedPointSign::Negative => write!(f, "-"),
+            FixedPointSign::Positive => write!(f, ""),
         }
     }
 }
@@ -42,8 +51,8 @@ impl fmt::Display for FixedPointSign {
 impl fmt::Debug for FixedPointSign {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FixedPointSign::Positive => write!(f, "Positive"),
             FixedPointSign::Negative => write!(f, "Negative"),
+            FixedPointSign::Positive => write!(f, "Positive"),
         }
     }
 }
@@ -53,8 +62,8 @@ impl fmt::Debug for FixedPointSign {
 impl From<bool> for FixedPointSign {
     fn from(b: bool) -> FixedPointSign {
         match b {
-            true => FixedPointSign::Positive,
             false => FixedPointSign::Negative,
+            true => FixedPointSign::Positive,
         }
     }
 }
@@ -68,8 +77,8 @@ impl From<i8> for FixedPointSign {
 impl From<Sign> for FixedPointSign {
     fn from(sign: Sign) -> FixedPointSign {
         match sign {
-            Sign::Positive => FixedPointSign::Positive,
             Sign::Negative => FixedPointSign::Negative,
+            Sign::Positive => FixedPointSign::Positive,
         }
     }
 }
@@ -77,8 +86,8 @@ impl From<Sign> for FixedPointSign {
 impl From<FixedPointSign> for bool {
     fn from(sign: FixedPointSign) -> bool {
         match sign {
-            FixedPointSign::Positive => true,
             FixedPointSign::Negative => false,
+            FixedPointSign::Positive => true,
         }
     }
 }
@@ -86,8 +95,8 @@ impl From<FixedPointSign> for bool {
 impl From<FixedPointSign> for Sign {
     fn from(sign: FixedPointSign) -> Sign {
         match sign {
-            FixedPointSign::Positive => Sign::Positive,
             FixedPointSign::Negative => Sign::Negative,
+            FixedPointSign::Positive => Sign::Positive,
         }
     }
 }

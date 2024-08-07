@@ -1,12 +1,9 @@
 use std::{
     fmt::Debug,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, Sub, SubAssign},
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Rem, Sub, SubAssign},
 };
 
-use ethers::{
-    core::k256::sha2::digest::typenum::PartialDiv,
-    types::{I256, U256},
-};
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use paste::paste;
 
@@ -33,8 +30,8 @@ macro_rules! try_from_into {
             fn [<to_ $type_name:snake>](self) -> Result<$type_name> {
                 self.try_into().map_err(|_| {
                     eyre!(
-                        "Failed to convert underlying FixedPointValue to {}: {self:?}",
-                        stringify!($type_name)
+                        "Failed to convert underlying FixedPointValue to {type}: {self:?}",
+                        type = stringify!($type_name)
                    )
                 })
             }
@@ -42,14 +39,22 @@ macro_rules! try_from_into {
     };
 }
 
+/// A value that can be used to perform fixed-point math.
+///
+/// All methods have default implementations based on comparisons to `0`, but
+/// can be overridden to provide more efficient alternatives.
 pub trait FixedPointValue:
     Copy
-    + Default
     + Debug
+    + Default
+
+    // Required comparisons
     + PartialEq
     + Eq
     + PartialOrd
     + Ord
+
+    // Required math
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
@@ -59,119 +64,109 @@ pub trait FixedPointValue:
     + Div<Output = Self>
     + DivAssign
     + Rem<Output = Self>
-    + TryFrom<U256>
+    
+    // Required std conversions
     + TryFrom<u128>
-    + TryFrom<i128>
-    + TryInto<U256>
     + TryInto<u128>
-    + TryInto<i128>
     + From<u64>
+
+    // Required ethers conversions
+    + TryFrom<U256>
+    + TryInto<U256>
 {
-    const MAX: Self;
+    /// The minimum value that can be represented by the type. Can be negative.
     const MIN: Self;
-    const MAX_DECIMALS: u8;
+    /// The maximum value that can be represented by the type. Must be `>= 0`.
+    const MAX: Self;
+    const MAX_DECIMALS: u8 = 18;
 
-    try_from_into!(U256, u128, i128);
+    try_from_into!(U256, u128);
 
-    fn abs(self) -> Self;
-    fn is_negative(self) -> bool;
-    fn flip_sign(self) -> Self;
+    fn is_zero(self) -> bool {
+        self == 0.into()
+    }
 
+    fn is_negative(self) -> bool {
+        self < 0.into()
+    }
+
+    fn is_positive(self) -> bool {
+        !self.is_negative()
+    }
+
+    /// Whether the value supports negation.
+    fn is_signed() -> bool {
+        Self::MIN.is_negative()
+    }
+
+    /// Flips the sign of the value.
+    ///
+    /// # Panics
+    ///
+    /// If the value doesn't support negation or the value overflows, i.e., the
+    /// value is equal to `MIN`.
+    fn flip_sign(self) -> Self {
+        if Self::is_signed() {
+            return Self::from(0) - self;
+        } else {
+            panic!("Cannot flip sign of unsigned value: {:?}", self);
+        }
+    }
+
+    /// Flips the sign of the value if the condition is true.
+    ///
+    /// # Panics
+    ///
+    /// If the value doesn't support negation.
     fn flip_sign_if(self, condition: bool) -> Self {
         if condition {
             return self.flip_sign();
         }
         self
     }
+
+    /// Computes the absolute value of self.
+    ///
+    /// # Panics
+    ///
+    /// If the absolute value of self overflows `T`, e.g., if self is the
+    /// minimum value of a signed integer.
+    fn abs(self) -> Self {
+        if self.is_negative() {
+             self.flip_sign()
+        } else {
+            self
+        }
+    }
+
+    /// Computes the absolute value of self as a `U256` to avoid overflow.
+    fn unsigned_abs(self) -> U256 {
+        if self.is_negative() {
+            // Add 1 before flipping the sign to avoid overflow
+            let abs = (self + 1.into()).flip_sign();
+            abs.to_u256().unwrap() + U256::from(1)
+        } else {
+            self.to_u256().unwrap()
+        }
+    }
 }
 
-// TODO: On hold until varying decimal precision is implemented
-// impl FixedPointValue for U512 {
-//     const MAX: Self = U512::MAX;
-//     const MIN: Self = U512([0, 0, 0, 0, 0, 0, 0, 0]);
-//     const MAX_DECIMALS: u8 = 36;
-
-//     fn abs(self) -> Self {
-//         self
-//     }
-
-//     fn is_negative(self) -> bool {
-//         false
-//     }
-
-//     fn flip_sign(self) -> Self {
-//         self
-//     }
-// }
-
 impl FixedPointValue for U256 {
+    const MIN: Self = U256([0, 0, 0, 0]);
     const MAX: Self = U256::MAX;
-    const MIN: Self = U256::MAX;
-    const MAX_DECIMALS: u8 = 18;
-
-    fn abs(self) -> Self {
-        self
-    }
-
-    fn is_negative(self) -> bool {
-        false
-    }
-
-    fn flip_sign(self) -> Self {
-        self
-    }
 }
 
 impl FixedPointValue for I256 {
-    const MAX: Self = I256::MAX;
     const MIN: Self = I256::MIN;
-    const MAX_DECIMALS: u8 = 18;
-
-    fn abs(self) -> Self {
-        I256::abs(self)
-    }
-
-    fn is_negative(self) -> bool {
-        self.is_negative()
-    }
-
-    fn flip_sign(self) -> Self {
-        -self
-    }
+    const MAX: Self = I256::MAX;
 }
 
 impl FixedPointValue for u128 {
-    const MAX: Self = u128::MAX;
     const MIN: Self = u128::MIN;
-    const MAX_DECIMALS: u8 = 18;
-
-    fn abs(self) -> Self {
-        self
-    }
-
-    fn is_negative(self) -> bool {
-        false
-    }
-
-    fn flip_sign(self) -> Self {
-        self
-    }
+    const MAX: Self = u128::MAX;
 }
 
 impl FixedPointValue for i128 {
-    const MAX: Self = i128::MAX;
     const MIN: Self = i128::MIN;
-    const MAX_DECIMALS: u8 = 18;
-
-    fn abs(self) -> Self {
-        i128::abs(self)
-    }
-
-    fn is_negative(self) -> bool {
-        self.is_negative()
-    }
-
-    fn flip_sign(self) -> Self {
-        -self
-    }
+    const MAX: Self = i128::MAX;
 }

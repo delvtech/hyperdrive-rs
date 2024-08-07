@@ -1,41 +1,36 @@
 mod macros;
+mod rng;
 mod sign;
 mod utils;
 mod value;
 
-use core::panic;
 use std::{
     fmt,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
 use ethers::types::{I256, U256, U512};
-use eyre::{bail, eyre, Error, Report, Result};
-use rand::{
-    distributions::{
-        uniform::{SampleBorrow, SampleUniform, UniformFloat, UniformSampler},
-        Distribution, Standard,
-    },
-    Rng,
-};
+use eyre::{bail, eyre, Result};
 pub use sign::*;
 pub use utils::*;
 pub use value::*;
 
-/// A fixed point wrapper around ethers-rs.
+/// A fixed point wrapper around the `U256` type from ethers-rs.
 ///
 /// This fixed point type is a heavily based on Solidity's FixedPointMath
 /// library with a few changes:
-/// - Support for negative numbers.
+/// - The outward type of the underlying value is generic, allowing the library
+///   to be used with any type that implements `FixedPointValue`, including
+///   signed integers, and ensuring that the instance is bounded by the generic
+///   type's limits.
 /// - Support for overflowing intermediate operations in `mul_div_down` and
-///  `mul_div_up`.
+///  `mul_div_up` via `U512`.
 ///
 /// Each of the functions is fuzz tested against the Solidity implementation to
 /// ensure that the behavior is identical given values bounded by both the
 /// Solidity and Rust limits.
-#[derive(PartialOrd, Ord, Clone, Copy)]
+#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub struct FixedPoint<T: FixedPointValue> {
-    sign: FixedPointSign,
     value: T,
     decimals: u8,
 }
@@ -43,7 +38,6 @@ pub struct FixedPoint<T: FixedPointValue> {
 impl<T: FixedPointValue> Default for FixedPoint<T> {
     fn default() -> Self {
         Self {
-            sign: FixedPointSign::Positive,
             value: T::default(),
             decimals: T::MAX_DECIMALS,
         }
@@ -51,15 +45,13 @@ impl<T: FixedPointValue> Default for FixedPoint<T> {
 }
 
 impl<T: FixedPointValue> FixedPoint<T> {
-    const MAX: Self = Self {
-        sign: FixedPointSign::Positive,
-        value: T::MAX,
+    const MIN: Self = Self {
+        value: T::MIN,
         decimals: T::MAX_DECIMALS,
     };
 
-    const MIN: Self = Self {
-        sign: FixedPointSign::Negative,
-        value: T::MIN,
+    const MAX: Self = Self {
+        value: T::MAX,
         decimals: T::MAX_DECIMALS,
     };
 
@@ -69,17 +61,10 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     /// The primary constructor for `FixedPoint`. All instances should be
     /// created using this method to ensure consistent behavior.
-    pub fn new<S, V>(sign: S, value: V) -> Result<Self>
-    where
-        S: Into<FixedPointSign>,
-        V: Into<T>,
-    {
-        let sign = sign.into();
+    pub fn new<V: Into<T>>(value: V) -> Result<Self> {
         let value = value.into();
 
-        if (sign == FixedPointSign::Positive && value > T::MAX)
-            || (sign == FixedPointSign::Negative && value < T::MIN)
-        {
+        if (value > T::MAX) || (value < T::MIN) {
             bail!(
                 r#"value {value:?} is out of FixedPoint range:
     min: {min:?}
@@ -90,30 +75,25 @@ impl<T: FixedPointValue> FixedPoint<T> {
         }
 
         Ok(Self {
-            sign,
             value,
             // TODO: Add support for variable decimals.
             decimals: Self::MAX_DECIMALS,
         })
     }
 
-    pub fn from_raw<V: Into<T>>(value: V) -> Result<Self> {
-        let value: T = value.into();
-        Self::new(!value.is_negative(), value)
-    }
-
     pub fn zero() -> Self {
-        Self::from_raw(0).unwrap()
+        Self::new(0).unwrap()
     }
 
     pub fn from_dec_str(s: &str) -> Result<Self> {
         if s.starts_with('-') {
-            return Self::new(
-                FixedPointSign::Negative,
-                T::from_u256(u256_from_str(&s[1..])?)?,
-            );
+            let uint = u256_from_str(&s[1..])?;
+            let raw = T::from_u256(uint)?.flip_sign();
+            return Self::new(raw);
         }
-        Self::from_raw(T::from_u256(u256_from_str(s)?)?)
+        let uint = u256_from_str(s)?;
+        let raw = T::from_u256(uint)?;
+        Self::new(raw)
     }
 
     pub fn saturate_sign(sign: FixedPointSign) -> Self {
@@ -134,27 +114,27 @@ impl<T: FixedPointValue> FixedPoint<T> {
     }
 
     pub fn sign(&self) -> FixedPointSign {
-        if self.is_zero() {
-            return FixedPointSign::Positive;
+        if self.is_negative() {
+            return FixedPointSign::Negative;
         }
-        self.sign
+        FixedPointSign::Positive
     }
 
     // Predicates //
 
-    pub fn is_positive(&self) -> bool {
-        self.sign() == FixedPointSign::Positive
+    pub fn is_negative(&self) -> bool {
+        self.raw().is_negative()
     }
 
-    pub fn is_negative(&self) -> bool {
-        !self.is_positive()
+    pub fn is_positive(&self) -> bool {
+        !self.is_negative()
     }
 
     pub fn is_zero(&self) -> bool {
-        self.raw() == 0.into()
+        self.raw().is_zero()
     }
 
-    // Conversions //
+    // Conversion to unsigned & signed ethers types //
 
     pub fn to_u256(&self) -> Result<U256> {
         if self.is_negative() {
@@ -167,141 +147,106 @@ impl<T: FixedPointValue> FixedPoint<T> {
     }
 
     pub fn to_i256(&self) -> Result<I256> {
-        let u = self.raw().to_u256()?;
-        if u > I256::MAX.unsigned_abs() {
+        let abs = self.unsigned_abs().raw();
+        let abs_max = FixedPoint::<I256>::saturate_sign(self.sign())
+            .raw()
+            .unsigned_abs();
+        if abs > abs_max {
             bail!(
                 "FixedPoint {} is too large to convert to I256",
                 self.to_scaled_string()
             );
         }
-        I256::checked_from_sign_and_abs(self.sign().into(), u).ok_or(eyre!(
+        I256::checked_from_sign_and_abs(self.sign().into(), abs).ok_or(eyre!(
             "failed to convert FixedPoint {} to I256",
             self.to_scaled_string()
         ))
     }
 
+    // Conversion to unsigned and signed std types //
+
     pub fn to_u128(&self) -> Result<u128> {
         if self.is_negative() {
             bail!(
                 "cannot convert negative FixedPoint {} to u128",
-                self.to_scaled_string()
+                self.to_scaled_string(),
             );
         }
         self.raw().to_u128()
     }
 
     pub fn to_i128(&self) -> Result<i128> {
-        let mut i = self.raw().to_i128()?;
-        if self.is_negative() && i.is_positive() {
-            i = -i
-        }
-        Ok(i)
+        let i256 = self.to_i256()?;
+        i128::try_from(i256).or_else(|_| {
+            bail!(
+                "FixedPoint {} is too large to convert to i128",
+                self.to_scaled_string()
+            )
+        })
     }
 
     // Math //
 
-    /// `FixedPoint(1.0)` with the same scale as this fixed point number.
+    /// One with the same scale as this fixed point number, i.e., `1.0`.
     ///
     /// # Panics
     ///
     /// Panics if `10` to the power of `self.decimals()` overflows `T`.
     pub fn one(&self) -> Self {
-        let u256 = uint256!(10).pow(self.decimals().into());
-        Self::from_raw(T::from_u256(u256).unwrap()).unwrap()
+        let uint = U256::from(10).pow(self.decimals().into());
+        Self::new(T::from_u256(uint).unwrap()).unwrap()
     }
 
-    pub fn checked_add(&self, other: Self) -> Option<Self> {
-        if self.sign() == other.sign() {
-            let lhs = self.raw().abs();
-            let rhs = other.raw().abs();
-            let max_rhs = match self.sign() {
-                FixedPointSign::Positive => T::MAX - lhs,
-                FixedPointSign::Negative => T::MIN + lhs,
-            };
-            if rhs > max_rhs {
-                return None;
-            }
-
-            Self::new(self.sign(), lhs + rhs).ok()
-        } else {
-            Self::new(self.max(&other).sign(), self.abs_diff(other).raw()).ok()
-        }
-    }
-
-    pub fn saturating_add(&self, other: Self) -> Self {
-        self.checked_add(other)
-            .unwrap_or(Self::saturate_sign(self.sign()))
-    }
-
-    pub fn try_add(&self, other: Self) -> Result<Self> {
-        self.checked_add(other).ok_or_else(|| {
-            eyre!(
-                "FixedPoint operation overflowed: {} + {}",
-                self.to_scaled_string(),
-                other.to_scaled_string()
-            )
-        })
-    }
-
-    pub fn checked_sub(&self, other: Self) -> Option<Self> {
-        if self.sign() == other.sign() {
-            Self::new(
-                self.sign().flip_if(other.raw() > self.raw()),
-                self.abs_diff(other).raw(),
-            )
-            .ok()
-        } else {
-            Self::new(self.sign(), self.abs().checked_add(other.abs())?.raw()).ok()
-        }
-    }
-
-    pub fn saturating_sub(&self, other: Self) -> Self {
-        self.checked_sub(other)
-            .unwrap_or(Self::saturate_sign(self.sign()))
-    }
-
-    pub fn try_sub(&self, other: Self) -> Result<Self> {
-        self.checked_sub(other).ok_or_else(|| {
-            eyre!(
-                "FixedPoint operation overflowed: {} - {}",
-                self.to_scaled_string(),
-                other.to_scaled_string()
-            )
-        })
-    }
-
+    /// Computes the absolute value of self.
+    ///
+    /// # Panics
+    ///
+    /// If the absolute value of self overflows `T`, e.g., if self is the
+    /// minimum value of a signed integer.
     pub fn abs(&self) -> Self {
-        Self::from_raw(self.raw().abs()).unwrap()
+        Self::new(self.raw().abs()).unwrap()
     }
 
-    pub fn abs_diff(&self, other: Self) -> Self {
-        if self > &other {
-            self.try_sub(other).unwrap()
-        } else {
-            other.try_sub(*self).unwrap()
+    /// Computes the absolute value of self as a `U256` to avoid overflow.
+    pub fn unsigned_abs(&self) -> FixedPoint<U256> {
+        FixedPoint::new(self.raw().unsigned_abs()).unwrap()
+    }
+
+    pub fn abs_diff(&self, other: Self) -> FixedPoint<U256> {
+        if self.sign() != other.sign() {
+            return FixedPoint::new(self.unsigned_abs().raw() + other.unsigned_abs().raw())
+                .unwrap();
         }
+        let diff = if self > &other {
+            self.raw() - other.raw()
+        } else {
+            other.raw() - self.raw()
+        };
+        FixedPoint::new(diff.to_u256().unwrap()).unwrap()
     }
 
     pub fn mul_div_down(&self, other: Self, divisor: Self) -> Result<Self> {
         if divisor.is_zero() {
             bail!("cannot divide by zero");
         }
-        let u512 = self
-            .abs()
-            .to_u256()?
-            .full_mul(other.abs().to_u256()?.into())
-            .div(divisor.abs().to_u256()?);
-        Self::new(
-            self.sign().flip_if(other.sign() != divisor.sign()),
-            T::from_u256(U256::try_from(u512).or_else(|_| {
-                bail!(
-                    "FixedPoint operation overflowed: {} * {} / {}",
-                    self.to_scaled_string(),
-                    other.to_scaled_string(),
-                    divisor.to_scaled_string(),
-                )
-            })?)?,
+        let u256 = U256::try_from(
+            self.raw()
+                .abs()
+                .to_u256()?
+                .full_mul(other.raw().abs().to_u256()?.into())
+                .div(divisor.raw().abs().to_u256()?),
         )
+        .or_else(|_| {
+            bail!(
+                "FixedPoint operation overflowed: {} * {} / {}",
+                self.to_scaled_string(),
+                other.to_scaled_string(),
+                divisor.to_scaled_string(),
+            )
+        })?;
+        let sign = self.sign().flip_if(other.sign() != divisor.sign());
+        let raw = T::from_u256(u256)?.flip_sign_if(sign.is_negative());
+        Self::new(raw)
     }
 
     pub fn mul_div_up(&self, other: Self, divisor: Self) -> Result<Self> {
@@ -309,22 +254,23 @@ impl<T: FixedPointValue> FixedPoint<T> {
             bail!("cannot divide by zero");
         }
         let (u512, remainder) = self
+            .raw()
             .abs()
             .to_u256()?
-            .full_mul(other.abs().to_u256()?.into())
-            .div_mod(divisor.abs().to_u256()?.into());
-        let rounded_u512 = u512 + (remainder.gt(&U512::zero()) as u128);
-        Self::new(
-            self.sign().flip_if(other.sign() != divisor.sign()),
-            T::from_u256(U256::try_from(rounded_u512).or_else(|_| {
+            .full_mul(other.raw().abs().to_u256()?.into())
+            .div_mod(divisor.raw().abs().to_u256()?.into());
+        let rounded_u256 =
+            U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128)).or_else(|_| {
                 bail!(
                     "FixedPoint operation overflowed: {} * {} / {}",
                     self.to_scaled_string(),
                     other.to_scaled_string(),
                     divisor.to_scaled_string()
                 )
-            })?)?,
-        )
+            })?;
+        let sign = self.sign().flip_if(other.sign() != divisor.sign());
+        let raw = T::from_u256(rounded_u256)?.flip_sign_if(sign.is_negative());
+        Self::new(raw)
     }
 
     pub fn mul_down(&self, other: Self) -> Result<Self> {
@@ -380,7 +326,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
         // Calculate exp(y * ln(x)) to get x^y
         let (sign, abs) = exp(ylnx)?.into_sign_and_abs();
-        Self::new(sign, T::from_u256(abs)?)
+        let raw = T::from_u256(abs)?.flip_sign_if(sign.is_negative());
+        Self::new(raw)
     }
 
     pub fn to_scaled_string(&self) -> String {
@@ -420,12 +367,14 @@ impl<T: FixedPointValue> FixedPoint<T> {
     }
 }
 
-impl<T: FixedPointValue> PartialEq for FixedPoint<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.sign() == other.sign() && self.raw().abs() == other.raw().abs()
-    }
-}
-impl<T: FixedPointValue> Eq for FixedPoint<T> {}
+// Comparisons //
+
+// impl<T: FixedPointValue> PartialEq for FixedPoint<T> {
+//     fn eq(&self, other: &Self) -> bool {
+//         self.sign() == other.sign() && self.raw().abs() == other.raw().abs()
+//     }
+// }
+// impl<T: FixedPointValue> Eq for FixedPoint<T> {}
 
 // Formatting //
 
@@ -443,56 +392,46 @@ impl<T: FixedPointValue> fmt::Display for FixedPoint<T> {
 
 // Conversions //
 
-macro_rules! impl_from_raw {
+impl<T: FixedPointValue> From<T> for FixedPoint<T> {
+    fn from(value: T) -> Self {
+        Self::new(value).unwrap()
+    }
+}
+
+/// Takes a list of raw types and implements conversions to `FixedPoint<T>` for
+/// each one that can be converted to `T`.
+macro_rules! impl_from_nested_raw {
     ($($t:ty),*) => {
         $(
             impl<T: FixedPointValue + From<$t>> From<$t> for FixedPoint<T> {
                 fn from(u: $t) -> Self {
-                    Self::from_raw(u).unwrap()
+                    Self::new(u).unwrap()
                 }
             }
         )*
     };
+    ($($tt:tt)*) => {};
 }
 
-impl_from_raw!(U256, u128, u64, u32, [u8; 32], [u64; 4]);
+// Any FixedPointValue that can be created from these types can be converted to
+// a FixedPoint.
+impl_from_nested_raw!(usize, isize, u64, i64, u32, i32, u16, i16, u8, i8, [u8; 32], bool);
 
-macro_rules! impl_from_signum_raw {
-    ($($t:ty),*) => {
-        $(
-            impl<T: FixedPointValue + From<$t>> From<$t> for FixedPoint<T> {
-                fn from(i: $t) -> Self {
-                    Self::new(i.signum() as i8, i).unwrap()
-                }
-            }
-        )*
-    };
-}
-
-impl_from_signum_raw!(i128, i64, i32);
-
-impl<T> From<I256> for FixedPoint<T>
-where
-    T: FixedPointValue + From<I256>,
-{
-    fn from(i: I256) -> Self {
-        Self::new(i.sign(), i).unwrap()
-    }
-}
-
+/// Takes a mapping of raw types to `FixedPoint` methods and implements
+/// conversions to each raw type using the corresponding method.
 macro_rules! impl_mapped_try_into {
     ($($t:ty => $fn:ident),*) => {
         $(
-            impl<T: $crate::FixedPointValue> TryFrom<$crate::FixedPoint<T>> for $t {
+            impl<T: FixedPointValue> TryFrom<FixedPoint<T>> for $t {
                 type Error = eyre::ErrReport;
 
-                fn try_from(f: $crate::FixedPoint<T>) -> eyre::Result<Self> {
+                fn try_from(f: FixedPoint<T>) -> eyre::Result<Self> {
                     f.$fn()
                 }
             }
         )*
     };
-    () => {};
+    ($($tt:tt)*) => {};
 }
 
 impl_mapped_try_into!(
@@ -508,16 +447,18 @@ impl<T: FixedPointValue> Neg for FixedPoint<T> {
     type Output = Self;
 
     fn neg(self) -> Self {
-        Self::new(self.sign().flip(), self.raw().flip_sign()).unwrap()
+        Self::new(self.raw().flip_sign()).unwrap()
     }
 }
 
+/// Takes a mapping of operator traits to `FixedPoint` methods and implements
+/// the operator and assignment operator for each one.
 macro_rules! impl_mapped_operator {
     ($($trait:ident => $fn:ident),*) => {
         $(
             paste::paste! {
 
-                impl<T: $crate::FixedPointValue> std::ops::$trait for $crate::FixedPoint<T> {
+                impl<T: FixedPointValue> std::ops::$trait for FixedPoint<T> {
                     type Output = Self;
 
                     fn [<$trait:lower>](self, other: Self) -> Self::Output {
@@ -525,7 +466,7 @@ macro_rules! impl_mapped_operator {
                     }
                 }
 
-                impl<T: $crate::FixedPointValue> std::ops::[<$trait Assign>] for $crate::FixedPoint<T> {
+                impl<T: FixedPointValue> std::ops::[<$trait Assign>] for FixedPoint<T> {
                     fn [<$trait:lower _assign>](&mut self, other: Self) {
                         *self = self.[<$trait:lower>](other);
                     }
@@ -533,403 +474,323 @@ macro_rules! impl_mapped_operator {
             }
         )*
     };
+    ($($tt:tt)*) => {};
 }
 
 impl_mapped_operator!(
-    Add => try_add,
-    Sub => try_sub,
+    // use `mul_down` for `*` and `*=`.
     Mul => mul_down,
+    // use `div_down` for `/` and `/=`.
     Div => div_down
 );
 
-// Sampling //
+/// Takes a list of operator traits and implements the operator and assignment
+/// operator for each one by forwarding to the corresponding method on the
+/// underlying `FixedPointValue`.
+macro_rules! impl_forwarded_operator {
+    ($($trait:ident),*) => {
+        $(
+            paste::paste! {
 
-// impl<T: FixedPointValue> Distribution<FixedPoint<T>> for Standard {
-//     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FixedPoint<T> {
-//         FixedPoint::new(
-//             rng.gen_bool(0.5),
-//             T::from_u256(rng.gen::<[u8; 32]>().into()).unwrap(),
-//         )
-//         .unwrap()
-//     }
-// }
+                impl<T: FixedPointValue> std::ops::$trait for FixedPoint<T> {
+                    type Output = Self;
 
-impl<T: FixedPointValue> Distribution<FixedPoint<T>> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FixedPoint<T> {
-        let u: U256 = rng.gen::<[u8; 32]>().into();
-        println!("sample--\nu: {}", u);
-        FixedPoint::new(
-            rng.gen_bool(0.5),
-            T::from_u256(u % (T::MAX.to_u256().unwrap() + U256::from(1))).unwrap(),
-        )
-        .unwrap()
+                    fn [<$trait:lower>](self, other: Self) -> Self::Output {
+                        Self::new(self.raw().[<$trait:lower>](other.raw())).unwrap()
+                    }
+                }
+
+                impl<T: FixedPointValue> std::ops::[<$trait Assign>] for FixedPoint<T> {
+                    fn [<$trait:lower _assign>](&mut self, other: Self) {
+                        *self = self.[<$trait:lower>](other);
+                    }
+                }
+            }
+        )*
+    };
+    ($($tt:tt)*) => {};
+}
+
+// Forward these operators to the underlying `FixedPointValue`.
+impl_forwarded_operator!(Add, Sub, Rem);
+
+#[cfg(test)]
+mod tests {
+    use std::{panic, u128};
+
+    use ethers::signers::Signer;
+    use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
+    use rand::{thread_rng, Rng};
+    use test_utils::{chain::Chain, constants::DEPLOYER};
+
+    use super::*;
+    use crate::uint256;
+
+    /// The maximum number that can be divided by another in the Solidity
+    /// implementation.
+    fn max_sol_numerator() -> FixedPoint<U256> {
+        FixedPoint::from(U256::MAX / uint256!(1e18))
     }
-}
 
-pub struct UniformFixedPoint<T: FixedPointValue> {
-    low: FixedPoint<T>,
-    high: FixedPoint<T>,
-}
+    #[test]
+    fn test_fixed_point_fmt() {
+        // fmt::Debug
+        assert_eq!(
+            format!("{:?}", fixed_u128!(1)),
+            "FixedPoint(0.000000000000000001)"
+        );
+        assert_eq!(
+            format!("{:?}", fixed_u128!(1.23456e18)),
+            "FixedPoint(1.234560000000000000)"
+        );
+        assert_eq!(
+            format!("{:?}", fixed_u128!(50_000.234_56e18)),
+            "FixedPoint(50000.234560000000000000)"
+        );
 
-impl<T: FixedPointValue> SampleUniform for FixedPoint<T> {
-    type Sampler = UniformFixedPoint<T>;
-}
+        // fmt::Display
+        assert_eq!(format!("{}", fixed_u128!(1)), "0.000000000000000001");
+        assert_eq!(
+            format!("{}", fixed_u128!(1.23456e18)),
+            "1.234560000000000000"
+        );
+        assert_eq!(
+            format!("{}", fixed_u128!(50_000.234_56e18)),
+            "50000.234560000000000000"
+        );
+    }
 
-impl<T: FixedPointValue> UniformSampler for UniformFixedPoint<T> {
-    type X = FixedPoint<T>;
+    #[test]
+    fn test_sub_failure() {
+        // Ensure that subtraction producing negative numbers fails.
+        assert!(panic::catch_unwind(|| fixed_u128!(1e18) - fixed!(2e18)).is_err());
+    }
 
-    #[inline]
-    fn new<B1, B2>(low_b: B1, high_b: B2) -> Self
-    where
-        B1: SampleBorrow<Self::X> + Sized,
-        B2: SampleBorrow<Self::X> + Sized,
-    {
-        let low = *low_b.borrow();
-        let high = *high_b.borrow();
-        if low >= high {
-            panic!("UniformFixedPoint::new called with invalid range");
+    #[test]
+    fn test_mul_div_down_failure() {
+        // Ensure that division by zero fails.
+        assert!(fixed_u128!(1e18)
+            .mul_div_down(fixed!(1e18), fixed!(0))
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn fuzz_mul_div_down() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let max = max_sol_numerator();
+            let a = rng.gen_range(0.into()..=max);
+            let b = rng.gen_range(0.into()..=max / a);
+            let c = rng.gen_range(0.into()..=max);
+            let actual = a.mul_div_down(b, c);
+            match mock_fixed_point_math
+                .mul_div_down(a.raw(), b.raw(), c.raw())
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
         }
-        UniformFixedPoint { low, high }
+
+        Ok(())
     }
 
-    #[inline]
-    fn new_inclusive<B1, B2>(low_b: B1, high_b: B2) -> Self
-    where
-        B1: SampleBorrow<Self::X> + Sized,
-        B2: SampleBorrow<Self::X> + Sized,
-    {
-        let low = *low_b.borrow();
-        let high = *high_b.borrow();
-        if low > high {
-            panic!("UniformFixedPoint::new called with invalid range");
-        }
-        UniformFixedPoint::new(low, high + FixedPoint::<T>::from(1))
+    #[test]
+    fn test_mul_div_up_failure() {
+        // Ensure that division by zero fails.
+        assert!(fixed_u128!(1e18)
+            .mul_div_up(fixed!(1e18), fixed!(0))
+            .is_err());
     }
 
-    #[inline]
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> FixedPoint<T> {
-        println!("sample(inline)--\nlow: {}, high: {}", self.low, self.high);
+    #[tokio::test]
+    async fn fuzz_mul_div_up() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
-        let range = self.high.abs_diff(self.low);
-        if range.is_zero() {
-            return self.low;
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let max = max_sol_numerator();
+            let a = rng.gen_range(0.into()..=max);
+            let b = rng.gen_range(0.into()..=max / a);
+            let c = rng.gen_range(0.into()..=max);
+            let actual = a.mul_div_up(b, c);
+            match mock_fixed_point_math
+                .mul_div_up(a.raw(), b.raw(), c.raw())
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
         }
 
-        let max_value = T::MAX;
-        let raw_rand = U256::from(rng.gen::<[u8; 32]>())
-            % (max_value
-                .to_u256()
-                .unwrap_or_else(|_| panic!("Failed to convert max_value to U256"))
-                + U256::from(1));
+        Ok(())
+    }
 
-        let scaled_rand = range
-            .mul_div_down(
-                FixedPoint::<T>::from_raw(
-                    T::from_u256(raw_rand)
-                        .unwrap_or_else(|_| panic!("Failed to convert raw_rand to T")),
-                )
-                .unwrap_or_else(|_| panic!("Failed to convert raw_rand to FixedPoint")),
-                FixedPoint::<T>::from_raw(max_value)
-                    .unwrap_or_else(|_| panic!("Failed to convert max_value to FixedPoint")),
-            )
-            .unwrap_or_else(|_| panic!("Failed to scale random value"));
+    #[tokio::test]
+    async fn fuzz_mul_down() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
 
-        self.low + scaled_rand
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let a: FixedPoint<U256> = rng.gen();
+            let b: FixedPoint<U256> = rng.gen();
+            let actual = a.mul_down(b);
+            match mock_fixed_point_math
+                .mul_down(a.raw(), b.raw())
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_mul_up() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let a: FixedPoint<U256> = rng.gen();
+            let b: FixedPoint<U256> = rng.gen();
+            let actual = a.mul_up(b);
+            match mock_fixed_point_math.mul_up(a.raw(), b.raw()).call().await {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_div_down_failure() {
+        // Ensure that division by zero fails.
+        assert!(fixed_u128!(1e18).div_down(fixed!(0)).is_err());
+    }
+
+    #[tokio::test]
+    async fn fuzz_div_down() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let max = max_sol_numerator();
+            let a = rng.gen_range(0.into()..=max);
+            let b = rng.gen_range(0.into()..=max);
+            let actual = a.div_down(b);
+            match mock_fixed_point_math
+                .div_down(a.raw(), b.raw())
+                .call()
+                .await
+            {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_div_up_failure() {
+        // Ensure that division by zero fails.
+        assert!(fixed_u128!(1e18).div_up(fixed!(0)).is_err());
+    }
+
+    #[tokio::test]
+    async fn fuzz_div_up() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let max = max_sol_numerator();
+            let a = rng.gen_range(0.into()..=max);
+            let b = rng.gen_range(0.into()..=max);
+            let actual = a.div_up(b);
+            match mock_fixed_point_math.div_up(a.raw(), b.raw()).call().await {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_pow_narrow() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let x = rng.gen_range(fixed!(0)..=fixed!(1e18));
+            let y = rng.gen_range(fixed!(0)..=fixed!(1e18));
+            let actual = x.pow(y);
+            match mock_fixed_point_math.pow(x.raw(), y.raw()).call().await {
+                Ok(expected) => {
+                    assert_eq!(actual.unwrap(), FixedPoint::from(expected));
+                }
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_pow() -> Result<()> {
+        let chain = Chain::connect(None, None).await?;
+        chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
+        let client = chain.client(DEPLOYER.clone()).await?;
+        let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
+
+        // Fuzz the rust and solidity implementations against each other.
+        let mut rng = thread_rng();
+        for _ in 0..10_000 {
+            let x: FixedPoint<U256> = rng.gen();
+            let y: FixedPoint<U256> = rng.gen();
+            let actual = x.pow(y);
+            match mock_fixed_point_math.pow(x.raw(), y.raw()).call().await {
+                Ok(expected) => assert_eq!(actual.unwrap(), FixedPoint::from(expected)),
+                Err(_) => assert!(actual.is_err()),
+            }
+        }
+
+        Ok(())
     }
 }
-
-// #[cfg(test)]
-// mod tests {
-//     use std::u128;
-
-//     use ethers::signers::Signer;
-//     use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
-//     use rand::thread_rng;
-//     use test_utils::{chain::Chain, constants::DEPLOYER};
-
-//     use super::*;
-//     use crate::uint256;
-
-//     fn max_sol_divisible() -> U256 {
-//         U256::MAX / uint256!(1e18)
-//     }
-
-//     #[test]
-//     fn test_fixed_point_fmt() {
-//         // fmt::Debug
-//         assert_eq!(
-//             format!("{:?}", fixed!(1)),
-//             "FixedPoint(0.000000000000000001)"
-//         );
-//         assert_eq!(
-//             format!("{:?}", fixed!(1.23456e18)),
-//             "FixedPoint(1.234560000000000000)"
-//         );
-//         assert_eq!(
-//             format!("{:?}", fixed!(50_000.234_56e18)),
-//             "FixedPoint(50000.234560000000000000)"
-//         );
-
-//         // fmt::Display
-//         assert_eq!(format!("{}", fixed!(1)), "0.000000000000000001");
-//         assert_eq!(format!("{}", fixed!(1.23456e18)), "1.234560000000000000");
-//         assert_eq!(
-//             format!("{}", fixed!(50_000.234_56e18)),
-//             "50000.234560000000000000"
-//         );
-//     }
-
-//     #[test]
-//     fn test_mul_div_down_failure() {
-//         // Ensure that division by zero fails.
-//         assert!(fixed!(1e18).mul_div_down(fixed!(1e18), 0.into()).is_err());
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_mul_div_down() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         println!(
-//             "Deployed mock contract at {}",
-//             mock_fixed_point_math.address()
-//         );
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(u128::MAX));
-//             let b = rng.gen_range(fixed!(0)..Self::from(u128::MAX));
-//             let c = rng.gen::<FixedPoint>();
-//             let actual = a.mul_div_down(b, c);
-//             match mock_fixed_point_math
-//                 .mul_div_down(
-//                     a.abs().try_into()?,
-//                     b.abs().try_into()?,
-//                     c.abs().try_into()?,
-//                 )
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => {
-//                     assert_eq!(actual?.abs(), Self::from(expected))
-//                 }
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[test]
-//     fn test_mul_div_up_failure() {
-//         // Ensure that division by zero fails.
-//         assert!(fixed!(1e18).mul_div_up(fixed!(1e18), 0.into()).is_err());
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_mul_div_up() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(u128::MAX));
-//             let b = rng.gen_range(fixed!(0)..Self::from(u128::MAX));
-//             let c = rng.gen::<FixedPoint>();
-//             let actual = a.mul_div_up(b, c);
-//             match mock_fixed_point_math
-//                 .mul_div_up(
-//                     a.abs().try_into()?,
-//                     b.abs().try_into()?,
-//                     c.abs().try_into()?,
-//                 )
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => assert_eq!(actual?.abs(), Self::from(expected)),
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_mul_down() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(u128::MAX));
-//             let b = rng.gen_range(fixed!(0)..Self::from(u128::MAX));
-//             let actual = a.mul_down(b);
-
-//             match mock_fixed_point_math
-//                 .mul_down(a.abs().try_into()?, b.abs().try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => assert_eq!(actual?.abs(), Self::from(expected)),
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_mul_up() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(u128::MAX));
-//             let b = rng.gen_range(fixed!(0)..Self::from(u128::MAX));
-//             let actual = a.mul_up(b);
-//             match mock_fixed_point_math
-//                 .mul_up(a.abs().try_into()?, b.abs().try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => assert_eq!(actual?.abs(), Self::from(expected)),
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[test]
-//     fn test_div_down_failure() {
-//         // Ensure that division by zero fails.
-//         assert!(fixed!(1e18).div_down(0.into()).is_err());
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_div_down() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(max_sol_divisible()));
-//             let b = rng.gen_range(fixed!(0)..Self::from(max_sol_divisible()));
-//             let actual = a.div_down(b);
-//             match mock_fixed_point_math
-//                 .div_down(a.abs().try_into()?, b.abs().try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => assert_eq!(actual?.abs(), Self::from(expected)),
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[test]
-//     fn test_div_up_failure() {
-//         // Ensure that division by zero fails.
-//         assert!(fixed!(1e18).div_up(0.into()).is_err());
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_div_up() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let a = rng.gen_range(fixed!(0)..=Self::from(max_sol_divisible()));
-//             let b = rng.gen_range(fixed!(0)..Self::from(max_sol_divisible()));
-//             let actual = a.div_up(b);
-//             match mock_fixed_point_math
-//                 .div_up(a.abs().try_into()?, b.abs().try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => assert_eq!(actual?.abs(), Self::from(expected)),
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_pow_narrow() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let x = rng.gen_range(fixed!(0)..=fixed!(1e18));
-//             let y = rng.gen_range(fixed!(0)..=fixed!(1e18)).abs();
-//             let actual = x.pow(y);
-//             match mock_fixed_point_math
-//                 .pow(x.abs().try_into()?, y.try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => {
-//                     assert_eq!(actual?, Self::from(expected));
-//                 }
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-
-//     #[tokio::test]
-//     async fn fuzz_pow() -> Result<()> {
-//         let chain = Chain::connect(None, None).await?;
-//         chain.deal(DEPLOYER.address(), uint256!(100_000e18)).await?;
-//         let client = chain.client(DEPLOYER.clone()).await?;
-//         let mock_fixed_point_math = MockFixedPointMath::deploy(client, ())?.send().await?;
-
-//         // Fuzz the rust and solidity implementations against each other.
-//         let mut rng = thread_rng();
-//         for _ in 0..10_000 {
-//             let x = rng.gen::<FixedPoint>();
-//             let y = rng.gen::<FixedPoint>();
-//             let actual = x.pow(y);
-//             match mock_fixed_point_math
-//                 .pow(x.abs().try_into()?, y.abs().try_into()?)
-//                 .call()
-//                 .await
-//             {
-//                 Ok(expected) => {
-//                     assert_eq!(actual?, Self::from(expected))
-//                 }
-//                 Err(_) => assert!(actual.is_err()),
-//             }
-//         }
-
-//         Ok(())
-//     }
-// }
