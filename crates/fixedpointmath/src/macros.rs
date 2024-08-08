@@ -4,8 +4,8 @@
 //    hexadecimal and binary numbers since Rust has similar problems with those
 //    number types.
 // 2. Support expressions. Ideally, we would execute any expressions at compile
-//    time, so we could instantiate a fixed point number to represent
-//    60 * 60 * 24 seconds (for example).
+//    time, so we could instantiate a fixed point number to represent 60 * 60 *
+//    24 seconds (for example).
 
 #[macro_export]
 macro_rules! uint256 {

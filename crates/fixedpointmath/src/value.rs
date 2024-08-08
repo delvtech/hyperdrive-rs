@@ -7,6 +7,8 @@ use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use paste::paste;
 
+use crate::FixedPoint;
+
 /// Implements the `from_<type>` and `to_<type>` conversion functions for the
 /// given type.
 macro_rules! try_from_into {
@@ -148,6 +150,10 @@ pub trait FixedPointValue:
         } else {
             self.to_u256().unwrap()
         }
+    }
+
+    fn fixed(self) -> FixedPoint<Self> {
+        FixedPoint::from(self)
     }
 }
 

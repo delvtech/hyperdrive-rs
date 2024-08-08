@@ -17,8 +17,8 @@ use crate::{int256, uint256};
 /// assert_eq!(u, U256::from(11) * U256::from(10).pow(U256::from(17)));
 /// ```
 pub fn u256_from_str(s: &str) -> Result<U256> {
-    // Parse a string into a mantissa and an exponent. The U256 arithmetic
-    // will overflow if the mantissa or the exponent are too large.
+    // Parse a string into a mantissa and an exponent. The U256 arithmetic will
+    // overflow if the mantissa or the exponent are too large.
     let mut found_dot = false;
     let mut found_e = false;
     let mut mantissa = ethers::types::U256::zero();
@@ -46,8 +46,8 @@ pub fn u256_from_str(s: &str) -> Result<U256> {
     }
 
     // Combine the mantissa and the exponent into a single U256. This will
-    // overflow if the exponent is too large. We also need to make sure that
-    // the final result is an integer.
+    // overflow if the exponent is too large. We also need to make sure that the
+    // final result is an integer.
     let decimals = ethers::types::U256::from(decimals);
     if exponent < decimals {
         bail!("Exponent {exponent} is too small for U256: {s}");
@@ -56,7 +56,8 @@ pub fn u256_from_str(s: &str) -> Result<U256> {
     Ok(mantissa * ethers::types::U256::from(10).pow(exponent - decimals))
 }
 
-/// Parse a string into an I256 with support for scientific and decimal notation.
+/// Parse a string into an I256 with support for scientific and decimal
+/// notation.
 ///
 /// ## Example
 ///
@@ -68,8 +69,8 @@ pub fn u256_from_str(s: &str) -> Result<U256> {
 /// assert_eq!(i, -I256::from(11) * I256::from(10).pow(17));
 /// ```
 pub fn i256_from_str(s: &str) -> Result<I256> {
-    // Parse a string into a mantissa and an exponent. The U256 arithmetic
-    // will overflow if the mantissa or the exponent are too large.
+    // Parse a string into a mantissa and an exponent. The U256 arithmetic will
+    // overflow if the mantissa or the exponent are too large.
     let mut sign = ethers::types::I256::one();
     let mut found_dot = false;
     let mut found_e = false;
@@ -99,9 +100,9 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
         }
     }
 
-    // Combine the mantissa and the exponent I256. This will
-    // overflow if the exponent is too large. We also need to make sure that
-    // the final result is an integer.
+    // Combine the mantissa and the exponent I256. This will overflow if the
+    // exponent is too large. We also need to make sure that the final result is
+    // an integer.
     if exponent < decimals {
         bail!("Exponent {exponent} is too small for I256: {s}");
     }
@@ -112,8 +113,8 @@ pub fn i256_from_str(s: &str) -> Result<I256> {
 /// Math
 
 pub fn exp(mut x: I256) -> Result<I256> {
-    // When the result is < 0.5 we return zero. This happens when
-    // x <= floor(log(0.5e18) * 1e18) ~ -42e18
+    // When the result is < 0.5 we return zero. This happens when x <=
+    // floor(log(0.5e18) * 1e18) ~ -42e18
     if x <= I256::from(-42139678854452767551_i128) {
         return Ok(I256::zero());
     }
@@ -129,9 +130,9 @@ pub fn exp(mut x: I256) -> Result<I256> {
     // is a multiplication by 1e18 / 2**96 = 5**18 / 2**78.
     x = x.wrapping_shl(78) / int256!(5).pow(18);
 
-    // Reduce range of x to (-½ ln 2, ½ ln 2) * 2**96 by factoring out powers
-    // of two such that exp(x) = exp(x') * 2**k, where k is an integer.
-    // Solving this gives k = round(x / log(2)) and x' = x - k * log(2).
+    // Reduce range of x to (-½ ln 2, ½ ln 2) * 2**96 by factoring out powers of
+    // two such that exp(x) = exp(x') * 2**k, where k is an integer. Solving
+    // this gives k = round(x / log(2)) and x' = x - k * log(2).
     let k = ((x.wrapping_shl(96) / int256!(54916777467707473351141471128))
         .wrapping_add(int256!(2).pow(95)))
     .asr(96);
@@ -139,8 +140,8 @@ pub fn exp(mut x: I256) -> Result<I256> {
 
     // k is in the range [-61, 195].
 
-    // Evaluate using a (6, 7)-term rational approximation.
-    // p is made monic, we'll multiply by a scale factor later.
+    // Evaluate using a (6, 7)-term rational approximation. p is made monic,
+    // we'll multiply by a scale factor later.
     let mut y = x.wrapping_add(1346386616545796478920950773328_u128.into());
     y = y
         .wrapping_mul(x)
@@ -157,7 +158,8 @@ pub fn exp(mut x: I256) -> Result<I256> {
         .wrapping_mul(x)
         .wrapping_add(int256!(4385272521454847904659076985693276).wrapping_shl(96));
 
-    // We leave p in 2**192 basis so we don't need to scale it back up for the division.
+    // We leave p in 2**192 basis so we don't need to scale it back up for the
+    // division.
     let mut q = x.wrapping_sub(2855989394907223263936484059900_u128.into());
     q = q
         .wrapping_mul(x)
@@ -187,9 +189,9 @@ pub fn exp(mut x: I256) -> Result<I256> {
     // We now need to multiply r by:
     // * the scale factor s = ~6.031367120.
     // * the 2**k factor from the range reduction.
-    // * the 1e18 / 2**96 factor for base conversion.
-    // We do this all at once, with an intermediate result in 2**213
-    // basis, so the final right shift is always by a positive amount.
+    // * the 1e18 / 2**96 factor for base conversion. We do this all at once,
+    // with an intermediate result in 2**213 basis, so the final right shift is
+    // always by a positive amount.
     r = I256::from_raw(
         (r.into_raw()
             .overflowing_mul(uint256!(3822833074963236453042738258902158003155416615667))
@@ -205,10 +207,10 @@ pub fn ln(mut x: I256) -> Result<I256> {
         bail!("Cannot calculate ln of of negative number or zero.");
     }
 
-    // We want to convert x from 10**18 fixed point to 2**96 fixed point.
-    // We do this by multiplying by 2**96 / 10**18. But since
-    // ln(x * C) = ln(x) + ln(C), we can simply do nothing here
-    // and add ln(2**96 / 10**18) at the end.
+    // We want to convert x from 10**18 fixed point to 2**96 fixed point. We do
+    // this by multiplying by 2**96 / 10**18. But since ln(x * C) = ln(x) +
+    // ln(C), we can simply do nothing here and add ln(2**96 / 10**18) at the
+    // end.
 
     let mut r = I256::from((x > I256::from(0xffffffffffffffffffffffffffffffff_u128)) as u128)
         .wrapping_shl(7);
@@ -221,14 +223,13 @@ pub fn ln(mut x: I256) -> Result<I256> {
     r = r | I256::from((x.asr(r.as_usize()) > I256::from(0x3_u128)) as u128).wrapping_shl(1);
     r = r | I256::from((x.asr(r.as_usize()) > I256::from(0x1_u128)) as u128);
 
-    // Reduce range of x to (1, 2) * 2**96
-    // ln(2^k * x) = k * ln(2) + ln(x)
+    // Reduce range of x to (1, 2) * 2**96 ln(2^k * x) = k * ln(2) + ln(x)
     let k = r.wrapping_sub(int256!(96));
     x = x.wrapping_shl(int256!(159).wrapping_sub(k).as_usize());
     x = I256::from_raw(x.into_raw().shr(159));
 
-    // Evaluate using a (8, 8)-term rational approximation.
-    // p is made monic, we will multiply by a scale factor later.
+    // Evaluate using a (8, 8)-term rational approximation. p is made monic, we
+    // will multiply by a scale factor later.
     let mut p = x.wrapping_add(int256!(3273285459638523848632254066296));
     p = ((p.wrapping_mul(x)).asr(96)).wrapping_add(int256!(24828157081833163892658089445524));
     p = ((p.wrapping_mul(x)).asr(96)).wrapping_add(int256!(43456485725739037958740375743393));
@@ -239,8 +240,8 @@ pub fn ln(mut x: I256) -> Result<I256> {
         .wrapping_mul(x)
         .wrapping_sub(int256!(795164235651350426258249787498).wrapping_shl(96));
 
-    // We leave p in 2**192 basis so we don't need to scale it back up for the division.
-    // q is monic by convention.
+    // We leave p in 2**192 basis so we don't need to scale it back up for the
+    // division. q is monic by convention.
     let mut q = x.wrapping_add(int256!(5573035233440673466300451813936));
     q = (q.wrapping_mul(x).asr(96)).wrapping_add(int256!(71694874799317883764090561454958));
     q = q

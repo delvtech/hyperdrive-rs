@@ -158,6 +158,13 @@ mod tests {
             assert!(int >= low);
             assert!(int <= high);
 
+            // > 0 int
+            let low = fixed_i128!(100);
+            let high = fixed!(1_000);
+            let int = rng.gen_range(low..=high);
+            assert!(int >= low);
+            assert!(int <= high);
+
             // <= 0 int
             let low = FixedPoint::<i128>::MIN;
             let high = fixed!(0);
@@ -165,14 +172,7 @@ mod tests {
             assert!(int >= low);
             assert!(int <= high);
 
-            // above zero
-            let low = fixed_i128!(100);
-            let high = fixed!(1_000);
-            let int = rng.gen_range(low..=high);
-            assert!(int >= low);
-            assert!(int <= high);
-
-            // below zero
+            // < 0 int
             let low = fixed_i128!(-1_000);
             let high = fixed!(-100);
             let int = rng.gen_range(low..=high);
