@@ -5,7 +5,7 @@ mod utils;
 mod value;
 
 use std::{
-    fmt,
+    fmt::{self, Debug},
     ops::{Add, Div, Mul, Neg, Rem, Sub},
 };
 
@@ -61,8 +61,13 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     /// The primary constructor for `FixedPoint`. All instances should be
     /// created using this method to ensure consistent behavior.
-    pub fn new<V: Into<T>>(value: V) -> Result<Self> {
-        let value = value.into();
+    pub fn new<V: TryInto<T> + Debug>(value: V) -> Result<Self> {
+        // Convert the value to a Debug string before moving it incase the
+        // conversion fails.
+        let value_debug = format!("{:?}", value);
+        let value = value
+            .try_into()
+            .map_err(|_| eyre!("Failed to convert value to FixedPoint: {value_debug}"))?;
 
         if (value > T::MAX) || (value < T::MIN) {
             bail!(
