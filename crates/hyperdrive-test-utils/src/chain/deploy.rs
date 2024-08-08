@@ -6,10 +6,10 @@ use ethers::{
     core::utils::keccak256,
     prelude::EthLogDecode,
     signers::Signer,
-    types::{Address, I256, U256},
+    types::{Address, U256},
 };
 use eyre::Result;
-use fixedpointmath::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, ln, uint256, FixedPoint, FixedPointValue};
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,
@@ -59,14 +59,14 @@ where
 
 // This is defined in hyperdrive-math, but re-defined here to avoid cyclic dependencies.
 pub fn calculate_time_stretch(
-    rate: FixedPoint,
-    position_duration: FixedPoint,
-) -> Result<FixedPoint> {
-    let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+    rate: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+) -> Result<FixedPoint<U256>> {
+    let seconds_in_a_year = fixed(60 * 60 * 24 * 365);
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
-    let time_stretch = fixed!(5.24592e18)
-        / (fixed!(0.04665e18) * FixedPoint::from(U256::from(rate) * uint256!(100)));
+    let time_stretch =
+        fixed!(5.24592e18) / (fixed!(0.04665e18) * fixed(rate.raw() * uint256!(100)));
     let time_stretch = fixed!(1e18) / time_stretch;
 
     // We know that the following simultaneous equations hold:
@@ -86,11 +86,13 @@ pub fn calculate_time_stretch(
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
-        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
-    )?)?)?
-        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
-        * time_stretch)
+    let ln_adjusted_apr = fixed(
+        ln((fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year)?).to_i256()?)?
+            .to_u256()?,
+    );
+    let ln_apr = fixed(ln((fixed!(1e18) + rate).to_i256()?)?.to_u256()?);
+
+    Ok(ln_adjusted_apr / ln_apr * time_stretch)
 }
 
 /// A configuration for a test chain that specifies the factory parameters,
@@ -339,7 +341,7 @@ impl TestnetDeploy for Chain {
                 fixed!(0.05e18),
                 U256::from(60 * 60 * 24 * 365).into(),
             )?
-            .into(), // time stretch for 5% rate
+            .raw(), // time stretch for 5% rate
             governance: client.address(),
             fee_collector: client.address(),
             sweep_collector: client.address(),
@@ -1049,7 +1051,7 @@ mod tests {
                     .erc4626_hyperdrive_position_duration
                     .into(),
             )?
-            .into()
+            .raw()
         );
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
@@ -1087,7 +1089,7 @@ mod tests {
                 test_chain_config.steth_hyperdrive_time_stretch_apr.into(),
                 test_chain_config.steth_hyperdrive_position_duration.into(),
             )?
-            .into()
+            .raw()
         );
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
@@ -1163,7 +1165,7 @@ mod tests {
                     .erc4626_hyperdrive_position_duration
                     .into(),
             )?
-            .into()
+            .raw()
         );
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
@@ -1201,7 +1203,7 @@ mod tests {
                 test_chain_config.steth_hyperdrive_time_stretch_apr.into(),
                 test_chain_config.steth_hyperdrive_position_duration.into(),
             )?
-            .into()
+            .raw()
         );
         assert_eq!(config.governance, test_chain_config.admin);
         assert_eq!(config.fee_collector, test_chain_config.admin);
