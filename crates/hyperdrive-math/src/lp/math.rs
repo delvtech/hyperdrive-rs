@@ -31,13 +31,13 @@ impl State {
         // rate is an APR.
         let t = self
             .position_duration()
-            .div_down(U256::from(60 * 60 * 24 * 365).into());
+            .div_down(U256::from(60 * 60 * 24 * 365).into())?;
 
         // NOTE: Round up to underestimate the initial bond reserves.
         //
         // Calculate the target price implied by the target rate.
         let one = fixed!(1e18);
-        let target_price = one.div_up(one + target_apr.mul_down(t));
+        let target_price = one.div_up(one + target_apr.mul_down(t)?)?;
 
         // The share reserves is just the share amount since we are initializing
         // the pool.
@@ -49,11 +49,11 @@ impl State {
         //
         // y = (mu * c * z) / (c * p_target ** (1 / t_s) + mu * p_target)
         let bond_reserves = self.initial_vault_share_price().mul_div_down(
-            self.vault_share_price().mul_down(share_reserves),
+            self.vault_share_price().mul_down(share_reserves)?,
             self.vault_share_price()
-                .mul_down(target_price.pow(one.div_down(self.time_stretch()))?)
-                + self.initial_vault_share_price().mul_up(target_price),
-        );
+                .mul_down(target_price.pow(one.div_down(self.time_stretch())?)?)?
+                + self.initial_vault_share_price().mul_up(target_price)?,
+        )?;
 
         // NOTE: Round down to underestimate the initial share adjustment.
         //
@@ -61,7 +61,7 @@ impl State {
         //
         // zeta = (p_target * y) / c
         let share_adjustment =
-            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))?;
+            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price())?)?;
 
         Ok((share_reserves, share_adjustment, bond_reserves))
     }
@@ -103,10 +103,10 @@ impl State {
         // zeta_new = zeta_old * (z_new / z_old)
         let new_share_adjustment = if share_adjustment >= I256::zero() {
             let share_adjustment_fp = FixedPoint::try_from(share_adjustment)?;
-            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
+            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves)?)?
         } else {
             let share_adjustment_fp = FixedPoint::try_from(-share_adjustment)?;
-            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
+            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves)?)?
         };
 
         // NOTE: Rounding down to avoid introducing dust into the computation.
@@ -127,8 +127,8 @@ impl State {
             calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())?;
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment)?;
-        let new_bond_reserves =
-            bond_reserves.mul_div_down(new_effective_share_reserves, old_effective_share_reserves);
+        let new_bond_reserves = bond_reserves
+            .mul_div_down(new_effective_share_reserves, old_effective_share_reserves)?;
 
         Ok((new_share_reserves, new_share_adjustment, new_bond_reserves))
     }
@@ -143,11 +143,11 @@ impl State {
         let long_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.long_average_maturity_time(),
             current_block_timestamp,
-        );
+        )?;
         let short_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.short_average_maturity_time(),
             current_block_timestamp,
-        );
+        )?;
         let net_curve_trade = self
             .calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)?;
         let net_flat_trade = self
@@ -182,12 +182,13 @@ impl State {
         // compute the net curve position as:
         //
         // netCurveTrade = y_l * t_l - y_s * t_s.
-        let net_curve_position =
-            I256::try_from(self.longs_outstanding().mul_up(long_average_time_remaining))?
-                - I256::try_from(
-                    self.shorts_outstanding()
-                        .mul_down(short_average_time_remaining),
-                )?;
+        let net_curve_position = I256::try_from(
+            self.longs_outstanding()
+                .mul_up(long_average_time_remaining)?,
+        )? - I256::try_from(
+            self.shorts_outstanding()
+                .mul_down(short_average_time_remaining)?,
+        )?;
         match self.effective_share_reserves() {
             Ok(_) => {}
             // NOTE: Return 0 to indicate that the net curve trade couldn't be
@@ -288,7 +289,7 @@ impl State {
                     Ok(I256::try_from(
                         max_share_payment
                             + (net_curve_position - max_curve_trade)
-                                .div_down(self.vault_share_price()),
+                                .div_down(self.vault_share_price())?,
                     )?)
                 }
             }
@@ -318,10 +319,10 @@ impl State {
         let net_flat_trade = I256::try_from(self.shorts_outstanding().mul_div_down(
             fixed!(1e18) - short_average_time_remaining,
             self.vault_share_price(),
-        ))? - I256::try_from(self.longs_outstanding().mul_div_up(
+        )?)? - I256::try_from(self.longs_outstanding().mul_div_up(
             fixed!(1e18) - long_average_time_remaining,
             self.vault_share_price(),
-        ))?;
+        )?)?;
 
         Ok(net_flat_trade)
     }
@@ -491,7 +492,7 @@ impl State {
         // Calculate the amount of withdrawal shares that can be redeemed.
         let lp_total_supply = active_lp_total_supply + withdrawal_shares_total_supply;
         Ok(lp_total_supply
-            - lp_total_supply.mul_div_down(ending_present_value, starting_present_value))
+            - lp_total_supply.mul_div_down(ending_present_value, starting_present_value)?)
     }
 
     /// Calculates the share proceeds to distribute to the withdrawal pool
@@ -521,7 +522,7 @@ impl State {
         // x_0 = w * (PV(0) / l)
         let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
         let mut share_proceeds =
-            withdrawal_shares_total_supply.mul_div_down(starting_present_value, lp_total_supply);
+            withdrawal_shares_total_supply.mul_div_down(starting_present_value, lp_total_supply)?;
 
         // If the pool is net neutral, the initial guess is equal to the final
         // result.
@@ -689,8 +690,8 @@ impl State {
             // is smaller than the previous smallest value, then we update the
             // value and record the share proceeds. We'll ultimately return the
             // share proceeds that resulted in the smallest value.
-            let delta = I256::try_from(present_value.mul_down(lp_total_supply))?
-                - I256::try_from(starting_present_value.mul_up(active_lp_total_supply))?;
+            let delta = I256::try_from(present_value.mul_down(lp_total_supply)?)?
+                - I256::try_from(starting_present_value.mul_up(active_lp_total_supply)?)?;
             if smallest_delta == I256::from(0) || delta.abs() < smallest_delta.abs() {
                 smallest_delta = delta;
                 closest_share_proceeds = share_proceeds;
@@ -705,12 +706,12 @@ impl State {
                 // NOTE: Round the quotient down to avoid overshooting.
                 share_proceeds = share_proceeds
                     + FixedPoint::try_from(delta)?
-                        .div_down(derivative)
-                        .div_down(lp_total_supply);
+                        .div_down(derivative)?
+                        .div_down(lp_total_supply)?;
             } else if delta < I256::zero() {
                 let delta = FixedPoint::try_from(-delta)?
-                    .div_down(derivative)
-                    .div_down(lp_total_supply);
+                    .div_down(derivative)?
+                    .div_down(lp_total_supply)?;
                 if delta < share_proceeds {
                     share_proceeds = share_proceeds - delta;
                 } else {
@@ -737,8 +738,8 @@ impl State {
         // Check to see if the current share proceeds is closer to the optimal
         // value than the previous closest value. We'll choose whichever of the
         // share proceeds that is closer to the optimal value.
-        let last_delta = I256::try_from(present_value.mul_down(lp_total_supply))?
-            - I256::try_from(starting_present_value.mul_up(active_lp_total_supply))?;
+        let last_delta = I256::try_from(present_value.mul_down(lp_total_supply)?)?
+            - I256::try_from(starting_present_value.mul_up(active_lp_total_supply)?)?;
         if last_delta.abs() < smallest_delta.abs() {
             closest_share_proceeds = share_proceeds;
             closest_present_value = present_value;
@@ -748,17 +749,17 @@ impl State {
         // tolerance.
         if
         // NOTE: Round down to make the check stricter.
-        closest_present_value.div_down(active_lp_total_supply)
+        closest_present_value.div_down(active_lp_total_supply)?
                 < starting_present_value.mul_div_up(
                     fixed!(1e18) - FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
                     lp_total_supply,
-                ) ||
+                )? ||
             // NOTE: Round up to make the check stricter.
-            closest_present_value.div_up(active_lp_total_supply)
+            closest_present_value.div_up(active_lp_total_supply)?
                 > starting_present_value.mul_div_down(
                     fixed!(1e18) + FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
                     lp_total_supply,
-                )
+                )?
         {
             return Err(eyre!("LP share price was not conserved within tolerance."));
         }
@@ -841,7 +842,7 @@ impl State {
             let rhs: FixedPoint = starting_present_value.mul_div_up(
                 active_lp_total_supply,
                 active_lp_total_supply + withdrawal_shares_total_supply,
-            );
+            )?;
             if net_flat_trade >= I256::zero() {
                 if net_flat_trade < I256::try_from(rhs)? {
                     rhs - net_flat_trade.try_into()?
@@ -859,7 +860,7 @@ impl State {
         //
         // rhs = ((PV(0) / l) * (l - w) - net_f) / (zeta / z)
         let rhs =
-            original_share_reserves.mul_div_up(rhs, FixedPoint::from(original_share_adjustment));
+            original_share_reserves.mul_div_up(rhs, FixedPoint::from(original_share_adjustment))?;
 
         // share proceeds = z - rhs
         if original_share_reserves < rhs {
@@ -888,18 +889,18 @@ impl State {
             // PV_1 / l_1 >= PV_0 / l_0
             //
             // NOTE: Round the LHS down to make the check stricter.
-            present_value.div_down(active_lp_total_supply) >=
-            starting_present_value.div_up(lp_total_supply)
+            present_value.div_down(active_lp_total_supply)? >=
+            starting_present_value.div_up(lp_total_supply)?
             // Ensure that new LP share price is less than or equal to the
             // previous LP share price plus the minimum tolerance:
             //
             // PV_1 / l_1 <= (PV_0 / l_0) * (1 + tolerance)
             //
             // NOTE: Round the LHS up to make the check stricter.
-            && present_value.div_up(active_lp_total_supply) <=
+            && present_value.div_up(active_lp_total_supply)? <=
             (fixed!(1e18) + FixedPoint::from(SHARE_PROCEEDS_SHORT_CIRCUIT_TOLERANCE)).mul_div_down(
                 starting_present_value,
-                lp_total_supply),
+                lp_total_supply)?,
         )
     }
 
@@ -915,7 +916,7 @@ impl State {
     ) -> Result<(FixedPoint, bool)> {
         let net_curve_trade =
             self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
-        let idle = self.calculate_idle_share_reserves();
+        let idle = self.calculate_idle_share_reserves()?;
         // If the net curve position is zero or net long, then the maximum
         // share reserves delta is equal to the pool's idle.
         if net_curve_trade >= I256::from(0) {
@@ -953,14 +954,14 @@ impl State {
         // s * y_out^max(z, y, zeta) - netCurveTrade = 0
         //                        =>
         // s = netCurveTrade / y_out^max(z, y, zeta)
-        let max_scaling_factor = net_curve_trade.div_up(max_bond_amount);
+        let max_scaling_factor = net_curve_trade.div_up(max_bond_amount)?;
 
         // Using the maximum scaling factor, we can calculate the maximum share
         // reserves delta as:
         //
         // maxShareReservesDelta = z * (1 - s)
         let max_share_reserves_delta = if max_scaling_factor <= fixed!(1e18) {
-            (fixed!(1e18) - max_scaling_factor).mul_down(self.share_reserves())
+            (fixed!(1e18) - max_scaling_factor).mul_down(self.share_reserves())?
         } else {
             // NOTE: If the max scaling factor is greater than one, the
             // calculation fails and we return a failure flag.
@@ -1050,17 +1051,18 @@ impl State {
         // NOTE: The exponent is positive and base is flipped to handle the negative value.
         let derivative = self.vault_share_price().div_up(
             self.initial_vault_share_price()
-                .mul_down(effective_share_reserves)
+                .mul_down(effective_share_reserves)?
                 .pow(self.time_stretch())?,
-        ) + original_bond_reserves.div_up(
+        )? + original_bond_reserves.div_up(
             original_effective_share_reserves
-                .mul_down(self.bond_reserves().pow(self.time_stretch())?),
-        );
+                .mul_down(self.bond_reserves().pow(self.time_stretch())?)?,
+        )?;
 
         // NOTE: Rounding this down rounds the subtraction up.
         let rhs = original_bond_reserves.div_down(
-            original_effective_share_reserves.mul_up(bond_reserves_after.pow(self.time_stretch())?),
-        );
+            original_effective_share_reserves
+                .mul_up(bond_reserves_after.pow(self.time_stretch())?)?,
+        )?;
         if derivative < rhs {
             return Err(eyre!("Derivative is less than right hand side"));
         }
@@ -1077,21 +1079,21 @@ impl State {
             return Err(eyre!("k is less than inner"));
         }
         let inner = k - inner;
-        let inner = inner.mul_div_up(self.initial_vault_share_price(), self.vault_share_price());
+        let inner = inner.mul_div_up(self.initial_vault_share_price(), self.vault_share_price())?;
         let inner = if inner >= fixed!(1e18) {
             // NOTE: Round the exponent up since this rounds the result up.
             inner.pow(
                 self.time_stretch()
-                    .div_up(fixed!(1e18) - self.time_stretch()),
+                    .div_up(fixed!(1e18) - self.time_stretch())?,
             )?
         } else {
             // NOTE: Round the exponent down since this rounds the result up.
             inner.pow(
                 self.time_stretch()
-                    .div_down(fixed!(1e18) - self.time_stretch()),
+                    .div_down(fixed!(1e18) - self.time_stretch())?,
             )?
         };
-        let derivative = derivative.mul_div_up(inner, self.vault_share_price());
+        let derivative = derivative.mul_div_up(inner, self.vault_share_price())?;
         let derivative = if fixed!(1e18) > derivative {
             fixed!(1e18) - derivative
         } else {
@@ -1105,18 +1107,18 @@ impl State {
         // derivative = derivative * (1 - (zeta / z))
         let derivative = if original_share_adjustment >= I256::zero() {
             let right_hand_side =
-                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves);
+                FixedPoint::try_from(original_share_adjustment)?.div_up(original_share_reserves)?;
             if right_hand_side > fixed!(1e18) {
                 return Err(eyre!("Right hand side is greater than 1e18"));
             }
             let right_hand_side = fixed!(1e18) - right_hand_side;
-            derivative.mul_down(right_hand_side)
+            derivative.mul_down(right_hand_side)?
         } else {
             derivative.mul_down(
                 fixed!(1e18)
                     + FixedPoint::try_from(-original_share_adjustment)?
-                        .div_down(original_share_reserves),
-            )
+                        .div_down(original_share_reserves)?,
+            )?
         };
 
         Ok(derivative)

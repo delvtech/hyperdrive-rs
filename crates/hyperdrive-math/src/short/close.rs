@@ -1,4 +1,4 @@
-use ethers::types::{I256, U256};
+use ethers::types::U256;
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -333,6 +333,7 @@ impl State {
 mod tests {
     use std::panic;
 
+    use ethers::types::I256;
     use fixedpointmath::int256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};

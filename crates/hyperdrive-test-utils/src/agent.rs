@@ -492,7 +492,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     /// This is useful for testing because it makes it easy to use the agent
     /// across multiple snapshots.
     pub async fn reset(&mut self, wallet: Wallet) -> Result<()> {
-        // Reset the nonce mananger.
+        // Reset the nonce manager.
         self.client.reset_nonce(None).await?;
 
         // Reset the wallet.
@@ -564,7 +564,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     }
 
     // TODO: We'll need to implement helpers that give us the maximum trade
-    // for an older checkpoint. We'll need to use these when closig trades.
+    // for an older checkpoint. We'll need to use these when closing trades.
 
     /// Helpers ///
 

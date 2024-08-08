@@ -200,8 +200,8 @@ impl State {
         // First get the target share reserves
         let c_over_mu = self
             .vault_share_price()
-            .div_up(self.initial_vault_share_price());
-        let scaled_rate = (target_rate.mul_up(self.annualized_position_duration()) + fixed!(1e18))
+            .div_up(self.initial_vault_share_price())?;
+        let scaled_rate = (target_rate.mul_up(self.annualized_position_duration())? + fixed!(1e18))
             .pow(fixed!(1e18) / self.time_stretch())?;
         let inner = (self.k_down()?
             / (c_over_mu + scaled_rate.pow(fixed!(1e18) - self.time_stretch())?))

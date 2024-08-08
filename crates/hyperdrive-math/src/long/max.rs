@@ -275,7 +275,7 @@ impl State {
         // price by interpolating between the spot price and 1 depending on how
         // large the estimate is.
         let t = (guess / absolute_max_base_amount)
-            .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
+            .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch())?)?
             * fixed!(0.8e18);
         let estimate_price = spot_price * (fixed!(1e18) - t) + fixed!(1e18) * t;
 

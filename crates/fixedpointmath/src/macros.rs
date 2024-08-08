@@ -26,13 +26,15 @@ macro_rules! int256 {
 #[macro_export]
 macro_rules! fixed {
     ($number:expr) => {{
-        $crate::FixedPoint::from($crate::uint256!($number))
+        let str = stringify!($number);
+        $crate::FixedPoint::from_dec_str(str).unwrap()
     }};
 }
 
 #[cfg(test)]
 mod tests {
     use ethers::types::{I256, U256};
+    use eyre::Result;
 
     use crate::FixedPoint;
 
@@ -93,29 +95,41 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed() {
+    fn test_fixed() -> Result<()> {
         // simple cases
-        assert_eq!(fixed!(1), FixedPoint::from(1));
-        assert_eq!(fixed!(1_000), FixedPoint::from(1_000));
-        assert_eq!(fixed!(5_500_000_000), FixedPoint::from(5_500_000_000_u128));
+        assert_eq!(fixed!(1), FixedPoint::<i128>::from(1));
+        assert_eq!(fixed!(1_000), FixedPoint::<i128>::from(1_000));
+        assert_eq!(fixed!(-1_000), FixedPoint::<i128>::from(-1_000));
+        assert_eq!(
+            fixed!(5_500_000_000),
+            FixedPoint::<i128>::from(5_500_000_000_i128)
+        );
 
         // scientific notation
-        assert_eq!(fixed!(1e0), FixedPoint::from(1));
-        assert_eq!(fixed!(1e3), FixedPoint::from(1_000));
+        assert_eq!(fixed!(1e0), FixedPoint::<i128>::from(1));
+        assert_eq!(fixed!(1e3), FixedPoint::<i128>::from(1_000));
+        assert_eq!(fixed!(1e18), FixedPoint::<i128>::from(10_i128.pow(18)));
+        assert_eq!(fixed!(-1e18), FixedPoint::<i128>::from(-10_i128.pow(18)));
         assert_eq!(
             fixed!(50_000e18),
-            FixedPoint::from(U256::from(50_000) * U256::from(10).pow(18.into()))
+            FixedPoint::<i128>::from(50_000 * 10_i128.pow(18))
         );
 
         // decimal notation
-        assert_eq!(fixed!(1.0e1), FixedPoint::from(10));
+        assert_eq!(fixed!(1.0e1), FixedPoint::<i128>::from(10));
         assert_eq!(
             fixed!(1.1e18),
-            FixedPoint::from(U256::from(11) * U256::from(10).pow(17.into())),
+            FixedPoint::<i128>::from(11_i128 * 10_i128.pow(17)),
         );
         assert_eq!(
             fixed!(333_333.555_555e18),
-            FixedPoint::from(U256::from(333_333_555_555_u128) * U256::from(10).pow(12.into()))
+            FixedPoint::<i128>::from(333_333_555_555_i128 * 10_i128.pow(12))
         );
+        assert_eq!(
+            fixed!(-333_333.555_555e18),
+            -FixedPoint::<I256>::from(333_333_555_555_i128 * 10_i128.pow(12))
+        );
+
+        Ok(())
     }
 }

@@ -524,8 +524,8 @@ mod tests {
                 .hyperdrive()
                 .open_long(
                     base_amount.into(),
-                    fixed!(0).into(),
-                    fixed!(0).into(),
+                    0.into(),
+                    0.into(),
                     Options {
                         destination: bob.address(),
                         as_base: true,

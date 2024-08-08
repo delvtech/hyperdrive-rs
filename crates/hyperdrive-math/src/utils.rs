@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, ln, uint256, FixedPoint};
 
 pub fn calculate_time_stretch(
     rate: FixedPoint,
@@ -30,10 +30,10 @@ pub fn calculate_time_stretch(
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
-        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
+    Ok((FixedPoint::try_from(ln(I256::try_from(
+        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year)?,
     )?)?)?
-        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
+        / FixedPoint::try_from(ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
         * time_stretch)
 }
 
@@ -84,21 +84,21 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
     // NOTE: Round down to underestimate the initial bond reserves.
     //
     // inner = (1 + apr * t) ** (1 / t_s)
-    let mut inner = fixed!(1e18) + target_rate.mul_down(t);
+    let mut inner = fixed!(1e18) + target_rate.mul_down(t)?;
     if inner >= fixed!(1e18) {
         // Rounding down the exponent results in a smaller result.
         inner = inner.pow(fixed!(1e18) / time_stretch)?;
     } else {
         // Rounding up the exponent results in a smaller result.
-        inner = inner.pow(fixed!(1e18).div_up(time_stretch))?;
+        inner = inner.pow(fixed!(1e18).div_up(time_stretch)?)?;
     }
 
     // NOTE: Round down to underestimate the initial bond reserves.
     //
     // mu * (z - zeta) * (1 + apr * t) ** (1 / tau)
     Ok(initial_vault_share_price
-        .mul_down(effective_share_reserves)
-        .mul_down(inner))
+        .mul_down(effective_share_reserves)?
+        .mul_down(inner)?)
 }
 
 /// Calculate the rate assuming a given price is constant for some annualized duration.

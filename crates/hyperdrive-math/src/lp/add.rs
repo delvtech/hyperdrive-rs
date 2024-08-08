@@ -1,5 +1,5 @@
 use ethers::types::{I256, U256};
-use eyre::{eyre, Result};
+use eyre::{bail, Result};
 use fixedpointmath::FixedPoint;
 
 use crate::State;
@@ -18,7 +18,7 @@ impl State {
         // Enforce the slippage guard.
         let apr = self.calculate_spot_rate()?;
         if apr < min_apr || apr > max_apr {
-            return Err(eyre!("InvalidApr: Apr is outside the slippage guard."));
+            bail!("InvalidApr: Apr is outside the slippage guard.");
         }
 
         // Get lp_total_supply for the lp_shares calculation.
@@ -33,23 +33,21 @@ impl State {
 
         // Ensure the present value didn't decrease after adding liquidity.
         if ending_present_value < starting_present_value {
-            return Err(eyre!("DecreasedPresentValueWhenAddingLiquidity: Present value decreased after adding liquidity."));
+            bail!("DecreasedPresentValueWhenAddingLiquidity: Present value decreased after adding liquidity.");
         }
 
         // Calculate the lp_shares.
         let lp_shares = (ending_present_value - starting_present_value)
-            .mul_div_down(lp_total_supply, starting_present_value);
+            .mul_div_down(lp_total_supply, starting_present_value)?;
 
         // Ensure that enough lp_shares are minted so that they can be redeemed.
         if lp_shares < self.minimum_transaction_amount() {
-            return Err(eyre!(
-                "MinimumTransactionAmount: Not enough lp shares minted."
-            ));
+            bail!("MinimumTransactionAmount: Not enough lp shares minted.");
         }
 
         // Enforce the minimum LP share price slippage guard.
-        if contribution.div_down(lp_shares) < min_lp_share_price {
-            return Err(eyre!("OutputLimit: Not enough lp shares minted."));
+        if contribution.div_down(lp_shares)? < min_lp_share_price {
+            bail!("OutputLimit: Not enough lp shares minted.");
         }
 
         Ok(lp_shares)
@@ -63,14 +61,14 @@ impl State {
         // Ensure that the contribution is greater than or equal to the minimum
         // transaction amount.
         if contribution < self.minimum_transaction_amount() {
-            return Err(eyre!(
+            bail!(
                 "MinimumTransactionAmount: Contribution is smaller than the minimum transaction."
-            ));
+            );
         }
 
         let share_contribution = {
             if as_base {
-                I256::try_from(contribution.div_down(self.vault_share_price()))?
+                I256::try_from(contribution.div_down(self.vault_share_price())?)?
             } else {
                 I256::try_from(contribution)?
             }

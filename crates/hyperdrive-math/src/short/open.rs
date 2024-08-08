@@ -79,7 +79,7 @@ impl State {
         // If the base proceeds of selling the bonds is greater than the bond
         // amount, then the trade occurred in the negative interest domain.
         // We revert in these pathological cases.
-        if share_reserves_delta.mul_up(self.vault_share_price()) > bond_amount {
+        if share_reserves_delta.mul_up(self.vault_share_price())? > bond_amount {
             return Err(eyre!(
                 "InsufficientLiquidity: Negative Interest.
                 expected bond_amount={} <= share_reserves_delta_in_shares={}",
@@ -95,7 +95,7 @@ impl State {
         // closing the trade.
         let curve_fee_shares = self
             .open_short_curve_fee(bond_amount)?
-            .div_up(self.vault_share_price());
+            .div_up(self.vault_share_price())?;
         if share_reserves_delta < curve_fee_shares {
             return Err(eyre!(format!(
                 "The transaction curve fee = {}, computed with coefficient = {},
@@ -128,7 +128,7 @@ impl State {
                 open_vault_share_price,
                 close_vault_share_price,
             )
-            .mul_up(self.vault_share_price());
+            .mul_up(self.vault_share_price())?;
 
         Ok(base_proceeds)
     }
@@ -185,7 +185,7 @@ impl State {
             self.calculate_short_principal(bond_amount)?
                 - self
                     .open_short_curve_fee(bond_amount)?
-                    .div_up(self.vault_share_price()),
+                    .div_up(self.vault_share_price())?,
             open_vault_share_price,
             close_vault_share_price,
         ) == fixed!(0)
@@ -200,11 +200,11 @@ impl State {
 
         // All of these are in base.
         let share_adjustment_derivative =
-            close_vault_share_price.div_up(open_vault_share_price) + self.flat_fee();
+            close_vault_share_price.div_up(open_vault_share_price)? + self.flat_fee();
         let short_principal_derivative = self
             .calculate_short_principal_derivative(bond_amount)?
-            .mul_up(self.vault_share_price());
-        let curve_fee_derivative = self.curve_fee().mul_up((fixed!(1e18) - spot_price));
+            .mul_up(self.vault_share_price())?;
+        let curve_fee_derivative = self.curve_fee().mul_up((fixed!(1e18) - spot_price))?;
 
         // Multiply by the share price to return base.
         Ok(share_adjustment_derivative - short_principal_derivative + curve_fee_derivative)
@@ -248,21 +248,21 @@ impl State {
         // Avoid negative exponent by putting the term in the denominator.
         let lhs = fixed!(1e18).div_up(
             self.vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
-        );
+                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?)?,
+        )?;
         let rhs = (self
             .initial_vault_share_price()
-            .div_up(self.vault_share_price())
+            .div_up(self.vault_share_price())?
             .mul_up(
                 self.k_up()?
                     - (self.bond_reserves() + bond_amount)
                         .pow(fixed!(1e18) - self.time_stretch())?,
-            ))
+            )?)
         .pow(
             self.time_stretch()
-                .div_up(fixed!(1e18) - self.time_stretch()),
+                .div_up(fixed!(1e18) - self.time_stretch())?,
         )?;
-        Ok(lhs.mul_up(rhs))
+        Ok(lhs.mul_up(rhs)?)
     }
 
     /// Calculate an updated pool state after opening a short.
@@ -292,12 +292,12 @@ impl State {
         bond_amount: FixedPoint,
     ) -> Result<FixedPoint> {
         let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
+        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price())?;
         let gov_curve_fee_shares = self
             .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-            .div_up(self.vault_share_price());
+            .div_up(self.vault_share_price())?;
         let short_principal = self.calculate_short_principal(bond_amount)?;
-        if short_principal.mul_up(self.vault_share_price()) > bond_amount {
+        if short_principal.mul_up(self.vault_share_price())? > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
         if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
@@ -399,7 +399,7 @@ impl State {
     ) -> Result<I256> {
         let full_base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
         let backpaid_interest = bond_amount
-            .mul_div_down(self.vault_share_price(), open_vault_share_price)
+            .mul_div_down(self.vault_share_price(), open_vault_share_price)?
             - bond_amount;
         let base_paid = full_base_paid - backpaid_interest;
         let tpy =
