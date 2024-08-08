@@ -47,8 +47,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     // Constructors //
 
-    /// The primary constructor for `FixedPoint`. All instances should be
-    /// created using this method to ensure consistent behavior.
+    // The primary constructor for `FixedPoint`. All instances should be created
+    // using this method to ensure consistent behavior.
     pub fn new<V: TryInto<T> + Debug>(value: V) -> Result<Self> {
         // Convert the value to a Debug string before moving it incase the
         // conversion fails.
