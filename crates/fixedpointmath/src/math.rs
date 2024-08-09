@@ -148,16 +148,16 @@ macro_rules! impl_mapped_operator {
         $(
             paste::paste! {
 
-                impl<T: FixedPointValue> std::ops::$trait for FixedPoint<T> {
+                impl<T: FixedPointValue, U: FixedPointValue> std::ops::$trait<FixedPoint<U>> for FixedPoint<T> {
                     type Output = Self;
 
-                    fn [<$trait:lower>](self, other: Self) -> Self::Output {
+                    fn [<$trait:lower>](self, other: FixedPoint<U>) -> Self::Output {
                         self.$fn(other).unwrap()
                     }
                 }
 
-                impl<T: FixedPointValue> std::ops::[<$trait Assign>] for FixedPoint<T> {
-                    fn [<$trait:lower _assign>](&mut self, other: Self) {
+                impl<T: FixedPointValue, U: FixedPointValue> std::ops::[<$trait Assign>]<FixedPoint<U>> for FixedPoint<T> {
+                    fn [<$trait:lower _assign>](&mut self, other: FixedPoint<U>) {
                         *self = self.[<$trait:lower>](other);
                     }
                 }
@@ -208,17 +208,14 @@ impl_forwarded_operator!(Add, Sub, Rem);
 mod tests {
     use std::{panic, u128};
 
-    use ethers::{
-        signers::Signer,
-        types::{I256, U256},
-    };
+    use ethers::{signers::Signer, types::U256};
     use eyre::Result;
     use hyperdrive_wrappers::wrappers::mock_fixed_point_math::MockFixedPointMath;
     use rand::{thread_rng, Rng};
     use test_utils::{chain::Chain, constants::DEPLOYER};
 
     use super::*;
-    use crate::{fixed, fixed_i128, fixed_u128, uint256};
+    use crate::{fixed, fixed_u128, uint256};
 
     /// The maximum number that can be divided by another in the Solidity
     /// implementation.
