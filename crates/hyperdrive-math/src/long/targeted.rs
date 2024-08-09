@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -14,9 +14,9 @@ impl State {
     /// an insolvent pool), then an error is thrown, and the user is advised to
     /// use [calculate_max_long](State::calculate_max_long).
     pub fn calculate_targeted_long_with_budget<
-        F1: Into<FixedPoint>,
-        F2: Into<FixedPoint>,
-        F3: Into<FixedPoint>,
+        F1: Into<FixedPoint<U256>>,
+        F2: Into<FixedPoint<U256>>,
+        F3: Into<FixedPoint<U256>>,
         I: Into<I256>,
     >(
         &self,
@@ -25,7 +25,7 @@ impl State {
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F3>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
         match self.calculate_targeted_long(
             target_rate,
@@ -39,13 +39,17 @@ impl State {
     }
 
     /// Gets a target long that can be opened to achieve a desired fixed rate.
-    fn calculate_targeted_long<F1: Into<FixedPoint>, F2: Into<FixedPoint>, I: Into<I256>>(
+    fn calculate_targeted_long<
+        F1: Into<FixedPoint<U256>>,
+        F2: Into<FixedPoint<U256>>,
+        I: Into<I256>,
+    >(
         &self,
         target_rate: F1,
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F2>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Check input args.
         let target_rate = target_rate.into();
         let checkpoint_exposure = checkpoint_exposure.into();
@@ -218,9 +222,9 @@ impl State {
     /// We return `$-r'(x)$` because negative numbers cannot be represented by FixedPoint.
     fn rate_after_long_derivative_negation(
         &self,
-        base_amount: FixedPoint,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let price = self.calculate_spot_price_after_long(base_amount, Some(bond_amount))?;
         let price_derivative = self.price_after_long_derivative(base_amount, bond_amount)?;
         // The actual equation we want to represent is:
@@ -289,9 +293,9 @@ impl State {
     ///
     fn price_after_long_derivative(
         &self,
-        base_amount: FixedPoint,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // g'(x) = \phi_g \phi_c (1 - p_0)
         let gov_fee_derivative = self.governance_lp_fee()
             * self.curve_fee()
@@ -301,12 +305,12 @@ impl State {
         let inner_numerator = self.mu()
             * (self.ze()?
                 + (base_amount - self.open_long_governance_fee(base_amount, None)?)
-                    .div_down(self.vault_share_price()));
+                    .div_down(self.vault_share_price())?);
 
         // a'(x) = (mu / c) (1 - g'(x))
         let inner_numerator_derivative = self
             .mu()
-            .mul_div_down(fixed!(1e18) - gov_fee_derivative, self.vault_share_price());
+            .mul_div_down(fixed!(1e18) - gov_fee_derivative, self.vault_share_price())?;
         //(self.mu() / self.vault_share_price()) * (fixed!(1e18) - gov_fee_derivative);
 
         // b(x) = y_0 - y(x)
@@ -378,9 +382,9 @@ impl State {
     /// can be determined with (`calculate_open_long`)[State::calculate_open_long].
     fn long_trade_needed_given_reserves(
         &self,
-        ending_share_reserves: FixedPoint,
-        ending_bond_reserves: FixedPoint,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+        ending_share_reserves: FixedPoint<U256>,
+        ending_bond_reserves: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         if self.bond_reserves() < ending_bond_reserves {
             return Err(eyre!(
                 "expected bond_reserves={} >= ending_bond_reserves={}",
@@ -400,7 +404,7 @@ impl State {
             - (fixed!(1e18) - self.calculate_spot_price()?)
                 * self.curve_fee()
                 * self.governance_lp_fee();
-        let base_delta = self.vault_share_price().mul_div_down(share_delta, fees);
+        let base_delta = self.vault_share_price().mul_div_down(share_delta, fees)?;
         let bond_delta = self.calculate_open_long(base_delta)?;
         Ok((base_delta, bond_delta))
     }

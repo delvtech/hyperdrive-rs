@@ -850,8 +850,8 @@ mod tests {
                         .hyperdrive()
                         .open_short(
                             sol_max_bonds.into(),
-                            FixedPoint::from(U256::MAX).into(),
-                            fixed!(0).into(),
+                            U256::MAX,
+                            0.into(),
                             Options {
                                 destination: celine.address(),
                                 as_base: true,

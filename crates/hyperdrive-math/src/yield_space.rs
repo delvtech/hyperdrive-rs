@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -6,30 +6,30 @@ use crate::calculate_effective_share_reserves;
 
 pub trait YieldSpace {
     /// The effective share reserves.
-    fn ze(&self) -> Result<FixedPoint> {
+    fn ze(&self) -> Result<FixedPoint<U256>> {
         calculate_effective_share_reserves(self.z(), self.zeta())
     }
 
     /// The share reserves.
-    fn z(&self) -> FixedPoint;
+    fn z(&self) -> FixedPoint<U256>;
 
     /// The share adjustment.
     fn zeta(&self) -> I256;
 
     /// The bond reserves.
-    fn y(&self) -> FixedPoint;
+    fn y(&self) -> FixedPoint<U256>;
 
     /// The share price.
-    fn c(&self) -> FixedPoint;
+    fn c(&self) -> FixedPoint<U256>;
 
     /// The initial vault share price.
-    fn mu(&self) -> FixedPoint;
+    fn mu(&self) -> FixedPoint<U256>;
 
     /// The YieldSpace time parameter.
-    fn t(&self) -> FixedPoint;
+    fn t(&self) -> FixedPoint<U256>;
 
     // The current spot price ignoring slippage.
-    fn calculate_spot_price(&self) -> Result<FixedPoint> {
+    fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
         if self.y() <= fixed!(0) {
             return Err(eyre!("expected y={} > 0", self.y()));
         }
@@ -39,7 +39,10 @@ pub trait YieldSpace {
     /// Calculates the amount of bonds a user will receive from the pool by
     /// providing a specified amount of shares. We underestimate the amount of
     /// bonds out to prevent sandwiches.
-    fn calculate_bonds_out_given_shares_in_down(&self, dz: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_bonds_out_given_shares_in_down(
+        &self,
+        dz: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // NOTE: We round k up to make the rhs of the equation larger.
         //
         // k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
@@ -50,7 +53,7 @@ pub trait YieldSpace {
         // (µ * (ze + dz))^(1 - t)
         let mut ze = (self.mu() * (self.ze()? + dz)).pow(fixed!(1e18) - self.t())?;
         // (c / µ) * (µ * (ze + dz))^(1 - t)
-        ze = self.c().mul_div_down(ze, self.mu());
+        ze = self.c().mul_div_down(ze, self.mu())?;
 
         // NOTE: We round _y up to make the rhs of the equation larger.
         //
@@ -61,7 +64,7 @@ pub trait YieldSpace {
         let mut y = k - ze;
         if y >= fixed!(1e18) {
             // Rounding up the exponent results in a larger result.
-            y = y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            y = y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         } else {
             // Rounding down the exponent results in a larger result.
             y = y.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
@@ -76,7 +79,10 @@ pub trait YieldSpace {
 
     /// Calculates the amount of shares a user must provide the pool to receive
     /// a specified amount of bonds. We overestimate the amount of shares in.
-    fn calculate_shares_in_given_bonds_out_up(&self, dy: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_shares_in_given_bonds_out_up(
+        &self,
+        dy: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // NOTE: We round k up to make the lhs of the equation larger.
         //
         // k = (c / µ) * (µ * z)^(1 - t) + y^(1 - t)
@@ -102,16 +108,16 @@ pub trait YieldSpace {
                 y,
             ));
         }
-        let mut _z = (k - y).mul_div_up(self.mu(), self.c());
+        let mut _z = (k - y).mul_div_up(self.mu(), self.c())?;
         if _z >= fixed!(1e18) {
             // Rounding up the exponent results in a larger result.
-            _z = _z.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            _z = _z.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         } else {
             // Rounding down the exponent results in a larger result.
             _z = _z.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
         }
         // ((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))) / µ
-        _z = _z.div_up(self.mu());
+        _z = _z.div_up(self.mu())?;
 
         // Δz = (((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))) / µ - ze
         if _z < self.ze()? {
@@ -126,7 +132,10 @@ pub trait YieldSpace {
 
     /// Calculates the amount of shares a user must provide the pool to receive
     /// a specified amount of bonds. We underestimate the amount of shares in.
-    fn calculate_shares_in_given_bonds_out_down(&self, dy: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_shares_in_given_bonds_out_down(
+        &self,
+        dy: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // NOTE: We round k down to make the lhs of the equation smaller.
         //
         // k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
@@ -138,13 +147,13 @@ pub trait YieldSpace {
         // NOTE: We round _ze down to make the lhs of the equation smaller.
         //
         // ((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))
-        let mut ze = (k - y).mul_div_down(self.mu(), self.c());
+        let mut ze = (k - y).mul_div_down(self.mu(), self.c())?;
         if ze >= fixed!(1e18) {
             // Rounding down the exponent results in a smaller result.
             ze = ze.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
         } else {
             // Rounding up the exponent results in a smaller result.
-            ze = ze.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            ze = ze.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         }
         // ((k - (y - dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))) / µ
         ze /= self.mu();
@@ -157,7 +166,10 @@ pub trait YieldSpace {
     /// providing a specified amount of bonds. This function reverts if an
     /// integer overflow or underflow occurs. We underestimate the amount of
     /// shares out.
-    fn calculate_shares_out_given_bonds_in_down(&self, dy: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_shares_out_given_bonds_in_down(
+        &self,
+        dy: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // NOTE: We round k up to make the rhs of the equation larger.
         //
         // k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
@@ -178,16 +190,16 @@ pub trait YieldSpace {
         // NOTE: We round _ze up to make the rhs of the equation larger.
         //
         // ((k - (y + dy)^(1 - t)) / (c / µ))^(1 / (1 - t)))
-        let mut ze = (k - y).mul_div_up(self.mu(), self.c());
+        let mut ze = (k - y).mul_div_up(self.mu(), self.c())?;
         if ze >= fixed!(1e18) {
             // Rounding the exponent up results in a larger outcome.
-            ze = ze.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            ze = ze.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         } else {
             // Rounding the exponent down results in a larger outcome.
             ze = ze.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
         }
         // ((k - (y + dy)^(1 - t) ) / (c / µ))^(1 / (1 - t))) / µ
-        ze = ze.div_up(self.mu());
+        ze = ze.div_up(self.mu())?;
 
         // Δz = ze - ((k - (y + dy)^(1 - t) ) / (c / µ))^(1 / (1 - t)) / µ
         if self.ze()? > ze {
@@ -199,7 +211,7 @@ pub trait YieldSpace {
 
     /// Calculates the share payment required to purchase the maximum
     /// amount of bonds from the pool.
-    fn calculate_max_buy_shares_in(&self) -> Result<FixedPoint> {
+    fn calculate_max_buy_shares_in(&self) -> Result<FixedPoint<U256>> {
         // We solve for the maximum buy using the constraint that the pool's
         // spot price can never exceed 1. We do this by noting that a spot price
         // of 1, ((mu * ze) / y) ** tau = 1, implies that mu * ze = y. This
@@ -211,15 +223,15 @@ pub trait YieldSpace {
         //
         // ze' = (1 / mu) * (k / ((c / mu) + 1)) ** (1 / (1 - tau)).
         let k = self.k_down()?;
-        let mut optimal_ze = k.div_down(self.c().div_up(self.mu()) + fixed!(1e18));
+        let mut optimal_ze = k.div_down(self.c().div_up(self.mu())? + fixed!(1e18))?;
         if optimal_ze >= fixed!(1e18) {
             // Rounding the exponent up results in a larger outcome.
-            optimal_ze = optimal_ze.pow(fixed!(1e18).div_down(fixed!(1e18) - self.t()))?;
+            optimal_ze = optimal_ze.pow(fixed!(1e18).div_down(fixed!(1e18) - self.t())?)?;
         } else {
             // Rounding the exponent down results in a larger outcome.
             optimal_ze = optimal_ze.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
         }
-        optimal_ze = optimal_ze.div_down(self.mu());
+        optimal_ze = optimal_ze.div_down(self.mu())?;
 
         // The optimal trade size is given by dz = ze' - ze. If the calculation
         // underflows, we return a failure flag.
@@ -237,7 +249,7 @@ pub trait YieldSpace {
     /// Calculates the maximum amount of bonds that can be purchased with the
     /// specified reserves. We round so that the max buy amount is
     /// underestimated.
-    fn calculate_max_buy_bonds_out(&self) -> Result<FixedPoint> {
+    fn calculate_max_buy_bonds_out(&self) -> Result<FixedPoint<U256>> {
         // We solve for the maximum buy using the constraint that the pool's
         // spot price can never exceed 1. We do this by noting that a spot price
         // of 1, (mu * ze) / y ** tau = 1, implies that mu * ze = y. This
@@ -246,10 +258,10 @@ pub trait YieldSpace {
         // y' = (k / ((c / mu) + 1)) ** (1 / (1 - tau)) and the maximum share
         // reserves of ze' = y/mu.
         let k = self.k_up()?;
-        let mut optimal_y = k.div_up(self.c() / self.mu() + fixed!(1e18));
+        let mut optimal_y = k.div_up(self.c() / self.mu() + fixed!(1e18))?;
         if optimal_y >= fixed!(1e18) {
             // Rounding the exponent up results in a larger outcome.
-            optimal_y = optimal_y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            optimal_y = optimal_y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         } else {
             // Rounding the exponent down results in a larger outcome.
             optimal_y = optimal_y.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
@@ -271,13 +283,13 @@ pub trait YieldSpace {
     /// Calculates the maximum amount of bonds that can be sold with the
     /// specified reserves. We round so that the max sell amount is
     /// underestimated.
-    fn calculate_max_sell_bonds_in(&self, mut z_min: FixedPoint) -> Result<FixedPoint> {
+    fn calculate_max_sell_bonds_in(&self, mut z_min: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         // If the share adjustment is negative, the minimum share reserves is
         // given by `z_min - zeta`, which ensures that the share reserves never
         // fall below the minimum share reserves. Otherwise, the minimum share
         // reserves is just zMin.
         if self.zeta() < I256::zero() {
-            z_min += FixedPoint::try_from(-self.zeta())?;
+            z_min += fixed(self.zeta().unsigned_abs());
         }
 
         // We solve for the maximum sell using the constraint that the pool's
@@ -288,15 +300,15 @@ pub trait YieldSpace {
         // y' = (k - (c / mu) * (mu * (zMin)) ** (1 - tau)) ** (1 / (1 - tau)).
         let k = self.k_down()?;
         let mut optimal_y = k - self.c().mul_div_up(
-            self.mu().mul_up(z_min).pow(fixed!(1e18) - self.t())?,
+            self.mu().mul_up(z_min)?.pow(fixed!(1e18) - self.t())?,
             self.mu(),
-        );
+        )?;
         if optimal_y >= fixed!(1e18) {
             // Rounding the exponent down results in a smaller outcome.
             optimal_y = optimal_y.pow(fixed!(1e18) / (fixed!(1e18) - self.t()))?;
         } else {
             // Rounding the exponent up results in a smaller outcome.
-            optimal_y = optimal_y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t()))?;
+            optimal_y = optimal_y.pow(fixed!(1e18).div_up(fixed!(1e18) - self.t())?)?;
         }
 
         // The optimal trade size is given by dy = y' - y. If this subtraction
@@ -317,11 +329,11 @@ pub trait YieldSpace {
     /// k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
     ///
     /// This variant of the calculation overestimates the result.
-    fn k_up(&self) -> Result<FixedPoint> {
+    fn k_up(&self) -> Result<FixedPoint<U256>> {
         Ok(self.c().mul_div_up(
-            (self.mu().mul_up(self.ze()?)).pow(fixed!(1e18) - self.t())?,
+            (self.mu().mul_up(self.ze()?))?.pow(fixed!(1e18) - self.t())?,
             self.mu(),
-        ) + self.y().pow(fixed!(1e18) - self.t())?)
+        )? + self.y().pow(fixed!(1e18) - self.t())?)
     }
 
     /// Calculates the YieldSpace invariant k. This invariant is given by:
@@ -329,11 +341,11 @@ pub trait YieldSpace {
     /// k = (c / µ) * (µ * ze)^(1 - t) + y^(1 - t)
     ///
     /// This variant of the calculation underestimates the result.
-    fn k_down(&self) -> Result<FixedPoint> {
+    fn k_down(&self) -> Result<FixedPoint<U256>> {
         Ok(self.c().mul_div_down(
             (self.mu() * self.ze()?).pow(fixed!(1e18) - self.t())?,
             self.mu(),
-        ) + self.y().pow(fixed!(1e18) - self.t())?)
+        )? + self.y().pow(fixed!(1e18) - self.t())?)
     }
 }
 

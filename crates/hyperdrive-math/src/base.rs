@@ -7,12 +7,9 @@ use crate::State;
 impl State {
     /// Calculates the number of share reserves that are not reserved by open
     /// positions.
-    pub fn calculate_idle_share_reserves(&self) -> FixedPoint {
-        let long_exposure = self.long_exposure().div_up(self.vault_share_price());
-        match self.share_reserves() > long_exposure + self.minimum_share_reserves() {
-            true => self.share_reserves() - long_exposure - self.minimum_share_reserves(),
-            false => fixed!(0),
-        }
+    // FIXME: This function is redundant with `calculate_solvency`.
+    pub fn calculate_idle_share_reserves(&self) -> Result<FixedPoint> {
+        self.calculate_solvency()
     }
 
     /// Calculates the pool's solvency.
@@ -36,19 +33,16 @@ impl State {
 
     /// Calculates the number of base reserves that are not reserved by open
     /// positions.
-    pub fn calculate_idle_share_reserves_in_base(&self) -> FixedPoint {
-        // NOTE: Round up to underestimate the pool's idle.
-        let long_exposure = self.long_exposure().div_up(self.vault_share_price());
-
-        // Calculate the idle base reserves.
-        let mut idle_shares_in_base = fixed!(0);
-        if self.share_reserves() > (long_exposure + self.minimum_share_reserves()) {
-            idle_shares_in_base =
-                (self.share_reserves() - long_exposure - self.minimum_share_reserves())
-                    * self.vault_share_price();
-        }
-
-        idle_shares_in_base
+    ///
+    /// FIXME: Delete this function. Creating shares and base versions of the
+    /// same function is redundant and not a precedent we want to set, otherwise
+    /// every function becomes a candidate for both a shares and base version.
+    #[deprecated(note = "Use `calculate_idle_share_reserves` and `vault_share_price` instead")]
+    pub fn calculate_idle_share_reserves_in_base(&self) -> Result<FixedPoint> {
+        Ok(self
+            // NOTE: Round up to underestimate the pool's idle.
+            .calculate_idle_share_reserves()?
+            .mul_down(self.vault_share_price())?)
     }
 
     /// Given a scaled FixedPoint maturity time, calculate the normalized time

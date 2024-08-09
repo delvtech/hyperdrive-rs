@@ -2,7 +2,7 @@ use std::cmp::{max, min, Ordering};
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, int256, FixedPoint};
+use fixedpointmath::{fixed, int256, FixedPoint, FixedPointValue};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -22,22 +22,22 @@ impl State {
     /// target spot rate.
     pub fn calculate_initial_reserves(
         &self,
-        share_amount: FixedPoint,
-        target_apr: FixedPoint,
-    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        share_amount: FixedPoint<U256>,
+        target_apr: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, I256, FixedPoint<U256>)> {
         // NOTE: Round down to underestimate the initial bond reserves.
         //
         // Normalize the time to maturity to fractions of a year since the provided
         // rate is an APR.
         let t = self
             .position_duration()
-            .div_down(U256::from(60 * 60 * 24 * 365).into());
+            .div_down(U256::from(60 * 60 * 24 * 365).into())?;
 
         // NOTE: Round up to underestimate the initial bond reserves.
         //
         // Calculate the target price implied by the target rate.
         let one = fixed!(1e18);
-        let target_price = one.div_up(one + target_apr.mul_down(t));
+        let target_price = one.div_up(one + target_apr.mul_down(t)?)?;
 
         // The share reserves is just the share amount since we are initializing
         // the pool.
@@ -49,11 +49,11 @@ impl State {
         //
         // y = (mu * c * z) / (c * p_target ** (1 / t_s) + mu * p_target)
         let bond_reserves = self.initial_vault_share_price().mul_div_down(
-            self.vault_share_price().mul_down(share_reserves),
+            self.vault_share_price().mul_down(share_reserves)?,
             self.vault_share_price()
-                .mul_down(target_price.pow(one.div_down(self.time_stretch()))?)
-                + self.initial_vault_share_price().mul_up(target_price),
-        );
+                .mul_down(target_price.pow(one.div_down(self.time_stretch())?)?)?
+                + self.initial_vault_share_price().mul_up(target_price)?,
+        )?;
 
         // NOTE: Round down to underestimate the initial share adjustment.
         //
@@ -61,7 +61,7 @@ impl State {
         //
         // zeta = (p_target * y) / c
         let share_adjustment =
-            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price()))?;
+            I256::try_from(bond_reserves.mul_div_down(target_price, self.vault_share_price())?)?;
 
         Ok((share_reserves, share_adjustment, bond_reserves))
     }
@@ -70,12 +70,12 @@ impl State {
     /// bond_reserves when updating liquidity with a `share_reserves_delta`.
     pub fn calculate_update_liquidity(
         &self,
-        share_reserves: FixedPoint,
+        share_reserves: FixedPoint<U256>,
         share_adjustment: I256,
-        bond_reserves: FixedPoint,
-        minimum_share_reserves: FixedPoint,
+        bond_reserves: FixedPoint<U256>,
+        minimum_share_reserves: FixedPoint<U256>,
         share_reserves_delta: I256,
-    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, I256, FixedPoint<U256>)> {
         // If the share reserves delta is zero, we can return early since no
         // action is needed.
         if share_reserves_delta == I256::zero() {
@@ -90,7 +90,7 @@ impl State {
                 "update would result in share reserves below minimum."
             ));
         }
-        let new_share_reserves = FixedPoint::try_from(new_share_reserves)?;
+        let new_share_reserves = new_share_reserves.as_fixed();
 
         // Update the share adjustment by holding the ratio of share reserves
         // to share adjustment proportional. In general, our pricing model cannot
@@ -101,13 +101,9 @@ impl State {
         // zeta_old / z_old = zeta_new / z_new
         //                  =>
         // zeta_new = zeta_old * (z_new / z_old)
-        let new_share_adjustment = if share_adjustment >= I256::zero() {
-            let share_adjustment_fp = FixedPoint::try_from(share_adjustment)?;
-            I256::try_from(new_share_reserves.mul_div_down(share_adjustment_fp, share_reserves))?
-        } else {
-            let share_adjustment_fp = FixedPoint::try_from(-share_adjustment)?;
-            -I256::try_from(new_share_reserves.mul_div_up(share_adjustment_fp, share_reserves))?
-        };
+        let new_share_adjustment = new_share_reserves
+            .mul_div_down(share_adjustment.as_fixed(), share_reserves)?
+            .raw();
 
         // NOTE: Rounding down to avoid introducing dust into the computation.
         //
@@ -127,14 +123,17 @@ impl State {
             calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())?;
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, new_share_adjustment)?;
-        let new_bond_reserves =
-            bond_reserves.mul_div_down(new_effective_share_reserves, old_effective_share_reserves);
+        let new_bond_reserves = bond_reserves
+            .mul_div_down(new_effective_share_reserves, old_effective_share_reserves)?;
 
         Ok((new_share_reserves, new_share_adjustment, new_bond_reserves))
     }
 
     /// Calculates the present value in shares of LP's capital in the pool.
-    pub fn calculate_present_value(&self, current_block_timestamp: U256) -> Result<FixedPoint> {
+    pub fn calculate_present_value(
+        &self,
+        current_block_timestamp: U256,
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the average time remaining for the longs and shorts.
 
         // To keep precision of long and short average maturity time (from contract call)
@@ -166,8 +165,8 @@ impl State {
 
     pub fn calculate_net_curve_trade(
         &self,
-        long_average_time_remaining: FixedPoint,
-        short_average_time_remaining: FixedPoint,
+        long_average_time_remaining: FixedPoint<U256>,
+        short_average_time_remaining: FixedPoint<U256>,
     ) -> Result<I256> {
         // NOTE: To underestimate the impact of closing the net curve position,
         // we round up the long side of the net curve position (since this
@@ -299,8 +298,8 @@ impl State {
     /// Calculates the result of closing the net flat position.
     pub fn calculate_net_flat_trade(
         &self,
-        long_average_time_remaining: FixedPoint,
-        short_average_time_remaining: FixedPoint,
+        long_average_time_remaining: FixedPoint<U256>,
+        short_average_time_remaining: FixedPoint<U256>,
     ) -> Result<I256> {
         if self.vault_share_price() == fixed!(0) {
             return Err(eyre!("Vault share price is zero."));
@@ -352,10 +351,10 @@ impl State {
     pub fn calculate_distribute_excess_idle(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint, // withdraw shares - ready to withdraw
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>, // withdraw shares - ready to withdraw
         max_iterations: u64,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint)> {
         // Steps 1 and 2: Calculate the maximum amount the share reserves can be
         // debited. If the effective share reserves or the maximum share
         // reserves delta can't be calculated or if the maximum share reserves
@@ -449,10 +448,10 @@ impl State {
     fn calculate_distribute_excess_idle_withdrawal_shares_redeemed(
         &self,
         current_block_timestamp: U256,
-        share_reserves_delta: FixedPoint,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-    ) -> Result<FixedPoint> {
+        share_reserves_delta: FixedPoint<U256>,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the present value after debiting the share reserves delta.
         let updated_state =
             match self.get_state_after_liquidity_update(-I256::try_from(share_reserves_delta)?) {
@@ -491,7 +490,7 @@ impl State {
         // Calculate the amount of withdrawal shares that can be redeemed.
         let lp_total_supply = active_lp_total_supply + withdrawal_shares_total_supply;
         Ok(lp_total_supply
-            - lp_total_supply.mul_div_down(ending_present_value, starting_present_value))
+            - lp_total_supply.mul_div_down(ending_present_value, starting_present_value)?)
     }
 
     /// Calculates the share proceeds to distribute to the withdrawal pool
@@ -502,11 +501,11 @@ impl State {
     fn calculate_distribute_excess_idle_share_proceeds(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint, // just the number of lp tokens
-        withdrawal_shares_total_supply: FixedPoint,
-        max_share_reserves_delta: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>, // just the number of lp tokens
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+        max_share_reserves_delta: FixedPoint<U256>,
         max_iterations: u64,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the LP total supply.
         let lp_total_supply = active_lp_total_supply + withdrawal_shares_total_supply;
 
@@ -521,7 +520,7 @@ impl State {
         // x_0 = w * (PV(0) / l)
         let starting_present_value = self.calculate_present_value(current_block_timestamp)?;
         let mut share_proceeds =
-            withdrawal_shares_total_supply.mul_div_down(starting_present_value, lp_total_supply);
+            withdrawal_shares_total_supply.mul_div_down(starting_present_value, lp_total_supply)?;
 
         // If the pool is net neutral, the initial guess is equal to the final
         // result.
@@ -689,8 +688,8 @@ impl State {
             // is smaller than the previous smallest value, then we update the
             // value and record the share proceeds. We'll ultimately return the
             // share proceeds that resulted in the smallest value.
-            let delta = I256::try_from(present_value.mul_down(lp_total_supply))?
-                - I256::try_from(starting_present_value.mul_up(active_lp_total_supply))?;
+            let delta = I256::try_from(present_value.mul_down(lp_total_supply)?)?
+                - I256::try_from(starting_present_value.mul_up(active_lp_total_supply)?)?;
             if smallest_delta == I256::from(0) || delta.abs() < smallest_delta.abs() {
                 smallest_delta = delta;
                 closest_share_proceeds = share_proceeds;
@@ -705,12 +704,12 @@ impl State {
                 // NOTE: Round the quotient down to avoid overshooting.
                 share_proceeds = share_proceeds
                     + FixedPoint::try_from(delta)?
-                        .div_down(derivative)
-                        .div_down(lp_total_supply);
+                        .div_down(derivative)?
+                        .div_down(lp_total_supply)?;
             } else if delta < I256::zero() {
                 let delta = FixedPoint::try_from(-delta)?
-                    .div_down(derivative)
-                    .div_down(lp_total_supply);
+                    .div_down(derivative)?
+                    .div_down(lp_total_supply)?;
                 if delta < share_proceeds {
                     share_proceeds = share_proceeds - delta;
                 } else {
@@ -737,8 +736,8 @@ impl State {
         // Check to see if the current share proceeds is closer to the optimal
         // value than the previous closest value. We'll choose whichever of the
         // share proceeds that is closer to the optimal value.
-        let last_delta = I256::try_from(present_value.mul_down(lp_total_supply))?
-            - I256::try_from(starting_present_value.mul_up(active_lp_total_supply))?;
+        let last_delta = I256::try_from(present_value.mul_down(lp_total_supply)?)?
+            - I256::try_from(starting_present_value.mul_up(active_lp_total_supply)?)?;
         if last_delta.abs() < smallest_delta.abs() {
             closest_share_proceeds = share_proceeds;
             closest_present_value = present_value;
@@ -748,17 +747,17 @@ impl State {
         // tolerance.
         if
         // NOTE: Round down to make the check stricter.
-        closest_present_value.div_down(active_lp_total_supply)
+        closest_present_value.div_down(active_lp_total_supply)?
                 < starting_present_value.mul_div_up(
-                    fixed!(1e18) - FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
+                    fixed!(1e18) - SHARE_PROCEEDS_TOLERANCE.as_fixed(),
                     lp_total_supply,
-                ) ||
+                )? ||
             // NOTE: Round up to make the check stricter.
-            closest_present_value.div_up(active_lp_total_supply)
+            closest_present_value.div_up(active_lp_total_supply)?
                 > starting_present_value.mul_div_down(
                     fixed!(1e18) + FixedPoint::from(SHARE_PROCEEDS_TOLERANCE),
                     lp_total_supply,
-                )
+                )?
         {
             return Err(eyre!("LP share price was not conserved within tolerance."));
         }
@@ -810,11 +809,11 @@ impl State {
         &self,
         current_block_timestamp: U256,
         original_share_adjustment: I256,
-        original_share_reserves: FixedPoint,
-        starting_present_value: FixedPoint,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-    ) -> Result<(FixedPoint, bool)> {
+        original_share_reserves: FixedPoint<U256>,
+        starting_present_value: FixedPoint<U256>,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, bool)> {
         // If the original share adjustment is zero or negative, we cannot
         // calculate the share proceeds. This should never happen, but for
         // safety we return a failure flag and break the loop at this point.
@@ -838,20 +837,20 @@ impl State {
         //
         // rhs = (PV(0) / l) * (l - w) - net_f
         let rhs = {
-            let rhs: FixedPoint = starting_present_value.mul_div_up(
+            let rhs = starting_present_value.mul_div_up(
                 active_lp_total_supply,
                 active_lp_total_supply + withdrawal_shares_total_supply,
-            );
+            )?;
             if net_flat_trade >= I256::zero() {
                 if net_flat_trade < I256::try_from(rhs)? {
-                    rhs - net_flat_trade.try_into()?
+                    rhs - net_flat_trade.to_u256()?.into()
                 } else {
                     // NOTE: Return a failure flag if computing the rhs would
                     // underflow.
                     return Ok((fixed!(0), false));
                 }
             } else {
-                rhs + (-net_flat_trade).try_into()?
+                rhs + (-net_flat_trade).to_u256()?.into()
             }
         };
 
@@ -876,10 +875,10 @@ impl State {
     /// price plus the minimum tolerance.
     fn should_short_circuit_distribute_excess_idle_share_proceeds(
         &self,
-        active_lp_total_supply: FixedPoint, // just the total number of lp shares
-        starting_present_value: FixedPoint,
-        lp_total_supply: FixedPoint, // total lp shares and withdrawal shares - w.s. ready to withraw
-        present_value: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>, // just the total number of lp shares
+        starting_present_value: FixedPoint<U256>,
+        lp_total_supply: FixedPoint<U256>, // total lp shares and withdrawal shares - w.s. ready to withraw
+        present_value: FixedPoint<U256>,
     ) -> Result<bool> {
         Ok(
             // Ensure that new LP share price is greater than or equal to the
@@ -912,7 +911,7 @@ impl State {
     fn calculate_max_share_reserves_delta_safe(
         &self,
         current_block_timestamp: U256,
-    ) -> Result<(FixedPoint, bool)> {
+    ) -> Result<(FixedPoint<U256>, bool)> {
         let net_curve_trade =
             self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         let idle = self.calculate_idle_share_reserves();
@@ -1024,11 +1023,11 @@ impl State {
     fn calculate_shares_delta_given_bonds_delta_derivative(
         &self,
         bond_amount: I256,
-        original_share_reserves: FixedPoint,
-        original_bond_reserves: FixedPoint,
-        original_effective_share_reserves: FixedPoint,
+        original_share_reserves: FixedPoint<U256>,
+        original_bond_reserves: FixedPoint<U256>,
+        original_effective_share_reserves: FixedPoint<U256>,
         original_share_adjustment: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the bond reserves after the bond amount is applied.
         let bond_reserves_after = if bond_amount >= I256::zero() {
             self.bond_reserves() + bond_amount.try_into()?
