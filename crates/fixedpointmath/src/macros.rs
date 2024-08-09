@@ -73,7 +73,6 @@ macro_rules! fixed_i128 {
 #[cfg(test)]
 mod tests {
     use ethers::types::{I256, U256};
-    use eyre::Result;
 
     use crate::FixedPoint;
 
