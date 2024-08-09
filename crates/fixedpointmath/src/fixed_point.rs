@@ -5,7 +5,7 @@ use eyre::{bail, eyre, Result};
 
 use crate::{sign::FixedPointSign, utils::u256_from_str, value::FixedPointValue};
 
-// TODO: Remove decimals
+// TODO: Remove decimals for now.
 
 /// A generic fixed point wrapper around the `U256` type from ethers-rs.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
@@ -273,7 +273,6 @@ impl_mapped_try_into!(
     i128 => to_i128
 );
 
-// Library level tests which use the full API.
 #[cfg(test)]
 mod tests {
     use std::u128;
