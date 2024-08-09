@@ -35,7 +35,7 @@ impl State {
 
         // Redeem as many of the withdrawal shares as possible.
         let (proceeds, withdrawal_shares_redeemed, updated_state) = state
-            .redeem_withdrawal_shares(
+            .redeem_withddrawal_shares(
                 current_block_timestamp,
                 active_lp_total_supply,
                 withdrawal_shares_total_supply,
@@ -54,7 +54,7 @@ impl State {
     /// withdrawal pool's proceeds. This function redeems the maximum amount of
     /// the specified withdrawal shares given the amount of withdrawal shares
     /// ready to withdraw.
-    pub fn redeem_withdrawal_shares(
+    pub fn redeem_withddrawal_shares(
         &self,
         current_block_timestamp: U256,
         active_lp_total_supply: FixedPoint,
@@ -96,8 +96,8 @@ impl State {
         //
         // The LP gets the pro-rata amount of the collected proceeds.
         let vault_share_price = updated_state.vault_share_price();
-        let share_proceeds = withdrawal_shares_redeemed
-            .mul_div_down(withdrawal_share_proceeds, ready_to_withdraw)?;
+        let share_proceeds =
+            withdrawal_shares_redeemed.mul_div_down(withdrawal_share_proceeds, ready_to_withdraw);
 
         // Apply the update to the withdrawal pool.
         let mut updated_state = updated_state.clone();
@@ -116,7 +116,7 @@ impl State {
         // NOTE: Round up to make the check more conservative.
         //
         // Ensure proceeds meet minimum output per share
-        if proceeds < min_output_per_share.mul_up(withdrawal_shares_redeemed)? {
+        if proceeds < min_output_per_share.mul_up(withdrawal_shares_redeemed) {
             return Err(eyre!("Output limit not met"));
         }
 
@@ -142,7 +142,7 @@ impl State {
         }
 
         // If there is no excess idle, then there is nothing to distribute.
-        let idle = self.calculate_idle_share_reserves()?;
+        let idle = self.calculate_idle_share_reserves();
         if idle == fixed!(0) {
             return Ok((fixed!(0), fixed!(0), self.clone(), true));
         }
@@ -191,7 +191,7 @@ impl State {
         as_base: bool,
     ) -> Result<FixedPoint> {
         // Withdraw logic here, returning the amount withdrawn
-        let base_amount = shares.mul_down(vault_share_price)?;
+        let base_amount = shares.mul_down(vault_share_price);
         let shares = self.convert_to_shares(base_amount, total_shares, total_assets)?;
 
         if as_base {
@@ -207,7 +207,7 @@ impl State {
         total_supply: FixedPoint,
         total_assets: FixedPoint,
     ) -> Result<FixedPoint> {
-        base_amount.mul_div_down(total_supply, total_assets)
+        Ok(base_amount.mul_div_down(total_supply, total_assets))
     }
 
     fn convert_to_assets(
@@ -216,7 +216,7 @@ impl State {
         total_supply: FixedPoint,
         total_assets: FixedPoint,
     ) -> Result<FixedPoint> {
-        share_amount.mul_div_down(total_assets, total_supply)
+        Ok(share_amount.mul_div_down(total_assets, total_supply))
     }
 }
 

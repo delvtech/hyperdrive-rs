@@ -3,7 +3,7 @@ use std::fmt;
 use ethers::types::Sign;
 
 /// The sign associated with a fixed point number.
-// NOTE: Order is important for the `PartialOrd` and `Ord` traits.
+// NOTE: Order is important for the derived traits.
 #[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
 pub enum FixedPointSign {
     Negative,
@@ -98,5 +98,32 @@ impl From<FixedPointSign> for Sign {
             FixedPointSign::Negative => Sign::Negative,
             FixedPointSign::Positive => Sign::Positive,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use eyre::Result;
+
+    use super::*;
+
+    #[test]
+    fn test_cmp() -> Result<()> {
+        let neg = FixedPointSign::Negative;
+        let pos = FixedPointSign::Positive;
+
+        assert!(neg < pos);
+        assert!(neg <= pos);
+        assert!(pos > neg);
+        assert!(pos >= neg);
+        assert_ne!(neg, pos);
+
+        let neg2 = FixedPointSign::Negative;
+        let pos2 = FixedPointSign::Positive;
+
+        assert_eq!(neg, neg2);
+        assert_eq!(pos, pos2);
+
+        Ok(())
     }
 }

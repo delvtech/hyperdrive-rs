@@ -1,3 +1,4 @@
+use ethers::types::U256;
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -23,7 +24,10 @@ impl State {
     ///                \right) \right)^{1 - t_s}
     ///            \right)^{\tfrac{1}{1 - t_s}}
     /// ```
-    pub fn calculate_open_long<F: Into<FixedPoint>>(&self, base_amount: F) -> Result<FixedPoint> {
+    pub fn calculate_open_long<F: Into<FixedPoint<U256>>>(
+        &self,
+        base_amount: F,
+    ) -> Result<FixedPoint<U256>> {
         let base_amount = base_amount.into();
 
         if base_amount < self.minimum_transaction_amount() {
@@ -75,8 +79,8 @@ impl State {
     /// ```
     pub(super) fn calculate_open_long_derivative(
         &self,
-        base_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let share_amount = base_amount / self.vault_share_price();
         let inner =
             self.initial_vault_share_price() * (self.effective_share_reserves()? + share_amount);
@@ -89,13 +93,13 @@ impl State {
         let rhs = self.vault_share_price().mul_div_down(
             inner.pow(self.time_stretch())?,
             self.initial_vault_share_price(),
-        );
+        )?;
         if k < rhs {
             return Err(eyre!("Open long derivative is undefined."));
         }
         derivative *= (k - rhs).pow(
             self.time_stretch()
-                .div_up(fixed!(1e18) - self.time_stretch()),
+                .div_up(fixed!(1e18) - self.time_stretch())?,
         )?;
 
         // Finish computing the derivative.
@@ -113,32 +117,32 @@ impl State {
     /// `state.share_reserves += base_delta / vault_share_price`.
     pub fn calculate_pool_state_after_open_long(
         &self,
-        base_amount: FixedPoint,
-        maybe_bond_delta: Option<FixedPoint>,
+        base_amount: FixedPoint<U256>,
+        maybe_bond_delta: Option<FixedPoint<U256>>,
     ) -> Result<Self> {
         let (share_delta, bond_delta) =
             self.calculate_pool_deltas_after_open_long(base_amount, maybe_bond_delta)?;
         let mut state = self.clone();
-        state.info.bond_reserves -= bond_delta.into();
-        state.info.share_reserves += share_delta.into();
+        state.info.bond_reserves -= bond_delta.try_into()?;
+        state.info.share_reserves += share_delta.try_into()?;
         Ok(state)
     }
 
     /// Calculate the share and bond deltas to be applied to the pool after opening a long.
     pub fn calculate_pool_deltas_after_open_long(
         &self,
-        base_amount: FixedPoint,
-        maybe_bond_delta: Option<FixedPoint>,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+        base_amount: FixedPoint<U256>,
+        maybe_bond_delta: Option<FixedPoint<U256>>,
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         let bond_delta = match maybe_bond_delta {
             Some(delta) => delta,
             None => self.calculate_open_long(base_amount)?,
         };
         let total_gov_curve_fee_shares = self
             .open_long_governance_fee(base_amount, None)?
-            .div_down(self.vault_share_price());
+            .div_down(self.vault_share_price())?;
         let share_delta =
-            base_amount.div_down(self.vault_share_price()) - total_gov_curve_fee_shares;
+            base_amount.div_down(self.vault_share_price())? - total_gov_curve_fee_shares;
         Ok((share_delta, bond_delta))
     }
 
@@ -146,9 +150,9 @@ impl State {
     /// If a bond_amount is not provided, then one is estimated using `calculate_open_long`.
     pub fn calculate_spot_price_after_long(
         &self,
-        base_amount: FixedPoint,
-        maybe_bond_pool_delta: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        maybe_bond_pool_delta: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let state =
             self.calculate_pool_state_after_open_long(base_amount, maybe_bond_pool_delta)?;
         state.calculate_spot_price()
@@ -171,9 +175,9 @@ impl State {
     /// for `base_amount` is opened.
     pub fn calculate_spot_rate_after_long(
         &self,
-        base_amount: FixedPoint,
-        maybe_bond_amount: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        maybe_bond_amount: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         Ok(calculate_rate_given_fixed_price(
             self.calculate_spot_price_after_long(base_amount, maybe_bond_amount)?,
             self.position_duration(),

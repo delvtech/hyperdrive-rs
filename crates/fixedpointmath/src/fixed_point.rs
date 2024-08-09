@@ -1,32 +1,14 @@
-use std::{
-    fmt::{self, Debug},
-    ops::Div,
-};
+use std::fmt::{self, Debug};
 
-use ethers::types::{I256, U256, U512};
+use ethers::types::{I256, U256};
 use eyre::{bail, eyre, Result};
 
-use crate::{
-    sign::FixedPointSign,
-    utils::{exp, ln, u256_from_str},
-    value::FixedPointValue,
-};
+use crate::{sign::FixedPointSign, utils::u256_from_str, value::FixedPointValue};
 
-/// A fixed point wrapper around the `U256` type from ethers-rs.
-///
-/// This fixed point type is a heavily based on Solidity's FixedPointMath
-/// library with a few changes:
-/// - The outward type of the underlying value is generic, allowing the library
-///   to be used with any type that implements `FixedPointValue`, including
-///   signed integers, and ensuring that the instance is bounded by the generic
-///   type's limits.
-/// - Support for overflowing intermediate operations in `mul_div_down` and
-///  `mul_div_up` via `U512`.
-///
-/// Each of the functions is fuzz tested against the Solidity implementation to
-/// ensure that the behavior is identical given values bounded by the Solidity
-/// implementation's limits.
-#[derive(PartialEq, Eq, PartialOrd, Ord, Clone, Copy)]
+// TODO: Remove decimals
+
+/// A generic fixed point wrapper around the `U256` type from ethers-rs.
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FixedPoint<T: FixedPointValue> {
     value: T,
     decimals: u8,
@@ -43,19 +25,23 @@ impl<T: FixedPointValue> FixedPoint<T> {
         decimals: T::MAX_DECIMALS,
     };
 
-    pub const MAX_DECIMALS: u8 = T::MAX_DECIMALS;
-
     // Constructors //
 
-    // The primary constructor for `FixedPoint`. All instances should be created
-    // using this method to ensure consistent behavior.
-    pub fn new<V: TryInto<T> + Debug>(value: V) -> Result<Self> {
+    pub fn from<V: Into<T>>(value: V) -> Self {
+        Self {
+            value: value.into(),
+            // TODO: Add support for variable decimals.
+            decimals: T::MAX_DECIMALS,
+        }
+    }
+
+    pub fn try_from<V: TryInto<T> + Debug>(value: V) -> Result<Self> {
         // Convert the value to a Debug string before moving it incase the
         // conversion fails.
         let value_debug = format!("{:?}", value);
-        let value = value
-            .try_into()
-            .map_err(|_| eyre!("Failed to convert value to FixedPoint: {value_debug}"))?;
+        let value = value.try_into().map_err(|_| {
+            eyre!("Failed to convert value to underlying FixedPointValue: {value_debug}")
+        })?;
 
         if (value > T::MAX) || (value < T::MIN) {
             bail!(
@@ -67,26 +53,18 @@ impl<T: FixedPointValue> FixedPoint<T> {
             );
         }
 
-        Ok(Self {
-            value,
-            // TODO: Add support for variable decimals.
-            decimals: Self::MAX_DECIMALS,
-        })
-    }
-
-    pub fn zero() -> Self {
-        Self::new(0).unwrap()
+        Ok(Self::from(value))
     }
 
     pub fn from_dec_str(s: &str) -> Result<Self> {
-        if s.starts_with('-') {
+        let raw = if s.starts_with('-') {
             let uint = u256_from_str(&s[1..])?;
-            let raw = T::from_u256(uint)?.flip_sign();
-            return Self::new(raw);
-        }
-        let uint = u256_from_str(s)?;
-        let raw = T::from_u256(uint)?;
-        Self::new(raw)
+            T::from_u256(uint)?.flip_sign()
+        } else {
+            let uint = u256_from_str(s)?;
+            T::from_u256(uint)?
+        };
+        Ok(Self::from(raw))
     }
 
     pub fn saturate_sign(sign: FixedPointSign) -> Self {
@@ -96,8 +74,22 @@ impl<T: FixedPointValue> FixedPoint<T> {
         }
     }
 
+    pub fn zero() -> Self {
+        Self::from(0)
+    }
+
+    /// One with the same scale as this fixed point number, i.e., `1.0`.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `10` to the power of `self.decimals()` overflows `T`.
+    pub fn one(&self) -> Self {
+        Self::try_from(10_u128.pow(self.decimals().into())).unwrap()
+    }
+
     // Getters //
 
+    // TODO: Change this
     pub fn raw(&self) -> T {
         self.value
     }
@@ -107,10 +99,10 @@ impl<T: FixedPointValue> FixedPoint<T> {
     }
 
     pub fn sign(&self) -> FixedPointSign {
-        if self.is_negative() {
-            return FixedPointSign::Negative;
+        match self.is_negative() {
+            true => FixedPointSign::Negative,
+            false => FixedPointSign::Positive,
         }
-        FixedPointSign::Positive
     }
 
     // Predicates //
@@ -125,137 +117,6 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     pub fn is_zero(&self) -> bool {
         self.raw().is_zero()
-    }
-
-    // Math //
-
-    /// One with the same scale as this fixed point number, i.e., `1.0`.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `10` to the power of `self.decimals()` overflows `T`.
-    pub fn one(&self) -> Self {
-        let uint = U256::from(10).pow(self.decimals().into());
-        Self::new(T::from_u256(uint).unwrap()).unwrap()
-    }
-
-    /// Computes the absolute value of self.
-    ///
-    /// # Panics
-    ///
-    /// If the absolute value of self overflows `T`, e.g., if self is the
-    /// minimum value of a signed integer.
-    pub fn abs(&self) -> Self {
-        Self::new(self.raw().abs()).unwrap()
-    }
-
-    /// Computes the absolute value of self as a `U256` to avoid overflow.
-    pub fn unsigned_abs(&self) -> FixedPoint<U256> {
-        FixedPoint::new(self.raw().unsigned_abs()).unwrap()
-    }
-
-    pub fn abs_diff(&self, other: Self) -> FixedPoint<U256> {
-        if self.sign() != other.sign() {
-            return FixedPoint::new(self.unsigned_abs().raw() + other.unsigned_abs().raw())
-                .unwrap();
-        }
-        let diff = if self > &other {
-            self.raw() - other.raw()
-        } else {
-            other.raw() - self.raw()
-        };
-        FixedPoint::new(diff.to_u256().unwrap()).unwrap()
-    }
-
-    pub fn mul_div_down(&self, other: Self, divisor: Self) -> Result<Self> {
-        if divisor.is_zero() {
-            bail!("Cannot divide by zero.");
-        }
-        let u256 = U256::try_from(
-            self.raw()
-                .abs()
-                .to_u256()?
-                .full_mul(other.raw().abs().to_u256()?.into())
-                .div(divisor.raw().abs().to_u256()?),
-        )
-        .or_else(|_| bail!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))?;
-        let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        let raw = T::from_u256(u256)?.flip_sign_if(sign.is_negative());
-        Self::new(raw)
-    }
-
-    pub fn mul_div_up(&self, other: Self, divisor: Self) -> Result<Self> {
-        if divisor.is_zero() {
-            bail!("Cannot divide by zero.");
-        }
-        let (u512, remainder) = self
-            .raw()
-            .abs()
-            .to_u256()?
-            .full_mul(other.raw().abs().to_u256()?.into())
-            .div_mod(divisor.raw().abs().to_u256()?.into());
-        let rounded_u256 = U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128))
-            .or_else(|_| bail!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))?;
-        let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        let raw = T::from_u256(rounded_u256)?.flip_sign_if(sign.is_negative());
-        Self::new(raw)
-    }
-
-    pub fn mul_down(&self, other: Self) -> Result<Self> {
-        self.mul_div_down(other, self.one())
-    }
-
-    pub fn mul_up(&self, other: Self) -> Result<Self> {
-        self.mul_div_up(other, self.one())
-    }
-
-    pub fn div_down(self, other: Self) -> Result<Self> {
-        self.mul_div_down(self.one(), other)
-    }
-
-    pub fn div_up(self, other: Self) -> Result<Self> {
-        self.mul_div_up(self.one(), other)
-    }
-
-    pub fn pow(self, y: Self) -> Result<Self> {
-        let one = self.one();
-
-        // If the exponent is negative, return 1 / x^abs(y).
-        if y.is_negative() {
-            let abs_result = self.pow(y.abs())?;
-
-            // FIXME: What's the correct return value here?
-            if abs_result.is_zero() {
-                return Ok(Self::zero());
-            }
-
-            return Ok(one.div_down(abs_result)?);
-        }
-
-        // If the exponent is 0, return 1.
-        if y.is_zero() {
-            return Ok(one);
-        }
-
-        // If the base is 0, return 0.
-        if self.is_zero() {
-            return Ok(Self::zero());
-        }
-
-        // Using properties of logarithms we calculate x^y: -> ln(x^y) = y *
-        // ln(x) -> e^(y * ln(x)) = x^y
-        let y_int256 = y.to_i256()?;
-
-        // Compute y*ln(x) Any overflow for x will be caught in _ln() in the
-        // initial bounds check
-        let lnx = ln(self.to_i256()?)?;
-        let mut ylnx = y_int256.wrapping_mul(lnx);
-        ylnx = ylnx.wrapping_div(one.to_i256()?);
-
-        // Calculate exp(y * ln(x)) to get x^y
-        let (sign, abs) = exp(ylnx)?.into_sign_and_abs();
-        let raw = T::from_u256(abs)?.flip_sign_if(sign.is_negative());
-        Self::new(raw)
     }
 
     // Conversion to unsigned & signed ethers types //
@@ -335,7 +196,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
 impl<T: FixedPointValue> Default for FixedPoint<T> {
     fn default() -> Self {
-        Self::new(T::default()).unwrap()
+        Self::from(T::default())
     }
 }
 
@@ -348,5 +209,102 @@ impl<T: FixedPointValue> fmt::Debug for FixedPoint<T> {
 impl<T: FixedPointValue> fmt::Display for FixedPoint<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_scaled_string())
+    }
+}
+
+// Conversions //
+
+// Raw values can be converted to FixedPoint instances.
+impl<T: FixedPointValue> From<T> for FixedPoint<T> {
+    fn from(value: T) -> Self {
+        Self::from(value)
+    }
+}
+
+/// Implements conversions to and from `FixedPoint<T>` for a list of types that
+/// can be converted to and from `T`.
+///
+/// "nested raw" types are types that can be converted to a `FixedPointValue`,
+/// the "raw" type of a `FixedPoint` instance.
+macro_rules! impl_from_nested_raw {
+    ($($t:ty),*) => {
+        $(
+            impl<T: FixedPointValue + From<$t>> From<$t> for FixedPoint<T> {
+                fn from(u: $t) -> Self {
+                    Self::from(u)
+                }
+            }
+
+            impl<T: FixedPointValue + Into<$t>> From<FixedPoint<T>> for $t {
+                fn from(f: FixedPoint<T>) -> Self {
+                    f.raw().into()
+                }
+            }
+        )*
+    };
+    ($($tt:tt)*) => {};
+}
+
+// Any `FixedPointValue` that can be created from these types can be converted
+// to a `FixedPoint` instance.
+impl_from_nested_raw!(i8, u8, i16, u16, i32, u32, i64, u64, isize, usize, [u8; 32], bool);
+
+/// Takes a mapping of raw types to `FixedPoint` methods and implements try
+/// conversions to each raw type using the corresponding method.
+macro_rules! impl_mapped_try_into {
+    ($($t:ty => $fn:ident),*) => {
+        $(
+            impl<T: FixedPointValue> TryFrom<FixedPoint<T>> for $t {
+                type Error = eyre::ErrReport;
+
+                fn try_from(f: FixedPoint<T>) -> eyre::Result<Self> {
+                    f.$fn()
+                }
+            }
+        )*
+    };
+    ($($tt:tt)*) => {};
+}
+
+impl_mapped_try_into!(
+    U256 => to_u256,
+    I256 => to_i256,
+    u128 => to_u128,
+    i128 => to_i128
+);
+
+// Library level tests which use the full API.
+#[cfg(test)]
+mod tests {
+    use std::u128;
+
+    use crate::fixed_u128;
+
+    #[test]
+    fn test_fixed_point_fmt() {
+        // fmt::Debug
+        assert_eq!(
+            format!("{:?}", fixed_u128!(1)),
+            "FixedPoint(0.000000000000000001)"
+        );
+        assert_eq!(
+            format!("{:?}", fixed_u128!(1.23456e18)),
+            "FixedPoint(1.234560000000000000)"
+        );
+        assert_eq!(
+            format!("{:?}", fixed_u128!(50_000.234_56e18)),
+            "FixedPoint(50000.234560000000000000)"
+        );
+
+        // fmt::Display
+        assert_eq!(format!("{}", fixed_u128!(1)), "0.000000000000000001");
+        assert_eq!(
+            format!("{}", fixed_u128!(1.23456e18)),
+            "1.234560000000000000"
+        );
+        assert_eq!(
+            format!("{}", fixed_u128!(50_000.234_56e18)),
+            "50000.234560000000000000"
+        );
     }
 }

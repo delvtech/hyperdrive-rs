@@ -6,12 +6,12 @@ use crate::{State, YieldSpace};
 
 impl State {
     /// Calculates the amount of shares the trader will receive after fees for closing a long
-    pub fn calculate_close_long<F: Into<FixedPoint>>(
+    pub fn calculate_close_long<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
 
         if bond_amount < self.config.minimum_transaction_amount.into() {
@@ -22,17 +22,17 @@ impl State {
         Ok(
             self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)?
                 - self.close_long_curve_fee(bond_amount, maturity_time, current_time)?
-                - self.close_long_flat_fee(bond_amount, maturity_time, current_time),
+                - self.close_long_flat_fee(bond_amount, maturity_time, current_time)?,
         )
     }
 
     /// Calculate the amount of shares returned when selling bonds without considering fees.
-    fn calculate_close_long_flat_plus_curve<F: Into<FixedPoint>>(
+    fn calculate_close_long_flat_plus_curve<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -41,7 +41,7 @@ impl State {
         let flat = bond_amount.mul_div_down(
             fixed!(1e18) - normalized_time_remaining,
             self.vault_share_price(),
-        );
+        )?;
 
         // Calculate the curve part of the trade
         let curve = if normalized_time_remaining > fixed!(0) {
@@ -65,12 +65,12 @@ impl State {
     ///
     /// `$\Delta y = \text{bond_amount}$`
     /// `$c = \text{close_vault_share_price (current if non-matured)}$`
-    pub fn calculate_market_value_long<F: Into<FixedPoint>>(
+    pub fn calculate_market_value_long<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
 
         let spot_price = self.calculate_spot_price()?;
@@ -83,12 +83,12 @@ impl State {
 
         // let flat_value = bond_amount * (fixed!(1e18) - time_remaining);
         let flat_value =
-            bond_amount.mul_div_down(fixed!(1e18) - time_remaining, self.vault_share_price());
+            bond_amount.mul_div_down(fixed!(1e18) - time_remaining, self.vault_share_price())?;
         let curve_bonds = bond_amount * time_remaining;
         let curve_value = curve_bonds * spot_price / self.vault_share_price();
 
         let trading_proceeds = flat_value + curve_value;
-        let flat_fees_paid = self.close_long_flat_fee(bond_amount, maturity_time, current_time);
+        let flat_fees_paid = self.close_long_flat_fee(bond_amount, maturity_time, current_time)?;
         let curve_fees_paid =
             self.close_long_curve_fee(bond_amount, maturity_time, current_time)?;
         let fees_paid = flat_fees_paid + curve_fees_paid;
@@ -178,6 +178,7 @@ mod tests {
 
             let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
+            let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
             let maturity_time = U256::try_from(state.position_duration())?;
             let current_time = rng.gen_range(fixed!(0)..=FixedPoint::from(maturity_time));
 

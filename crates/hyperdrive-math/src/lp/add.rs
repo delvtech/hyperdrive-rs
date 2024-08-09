@@ -9,12 +9,12 @@ impl State {
     pub fn calculate_add_liquidity(
         &self,
         current_block_timestamp: U256,
-        contribution: FixedPoint,
-        min_lp_share_price: FixedPoint,
-        min_apr: FixedPoint,
-        max_apr: FixedPoint,
+        contribution: FixedPoint<U256>,
+        min_lp_share_price: FixedPoint<U256>,
+        min_apr: FixedPoint<U256>,
+        max_apr: FixedPoint<U256>,
         as_base: bool,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Enforce the slippage guard.
         let apr = self.calculate_spot_rate()?;
         if apr < min_apr || apr > max_apr {
@@ -55,7 +55,7 @@ impl State {
 
     pub fn calculate_pool_state_after_add_liquidity(
         &self,
-        contribution: FixedPoint,
+        contribution: FixedPoint<U256>,
         as_base: bool,
     ) -> Result<State> {
         // Ensure that the contribution is greater than or equal to the minimum
@@ -78,9 +78,9 @@ impl State {
 
     pub fn calculate_pool_deltas_after_add_liquidity(
         &self,
-        contribution: FixedPoint,
+        contribution: FixedPoint<U256>,
         as_base: bool,
-    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, I256, FixedPoint<U256>)> {
         let share_contribution = match as_base {
             true => contribution / self.vault_share_price(),
             false => contribution,

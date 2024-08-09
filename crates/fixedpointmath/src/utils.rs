@@ -5,7 +5,8 @@ use eyre::{bail, Result};
 
 use crate::{int256, uint256};
 
-/// Parse a string into a U256 with support for scientific and decimal notation.
+/// Parses a string into a U256 with support for scientific and decimal
+/// notation.
 ///
 /// ## Example
 ///

@@ -9,7 +9,7 @@ use ethers::{
     types::{Address, U256},
 };
 use eyre::Result;
-use fixedpointmath::{fixed, ln, uint256, FixedPoint, FixedPointValue};
+use fixedpointmath::{ln, prelude::*};
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,

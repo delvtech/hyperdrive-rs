@@ -1,6 +1,6 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, int256, FixedPoint};
+use fixedpointmath::{fixed, fixed_u256, int256, FixedPoint};
 
 use crate::{State, YieldSpace};
 
@@ -15,13 +15,13 @@ impl State {
     /// p_{\text{max}} = \frac{1 - \phi_f}{1 + \phi_c \cdot
     /// \left( p_0^{-1} - 1 \right) \cdot \left( \phi_f - 1 \right)}
     /// ```
-    pub fn calculate_max_spot_price(&self) -> Result<FixedPoint> {
+    pub fn calculate_max_spot_price(&self) -> Result<FixedPoint<U256>> {
         Ok((fixed!(1e18) - self.flat_fee())
             / (fixed!(1e18)
-                + self
-                    .curve_fee()
-                    .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18)))
-            .mul_up(fixed!(1e18) - self.flat_fee()))
+                + self.curve_fee().mul_up(
+                    fixed_u256!(1e18).div_up(self.calculate_spot_price()?)? - fixed!(1e18),
+                )?)
+            .mul_up(fixed!(1e18) - self.flat_fee())?)
     }
 
     /// Calculates the max long that can be opened given a budget.
@@ -29,12 +29,12 @@ impl State {
     /// We start by calculating the long that brings the pool's spot price to 1.
     /// If we are solvent at this point, then we're done. Otherwise, we approach
     /// the max long iteratively using Newton's method.
-    pub fn calculate_max_long<F: Into<FixedPoint>, I: Into<I256>>(
+    pub fn calculate_max_long<F: Into<FixedPoint<U256>>, I: Into<I256>>(
         &self,
         budget: F,
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
         let checkpoint_exposure = checkpoint_exposure.into();
 
@@ -168,7 +168,7 @@ impl State {
     /// Calculates the largest long that can be opened without buying bonds at a
     /// negative interest rate. This calculation does not take Hyperdrive's
     /// solvency constraints into account and shouldn't be used directly.
-    fn absolute_max_long(&self) -> Result<(FixedPoint, FixedPoint)> {
+    fn absolute_max_long(&self) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         // We are targeting the pool's max spot price of:
         //
         // p_max = (1 - flatFee) / (1 + curveFee * (1 / p_0 - 1) * (1 - flatFee))
@@ -203,19 +203,20 @@ impl State {
             .k_down()?
             .div_down(
                 self.vault_share_price()
-                    .div_up(self.initial_vault_share_price())
+                    .div_up(self.initial_vault_share_price())?
                     + ((fixed!(1e18)
                         + self
                             .curve_fee()
                             .mul_up(
-                                fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18),
-                            )
-                            .mul_up(fixed!(1e18) - self.flat_fee()))
-                    .div_up(fixed!(1e18) - self.flat_fee()))
-                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch()))?,
-            )
-            .pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?;
-        let target_share_reserves = inner.div_down(self.initial_vault_share_price());
+                                fixed_u256!(1e18).div_up(self.calculate_spot_price()?)?
+                                    - fixed!(1e18),
+                            )?
+                            .mul_up(fixed!(1e18) - self.flat_fee())?)
+                    .div_up(fixed!(1e18) - self.flat_fee())?)
+                    .pow((fixed!(1e18) - self.time_stretch()).div_down(self.time_stretch())?)?,
+            )?
+            .pow(fixed_u256!(1e18).div_down(fixed!(1e18) - self.time_stretch())?)?;
+        let target_share_reserves = inner.div_down(self.initial_vault_share_price())?;
 
         // Now that we have the target share reserves, we can calculate the
         // target bond reserves using the formula:
@@ -230,7 +231,7 @@ impl State {
             * (fixed!(1e18) - self.flat_fee());
         let target_bond_reserves = ((fixed!(1e18) + fee_adjustment)
             / (fixed!(1e18) - self.flat_fee()))
-        .pow(fixed!(1e18).div_up(self.time_stretch()))?
+        .pow(fixed_u256!(1e18).div_up(self.time_stretch())?)?
             * inner;
 
         // Catch if the target share reserves are smaller than the effective share reserves.
@@ -260,9 +261,9 @@ impl State {
     /// method.
     fn max_long_guess(
         &self,
-        absolute_max_base_amount: FixedPoint,
+        absolute_max_base_amount: FixedPoint<U256>,
         checkpoint_exposure: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Calculate an initial estimate of the max long by using the spot price as
         // our conservative price.
         let spot_price = self.calculate_spot_price()?;
@@ -275,7 +276,7 @@ impl State {
         // price by interpolating between the spot price and 1 depending on how
         // large the estimate is.
         let t = (guess / absolute_max_base_amount)
-            .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch())?)?
+            .pow(fixed_u256!(1e18).div_up(fixed!(1e18) - self.time_stretch())?)?
             * fixed!(0.8e18);
         let estimate_price = spot_price * (fixed!(1e18) - t) + fixed!(1e18) * t;
 
@@ -323,10 +324,10 @@ impl State {
     /// ```
     fn max_long_estimate(
         &self,
-        estimate_price: FixedPoint,
-        spot_price: FixedPoint,
+        estimate_price: FixedPoint<U256>,
+        spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         let mut estimate =
             self.calculate_solvency()? + checkpoint_exposure / self.vault_share_price();
@@ -375,10 +376,10 @@ impl State {
     /// negative numbers.
     pub(super) fn solvency_after_long(
         &self,
-        base_amount: FixedPoint,
-        bond_amount: FixedPoint,
+        base_amount: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
         checkpoint_exposure: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let governance_fee_shares =
             self.open_long_governance_fee(base_amount, None)? / self.vault_share_price();
         let share_amount = base_amount / self.vault_share_price();
@@ -423,16 +424,13 @@ impl State {
     /// domain, which allows us to use the fixed point library.
     pub(super) fn solvency_after_long_derivative_negation(
         &self,
-        base_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let derivative = self.calculate_open_long_derivative(base_amount)?;
         let spot_price = self.calculate_spot_price()?;
-        Ok(
-            (derivative
-                + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
-                - fixed!(1e18))
-            .div_down(self.vault_share_price()),
-        )
+        (derivative + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
+            - fixed!(1e18))
+        .div_down(self.vault_share_price())
     }
 }
 

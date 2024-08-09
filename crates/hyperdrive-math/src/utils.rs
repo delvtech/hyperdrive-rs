@@ -1,12 +1,16 @@
-use ethers::types::{I256, U256};
+use ethers::{
+    core::k256::elliptic_curve::consts::U2,
+    types::{I256, U256},
+};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, ln, uint256, FixedPoint};
+use fixedpointmath::prelude::*;
 
 pub fn calculate_time_stretch(
-    rate: FixedPoint,
-    position_duration: FixedPoint,
-) -> Result<FixedPoint> {
-    let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
+    rate: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+) -> Result<FixedPoint<U256>> {
+    
+    let seconds_in_a_year = (60 * 60 * 24 * 365).fixed();
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
     let time_stretch = fixed!(5.24592e18)
@@ -30,24 +34,27 @@ pub fn calculate_time_stretch(
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    Ok((FixedPoint::try_from(ln(I256::try_from(
-        fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year)?,
-    )?)?)?
-        / FixedPoint::try_from(ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
-        * time_stretch)
+    let ln_adjusted_apr = fixed(
+        ln((fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year)?).to_i256()?)?
+            .to_u256()?,
+    );
+    let ln_apr = fixed(ln((fixed!(1e18) + rate).to_i256()?)?.to_u256()?);
+
+    Ok(ln_adjusted_apr / ln_apr * time_stretch)
 }
 
 /// Calculates the share reserves after zeta adjustment, aka the effective share
 /// reserves: `$z_e = z - zeta$`.
 pub fn calculate_effective_share_reserves(
-    share_reserves: FixedPoint,
+    share_reserves: FixedPoint<U256>,
     share_adjustment: I256,
-) -> Result<FixedPoint> {
+) -> Result<FixedPoint<U256>> {
     let effective_share_reserves = I256::try_from(share_reserves)? - share_adjustment;
     if effective_share_reserves < I256::from(0) {
         return Err(eyre!("effective share reserves cannot be negative"));
     }
-    effective_share_reserves.try_into()
+    // Ok(fixed(effective_share_reserves.to_u256()?))
+    let foo = effective_share_reserves.f
 }
 
 /// Calculates the bond reserves assuming that the pool has a given

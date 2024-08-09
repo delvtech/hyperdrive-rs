@@ -32,7 +32,7 @@ impl State {
             - (self.vault_share_price() / self.initial_vault_share_price())
                 * (self.initial_vault_share_price() * self.minimum_share_reserves())
                     .pow(fixed!(1e18) - self.time_stretch())?)
-        .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch())?)?;
+        .pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?;
 
         ((self.initial_vault_share_price() * self.minimum_share_reserves()) / y_max)
             .pow(self.time_stretch())
@@ -313,16 +313,16 @@ impl State {
         let optimal_bond_reserves = self.k_down()?
             - self.vault_share_price().mul_div_up(
                 self.initial_vault_share_price()
-                    .mul_up(optimal_effective_share_reserves)?
+                    .mul_up(optimal_effective_share_reserves)
                     .pow(fixed!(1e18) - self.time_stretch())?,
                 self.initial_vault_share_price(),
-            )?;
+            );
         let optimal_bond_reserves = if optimal_bond_reserves >= fixed!(1e18) {
             // Rounding the exponent down results in a smaller outcome.
-            optimal_bond_reserves.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch())?)?
+            optimal_bond_reserves.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
         } else {
             // Rounding the exponent up results in a smaller outcome.
-            optimal_bond_reserves.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch())?)?
+            optimal_bond_reserves.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
         };
 
         Ok(optimal_bond_reserves - self.bond_reserves())
@@ -433,13 +433,13 @@ impl State {
     ) -> Result<FixedPoint> {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
-                .div_down(self.vault_share_price())?;
+                .div_down(self.vault_share_price());
         // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
         let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
-        let guess = self.vault_share_price().mul_down(solvency)?;
-        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price)?;
-        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee)?;
-        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee)?)
+        let guess = self.vault_share_price().mul_down(solvency);
+        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
+        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
+        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
     }
 
     /// Calculates the pool's solvency after opening a short.

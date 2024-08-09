@@ -76,7 +76,7 @@ impl<T: FixedPointValue> UniformSampler for UniformFixedPoint<T> {
             let abs_diff = narrowed.abs_diff(abs_low);
             T::from_u256(abs_diff.raw()).unwrap()
         };
-        FixedPoint::new(raw).unwrap()
+        FixedPoint::from(raw)
     }
 }
 

@@ -9,9 +9,9 @@ use paste::paste;
 
 use crate::FixedPoint;
 
-/// Implements the `from_<type>` and `to_<type>` conversion functions for the
-/// given type.
-macro_rules! try_from_into {
+/// Implements the `from_<type>` and `to_<type>` conversion functions for a list
+/// of types.
+macro_rules! conversion_fns {
     ($($type_name:ident),*) => {
         $(
         paste! {
@@ -46,7 +46,8 @@ macro_rules! try_from_into {
 /// All methods have default implementations based on comparisons to `0`, but
 /// can be overridden to provide more efficient alternatives.
 pub trait FixedPointValue:
-    Copy
+    Sized
+    + Copy
     + Debug
     + Default
 
@@ -78,11 +79,11 @@ pub trait FixedPointValue:
 {
     /// The minimum value that can be represented by the type. Can be negative.
     const MIN: Self;
+
     /// The maximum value that can be represented by the type. Must be `>= 0`.
     const MAX: Self;
-    const MAX_DECIMALS: u8 = 18;
 
-    try_from_into!(U256, u128);
+    const MAX_DECIMALS: u8 = 18;
 
     fn is_zero(self) -> bool {
         self == 0.into()
@@ -152,7 +153,19 @@ pub trait FixedPointValue:
         }
     }
 
-    fn fixed(self) -> FixedPoint<Self> {
+    conversion_fns!(U256, u128);
+    
+    /// Converts the value to a `FixedPoint` instance.
+    ///
+    /// # Example
+    ///
+    /// ```rs
+    /// let U256 = U256::from(100).as_fixed(); // -> FixedPoint<U256>
+    /// let I256 = I256::from(100).as_fixed(); // -> FixedPoint<I256>
+    /// let u128 = 100u128.as_fixed();         // -> FixedPoint<u128>
+    /// let i128 = 100i128.as_fixed();         // -> FixedPoint<i128>
+    /// ```
+    fn as_fixed(self) -> FixedPoint<Self> {
         FixedPoint::from(self)
     }
 }

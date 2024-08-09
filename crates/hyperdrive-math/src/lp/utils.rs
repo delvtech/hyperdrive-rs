@@ -17,11 +17,11 @@ impl State {
         let long_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.long_average_maturity_time(),
             current_block_timestamp,
-        )?;
+        );
         let short_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.short_average_maturity_time(),
             current_block_timestamp,
-        )?;
+        );
 
         self.calculate_net_curve_trade(long_average_time_remaining, short_average_time_remaining)
     }
@@ -34,11 +34,11 @@ impl State {
         let long_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.long_average_maturity_time(),
             current_block_timestamp,
-        )?;
+        );
         let short_average_time_remaining = self.calculate_scaled_normalized_time_remaining(
             self.short_average_maturity_time(),
             current_block_timestamp,
-        )?;
+        );
 
         self.calculate_net_flat_trade(long_average_time_remaining, short_average_time_remaining)
     }
