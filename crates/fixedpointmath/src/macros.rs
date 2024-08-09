@@ -134,7 +134,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fixed() -> Result<()> {
+    fn test_fixed() {
         // simple cases
         assert_eq!(fixed!(1), FixedPoint::<i128>::from(1));
         assert_eq!(fixed!(1_000), FixedPoint::<i128>::from(1_000));
@@ -169,7 +169,5 @@ mod tests {
             fixed!(-333_333.555_555e18),
             -FixedPoint::<i128>::from(333_333_555_555_i128 * 10_i128.pow(12))
         );
-
-        Ok(())
     }
 }
