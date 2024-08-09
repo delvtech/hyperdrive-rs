@@ -9,8 +9,7 @@ use paste::paste;
 
 use crate::FixedPoint;
 
-/// Implements the `from_<type>` and `to_<type>` conversion functions for a list
-/// of types.
+/// Adds `from_<type>` and `to_<type>` conversion functions for a list of types.
 macro_rules! conversion_fns {
     ($($type_name:ident),*) => {
         $(
