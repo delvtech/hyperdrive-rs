@@ -201,21 +201,6 @@ macro_rules! impl_forwarded_operator {
     ($($tt:tt)*) => {};
 }
 
-// impl<T: FixedPointValue, U: FixedPointValue> Add<FixedPoint<U>> for FixedPoint<T> {
-//     type Output = Self;
-//     fn add(self, other: FixedPoint<U>) -> Self::Output {
-
-//         Self::from(self.raw().add(other.raw()))
-//     }
-// }
-
-// impl<T: FixedPointValue> Add<U256> for FixedPoint<T> {
-//     type Output = Self;
-//     fn add(self, other: U256) -> Self::Output {
-//         Self::from(self.raw().unsigned_abs().add(other))
-//     }
-// }
-
 // Forward these operators to the underlying `FixedPointValue`.
 impl_forwarded_operator!(Add, Sub, Rem);
 
@@ -471,25 +456,6 @@ mod tests {
                 Err(_) => assert!(actual.is_err()),
             }
         }
-
-        Ok(())
-    }
-
-    #[test]
-    fn foo() -> Result<()> {
-        // let new_a = a
-        //     .as_fixed()
-        //     .mul_div_down(a_fp, share_reserves)?
-        //     .abs()
-        //     .to_i256()?;
-
-        // let new_a = if a.is_positive() {
-        //     let a_fp = a.as_fixed(); // Fixed(100)
-        //     I256::try_from(new_share_reserves.mul_div_down(a_fp, share_reserves)?)?
-        // } else {
-        //     let a_fp = FixedPoint::try_from(-a)?; // Fixed(100)
-        //     -I256::try_from(new_share_reserves.mul_div_up(a_fp, share_reserves)?)?
-        // };
 
         Ok(())
     }
