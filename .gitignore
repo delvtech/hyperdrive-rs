@@ -52,3 +52,5 @@ crates/hyperdrive-wrappers/debug/
 # Crash Reports
 crash_report.json
 
+# Local files
+.local
