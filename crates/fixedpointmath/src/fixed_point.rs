@@ -278,8 +278,8 @@ pub trait ToFixed: Sized + Debug {
     /// let a = 100_u128.to_fixed::<U256>();
     /// let b = 100_i128.to_fixed::<I256>();
     /// ```
-    fn to_fixed<U: FixedPointValue + From<Self>>(self) -> FixedPoint<U> {
-        FixedPoint::<U>::new(self)
+    fn to_fixed<T: FixedPointValue + From<Self>>(self) -> FixedPoint<T> {
+        FixedPoint::<T>::new(self)
     }
 
     /// Attempts to convert the value to a `FixedPoint<T>` instance, first
