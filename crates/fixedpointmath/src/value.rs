@@ -47,14 +47,10 @@ pub trait FixedPointValue:
     + Debug
     + Default
     + Sized
-
-    // Required comparisons
     + Eq
     + PartialEq
     + Ord
     + PartialOrd
-
-    // Required math
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
@@ -64,13 +60,9 @@ pub trait FixedPointValue:
     + Div<Output = Self>
     + DivAssign
     + Rem<Output = Self>
-    
-    // Required std conversions (the bridge types between Rust and ethers)
     + TryFrom<u128>
     + TryInto<u128>
     + From<u64>
-
-    // Required ethers conversions (the types lib is built on)
     + TryFrom<U256>
     + TryInto<U256>
 {
@@ -144,7 +136,7 @@ pub trait FixedPointValue:
         if self.is_negative() && self == Self::MIN {
             // Add 1 before flipping the sign to avoid overflow
             let abs = (self + 1.into()).flip_sign();
-             return abs.to_u256().unwrap() + U256::from(1);
+            return abs.to_u256().unwrap() + U256::from(1);
         }
         self.abs().to_u256().unwrap()
     }

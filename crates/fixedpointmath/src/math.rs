@@ -42,8 +42,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
                 .abs()
                 .to_u256()
                 .unwrap()
-                .full_mul(other.raw().abs().to_u256().unwrap().into())
-                .div(divisor.raw().abs().to_u256().unwrap()),
+                .full_mul(other.raw().unsigned_abs())
+                .div(divisor.raw().unsigned_abs()),
         )
         .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
         .unwrap();
@@ -61,8 +61,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
             .abs()
             .to_u256()
             .unwrap()
-            .full_mul(other.raw().abs().to_u256().unwrap().into())
-            .div_mod(divisor.raw().abs().to_u256().unwrap().into());
+            .full_mul(other.raw().unsigned_abs())
+            .div_mod(divisor.raw().unsigned_abs().into());
         let rounded_u256 = U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128))
             .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
             .unwrap();
