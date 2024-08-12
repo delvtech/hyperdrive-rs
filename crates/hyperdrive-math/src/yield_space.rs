@@ -586,7 +586,7 @@ mod tests {
                     assert_eq!(actual.is_ok(), expected_status);
                     assert_eq!(actual.unwrap_or(fixed!(0)), FixedPoint::from(expected_out));
                 }
-                Err(_) => assert!(actual.is_err()),
+                Err(e) => assert!(actual.is_err() || actual.unwrap().is_err()),
             }
         }
 
