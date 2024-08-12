@@ -525,15 +525,7 @@ mod tests {
             let state = rng.gen::<State>();
 
             // Generate a random checkpoint exposure.
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
-                let sign = rng.gen::<bool>();
-                if sign {
-                    -I256::try_from(value).unwrap()
-                } else {
-                    I256::try_from(value).unwrap()
-                }
-            };
+            let checkpoint_exposure = rng.gen_range(0..=i128::MAX).flip_sign_if(rng.gen()).into();
 
             // Check Solidity against Rust.
             let max_iterations = 8usize;
