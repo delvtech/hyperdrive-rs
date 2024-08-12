@@ -56,9 +56,8 @@ impl<T: FixedPointValue> FixedPoint<T> {
             FixedPointSign::Positive => Self::new(T::from_u256(abs)?),
             FixedPointSign::Negative => {
                 if abs == T::MIN.unsigned_abs() {
-                    // Subtract 1 to avoid overflow.
-                    let raw = T::from_u256(abs - U256::from(1))?.flip_sign() - T::from(1);
-                    Self::new(raw)
+                    // Avoid overflow
+                    Self::MIN
                 } else {
                     let raw = T::from_u256(abs)?.flip_sign();
                     Self::new(raw)
