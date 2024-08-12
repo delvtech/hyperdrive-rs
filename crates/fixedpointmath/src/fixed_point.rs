@@ -51,15 +51,28 @@ impl<T: FixedPointValue> FixedPoint<T> {
         Ok(Self::new(value))
     }
 
+    pub fn from_sign_and_abs(sign: FixedPointSign, abs: U256) -> Result<Self> {
+        Ok(match sign {
+            FixedPointSign::Positive => Self::new(T::from_u256(abs)?),
+            FixedPointSign::Negative => {
+                if abs == T::MIN.unsigned_abs() {
+                    // Subtract 1 to avoid overflow.
+                    let val = T::from_u256(abs - U256::from(1))?.flip_sign();
+                    Self::new(val - T::from(1))
+                } else {
+                    let val = T::from_u256(abs)?.flip_sign();
+                    Self::new(val)
+                }
+            }
+        })
+    }
+
     pub fn from_dec_str(s: &str) -> Result<Self> {
-        let raw = if s.starts_with('-') {
-            let uint = u256_from_str(&s[1..])?;
-            T::from_u256(uint)?.flip_sign()
+        if s.starts_with('-') {
+            Self::from_sign_and_abs(FixedPointSign::Negative, u256_from_str(&s[1..])?)
         } else {
-            let uint = u256_from_str(s)?;
-            T::from_u256(uint)?
-        };
-        Ok(Self::new(raw))
+            Self::from_sign_and_abs(FixedPointSign::Positive, u256_from_str(s)?)
+        }
     }
 
     pub fn saturate_sign(sign: FixedPointSign) -> Self {
@@ -175,10 +188,10 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     pub fn to_scaled_string(&self) -> String {
         let decimals = (self.decimals()) as usize;
-        let zero = T::from(0);
-        let ten = T::from(10);
-        let char_code_zero = T::from(48);
-        let mut value = self.raw().abs();
+        let zero = U256::from(0);
+        let ten = U256::from(10);
+        let char_code_zero = U256::from(48);
+        let mut value = self.raw().unsigned_abs();
         let mut digits = 0;
         let mut result = vec![];
         while value > zero {

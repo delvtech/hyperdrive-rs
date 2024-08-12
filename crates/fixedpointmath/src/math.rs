@@ -37,7 +37,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
         if divisor.is_zero() {
             panic!("Cannot divide by zero.");
         }
-        let u256 = U256::try_from(
+        let abs = U256::try_from(
             self.raw()
                 .abs()
                 .to_u256()
@@ -48,29 +48,25 @@ impl<T: FixedPointValue> FixedPoint<T> {
         .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
         .unwrap();
         let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        let raw = T::from_u256(u256).unwrap().flip_sign_if(sign.is_negative());
-        Self::try_from(raw).unwrap()
+        Self::from_sign_and_abs(sign, abs).unwrap()
     }
 
     pub fn mul_div_up(self, other: Self, divisor: Self) -> Self {
         if divisor.is_zero() {
             panic!("Cannot divide by zero.");
         }
-        let (u512, remainder) = self
+        let (abs, remainder) = self
             .raw()
             .abs()
             .to_u256()
             .unwrap()
             .full_mul(other.raw().unsigned_abs())
             .div_mod(divisor.raw().unsigned_abs().into());
-        let rounded_u256 = U256::try_from(u512 + (remainder.gt(&U512::zero()) as u128))
+        let rounded_abs = U256::try_from(abs + (remainder.gt(&U512::zero()) as u8))
             .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
             .unwrap();
         let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        let raw = T::from_u256(rounded_u256)
-            .unwrap()
-            .flip_sign_if(sign.is_negative());
-        Self::try_from(raw).unwrap()
+        Self::from_sign_and_abs(sign, rounded_abs).unwrap()
     }
 
     pub fn mul_down(self, other: Self) -> Self {
@@ -126,8 +122,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
         // Calculate exp(y * ln(x)) to get x^y
         let (sign, abs) = exp(ylnx)?.into_sign_and_abs();
-        let raw = T::from_u256(abs)?.flip_sign_if(sign.is_negative());
-        Self::try_from(raw)
+        Self::from_sign_and_abs(sign.into(), abs)
     }
 }
 
