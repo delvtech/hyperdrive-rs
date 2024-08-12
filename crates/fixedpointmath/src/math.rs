@@ -39,9 +39,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
         }
         let abs = U256::try_from(
             self.raw()
-                .abs()
-                .to_u256()
-                .unwrap()
+                .unsigned_abs()
                 .full_mul(other.raw().unsigned_abs())
                 .div(divisor.raw().unsigned_abs()),
         )
@@ -57,9 +55,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
         }
         let (abs, remainder) = self
             .raw()
-            .abs()
-            .to_u256()
-            .unwrap()
+            .unsigned_abs()
             .full_mul(other.raw().unsigned_abs())
             .div_mod(divisor.raw().unsigned_abs().into());
         let rounded_abs = U256::try_from(abs + (remainder.gt(&U512::zero()) as u8))
