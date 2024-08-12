@@ -211,17 +211,19 @@ mod tests {
                 current_time.into(),
             )?;
 
-            let error = if spot_valuation > hyperdrive_valuation {
-                I256::try_from(spot_valuation - hyperdrive_valuation)?
-            } else {
-                I256::try_from(hyperdrive_valuation - spot_valuation)?
-            };
+            let diff = spot_valuation
+                .abs_diff(hyperdrive_valuation)
+                .change_type::<I256>()?
+                .raw();
 
             assert!(
-                error < scaled_tolerance,
-                "error {:?} exceeds tolerance of {}",
-                error,
-                scaled_tolerance
+                diff < scaled_tolerance,
+                r#"
+    hyperdrive_valuation: {hyperdrive_valuation}
+          spot_valuation: {spot_valuation}
+                    diff: {diff}
+               tolerance: {scaled_tolerance}
+"#,
             );
         }
 

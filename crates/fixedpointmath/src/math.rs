@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
-use ethers::types::{U256, U512};
+use ethers::types::U256;
 use eyre::{eyre, Result};
 
 use crate::{exp, ln, FixedPoint, FixedPointValue};
@@ -37,6 +37,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
         if divisor.is_zero() {
             panic!("Cannot divide by zero.");
         }
+        let sign = self.sign().flip_if(other.sign() != divisor.sign());
         let abs = U256::try_from(
             self.raw()
                 .unsigned_abs()
@@ -45,7 +46,6 @@ impl<T: FixedPointValue> FixedPoint<T> {
         )
         .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
         .unwrap();
-        let sign = self.sign().flip_if(other.sign() != divisor.sign());
         Self::from_sign_and_abs(sign, abs).unwrap()
     }
 
@@ -53,16 +53,17 @@ impl<T: FixedPointValue> FixedPoint<T> {
         if divisor.is_zero() {
             panic!("Cannot divide by zero.");
         }
-        let (abs, remainder) = self
+        let sign = self.sign().flip_if(other.sign() != divisor.sign());
+        let (abs_u512, rem_512) = self
             .raw()
             .unsigned_abs()
             .full_mul(other.raw().unsigned_abs())
             .div_mod(divisor.raw().unsigned_abs().into());
-        let rounded_abs = U256::try_from(abs + (remainder.gt(&U512::zero()) as u8))
+        let abs = U256::try_from(abs_u512)
             .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
             .unwrap();
-        let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        Self::from_sign_and_abs(sign, rounded_abs).unwrap()
+        Self::from_sign_and_abs(sign, abs).unwrap()
+            + Self::from_sign_and_abs(sign, U256::from(!rem_512.is_zero() as u8)).unwrap()
     }
 
     pub fn mul_down(self, other: Self) -> Self {
