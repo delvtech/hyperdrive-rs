@@ -5,7 +5,7 @@ use eyre::{bail, eyre, Result};
 
 use crate::{sign::FixedPointSign, utils::u256_from_str, value::FixedPointValue};
 
-/// A generic fixed point wrapper around the `U256` type from ethers-rs.
+/// A generic fixed point type built on ethers-rs.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FixedPoint<T: FixedPointValue> {
     raw: T,
