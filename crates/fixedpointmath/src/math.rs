@@ -208,7 +208,7 @@ mod tests {
     use test_utils::{chain::Chain, constants::DEPLOYER};
 
     use super::*;
-    use crate::{fixed, fixed_u128, uint256};
+    use crate::{fixed, fixed_u128, fixed_u256, uint256};
 
     /// The maximum number that can be divided by another in the Solidity
     /// implementation.
@@ -218,8 +218,8 @@ mod tests {
 
     #[test]
     fn test_sub_failure() {
-        // Ensure that subtraction producing negative numbers fails.
-        assert!(panic::catch_unwind(|| fixed_u128!(1e18) - fixed!(2e18)).is_err());
+        // Ensure that subtraction failures are propagated from the raw type.
+        assert!(panic::catch_unwind(|| fixed_u256!(1e18) - fixed!(2e18)).is_err());
     }
 
     #[test]
