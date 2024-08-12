@@ -77,8 +77,9 @@ pub trait FixedPointValue:
     /// The maximum number of decimal places the value can support.
     const MAX_DECIMALS: u8 = 18;
 
-    fn is_zero(&self) -> bool {
-        self == &Self::from(0)
+    /// Whether the value supports negation.
+    fn is_signed() -> bool {
+        Self::MIN.is_negative()
     }
 
     fn is_negative(&self) -> bool {
@@ -89,9 +90,8 @@ pub trait FixedPointValue:
         !self.is_negative()
     }
 
-    /// Whether the value supports negation.
-    fn is_signed() -> bool {
-        Self::MIN.is_negative()
+    fn is_zero(&self) -> bool {
+        self == &Self::from(0)
     }
 
     /// Flips the sign of the value.

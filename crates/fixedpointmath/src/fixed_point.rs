@@ -116,16 +116,16 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
     // Predicates //
 
-    pub fn is_zero(&self) -> bool {
-        self.raw().is_zero()
-    }
-
     pub fn is_negative(&self) -> bool {
         self.raw().is_negative()
     }
 
     pub fn is_positive(&self) -> bool {
         !self.is_negative()
+    }
+
+    pub fn is_zero(&self) -> bool {
+        self.raw().is_zero()
     }
 
     // Conversion to other FixedPoint types //
