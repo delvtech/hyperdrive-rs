@@ -1,16 +1,16 @@
-use ethers::types::{I256, U256};
+use ethers::types::U256;
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
 use crate::{State, YieldSpace};
 
 impl State {
-    fn calculate_close_short_flat<F: Into<FixedPoint>>(
+    fn calculate_close_short_flat<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> FixedPoint<U256> {
         // NOTE: We overestimate the trader's share payment to avoid sandwiches.
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
@@ -21,12 +21,12 @@ impl State {
         )
     }
 
-    fn calculate_close_short_curve<F: Into<FixedPoint>>(
+    fn calculate_close_short_curve<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -41,12 +41,12 @@ impl State {
         }
     }
 
-    fn calculate_close_short_flat_plus_curve<F: Into<FixedPoint>>(
+    fn calculate_close_short_flat_plus_curve<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         // Calculate the flat part of the trade
         let flat = self.calculate_close_short_flat(bond_amount, maturity_time, current_time);
@@ -83,11 +83,11 @@ impl State {
     /// released, the short's proceeds are marked to zero.
     pub fn calculate_short_proceeds_up(
         &self,
-        bond_amount: FixedPoint,
-        share_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
-        close_vault_share_price: FixedPoint,
-    ) -> FixedPoint {
+        bond_amount: FixedPoint<U256>,
+        share_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        close_vault_share_price: FixedPoint<U256>,
+    ) -> FixedPoint<U256> {
         // NOTE: Round up to overestimate the short proceeds.
         //
         // The total value is the amount of shares that underlies the bonds that
@@ -145,11 +145,11 @@ impl State {
     /// released, the short's proceeds are marked to zero.
     fn calculate_short_proceeds_down(
         &self,
-        bond_amount: FixedPoint,
-        share_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
-        close_vault_share_price: FixedPoint,
-    ) -> FixedPoint {
+        bond_amount: FixedPoint<U256>,
+        share_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        close_vault_share_price: FixedPoint<U256>,
+    ) -> FixedPoint<U256> {
         // NOTE: Round down to underestimate the short proceeds.
         //
         // The total value is the amount of shares that underlies the bonds that
@@ -190,7 +190,7 @@ impl State {
     /// ```math
     /// p_{\text{max}} = 1 - \phi_c \cdot (1 - p_0)
     /// ```
-    fn calculate_close_short_max_spot_price(&self) -> Result<FixedPoint> {
+    fn calculate_close_short_max_spot_price(&self) -> Result<FixedPoint<U256>> {
         Ok(fixed!(1e18)
             - self
                 .curve_fee()
@@ -198,14 +198,14 @@ impl State {
     }
 
     /// Calculates the amount of shares the trader will receive after fees for closing a short
-    pub fn calculate_close_short<F: Into<FixedPoint>>(
+    pub fn calculate_close_short<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         open_vault_share_price: F,
         close_vault_share_price: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         let open_vault_share_price = open_vault_share_price.into();
         let close_vault_share_price = close_vault_share_price.into();
@@ -281,14 +281,14 @@ impl State {
     ///
     /// `$\Delta y = \text{bond_amount}$`
     /// `$c = \text{close_vault_share_price (current if non-matured)}$`
-    pub fn calculate_market_value_short<F: Into<FixedPoint>>(
+    pub fn calculate_market_value_short<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         open_vault_share_price: F,
         close_vault_share_price: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         let open_vault_share_price = open_vault_share_price.into();
         let close_vault_share_price = close_vault_share_price.into();
@@ -333,6 +333,7 @@ impl State {
 mod tests {
     use std::panic;
 
+    use ethers::types::I256;
     use fixedpointmath::int256;
     use hyperdrive_test_utils::{chain::TestChain, constants::FAST_FUZZ_RUNS};
     use rand::{thread_rng, Rng};

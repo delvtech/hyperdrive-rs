@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -14,9 +14,9 @@ impl State {
     /// an insolvent pool), then an error is thrown, and the user is advised to
     /// use [calculate_max_long](State::calculate_max_long).
     pub fn calculate_targeted_long_with_budget<
-        F1: Into<FixedPoint>,
-        F2: Into<FixedPoint>,
-        F3: Into<FixedPoint>,
+        F1: Into<FixedPoint<U256>>,
+        F2: Into<FixedPoint<U256>>,
+        F3: Into<FixedPoint<U256>>,
         I: Into<I256>,
     >(
         &self,
@@ -25,7 +25,7 @@ impl State {
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F3>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
         match self.calculate_targeted_long(
             target_rate,
@@ -39,13 +39,17 @@ impl State {
     }
 
     /// Gets a target long that can be opened to achieve a desired fixed rate.
-    fn calculate_targeted_long<F1: Into<FixedPoint>, F2: Into<FixedPoint>, I: Into<I256>>(
+    fn calculate_targeted_long<
+        F1: Into<FixedPoint<U256>>,
+        F2: Into<FixedPoint<U256>>,
+        I: Into<I256>,
+    >(
         &self,
         target_rate: F1,
         checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F2>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Check input args.
         let target_rate = target_rate.into();
         let checkpoint_exposure = checkpoint_exposure.into();
@@ -76,7 +80,7 @@ impl State {
         // The estimated long will usually underestimate because the realized price
         // should always be greater than the spot price.
         //
-        // However, if we overshot the zero-crossing (due to errors arising from FixedPoint arithmetic),
+        // However, if we overshot the zero-crossing (due to errors arising from FixedPoint<U256> arithmetic),
         // then either return or reduce the starting base amount and start on Newton's method.
         if target_rate > resulting_rate {
             let rate_error = target_rate - resulting_rate;
@@ -156,7 +160,7 @@ impl State {
             else {
                 // The derivative of the loss is $l'(x) = r'(x)$.
                 // We return $-l'(x)$ because $r'(x)$ is negative, which
-                // can't be represented with FixedPoint.
+                // can't be represented with FixedPoint<U256>.
                 let negative_loss_derivative = self.rate_after_long_derivative_negation(
                     possible_target_base_delta,
                     possible_target_bond_delta,
@@ -215,12 +219,12 @@ impl State {
     /// r'(x) = \frac{-p'(x)}{t \cdot p(x)^2}
     /// ```
     ///
-    /// We return `$-r'(x)$` because negative numbers cannot be represented by FixedPoint.
+    /// We return `$-r'(x)$` because negative numbers cannot be represented by FixedPoint<U256>.
     fn rate_after_long_derivative_negation(
         &self,
-        base_amount: FixedPoint,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let price = self.calculate_spot_price_after_long(base_amount, Some(bond_amount))?;
         let price_derivative = self.price_after_long_derivative(base_amount, bond_amount)?;
         // The actual equation we want to represent is:
@@ -289,9 +293,9 @@ impl State {
     ///
     fn price_after_long_derivative(
         &self,
-        base_amount: FixedPoint,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // g'(x) = \phi_g \phi_c (1 - p_0)
         let gov_fee_derivative = self.governance_lp_fee()
             * self.curve_fee()
@@ -378,9 +382,9 @@ impl State {
     /// can be determined with (`calculate_open_long`)[State::calculate_open_long].
     fn long_trade_needed_given_reserves(
         &self,
-        ending_share_reserves: FixedPoint,
-        ending_bond_reserves: FixedPoint,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+        ending_share_reserves: FixedPoint<U256>,
+        ending_bond_reserves: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         if self.bond_reserves() < ending_bond_reserves {
             return Err(eyre!(
                 "expected bond_reserves={} >= ending_bond_reserves={}",
@@ -411,7 +415,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use fixedpointmath::uint256;
+    use fixedpointmath::{uint256, FixedPointValue};
     use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
     use rand::{thread_rng, Rng};
 
@@ -426,14 +430,10 @@ mod tests {
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
             // Get a random long trade amount.
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
+            let checkpoint_exposure = rng
+                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
+                .raw()
+                .flip_sign_if(rng.gen());
             let max_long_trade = match panic::catch_unwind(|| {
                 state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
             }) {

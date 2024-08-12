@@ -9,7 +9,7 @@ use ethers::{
     types::{Address, I256, U256},
 };
 use eyre::Result;
-use fixedpointmath::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, ln, uint256, FixedPoint};
 use hyperdrive_wrappers::wrappers::{
     erc20_forwarder_factory::ERC20ForwarderFactory,
     erc20_mintable::ERC20Mintable,
@@ -59,9 +59,9 @@ where
 
 // This is defined in hyperdrive-math, but re-defined here to avoid cyclic dependencies.
 pub fn calculate_time_stretch(
-    rate: FixedPoint,
-    position_duration: FixedPoint,
-) -> Result<FixedPoint> {
+    rate: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+) -> Result<FixedPoint<U256>> {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
@@ -86,10 +86,10 @@ pub fn calculate_time_stretch(
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
+    Ok((FixedPoint::try_from(ln(I256::try_from(
         fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
     )?)?)?
-        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
+        / FixedPoint::try_from(ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
         * time_stretch)
 }
 

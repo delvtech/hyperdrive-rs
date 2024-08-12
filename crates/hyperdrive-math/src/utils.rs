@@ -1,11 +1,11 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, uint256, FixedPoint};
+use fixedpointmath::{fixed, ln, uint256, FixedPoint};
 
 pub fn calculate_time_stretch(
-    rate: FixedPoint,
-    position_duration: FixedPoint,
-) -> Result<FixedPoint> {
+    rate: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+) -> Result<FixedPoint<U256>> {
     let seconds_in_a_year = FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     // Calculate the benchmark time stretch. This time stretch is tuned for
     // a position duration of 1 year.
@@ -30,19 +30,19 @@ pub fn calculate_time_stretch(
     // ) * timeStretch
     //
     // NOTE: Round down so that the output is an underestimate.
-    Ok((FixedPoint::try_from(FixedPoint::ln(I256::try_from(
+    Ok((FixedPoint::try_from(ln(I256::try_from(
         fixed!(1e18) + rate.mul_div_down(position_duration, seconds_in_a_year),
     )?)?)?
-        / FixedPoint::try_from(FixedPoint::ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
+        / FixedPoint::try_from(ln(I256::try_from(fixed!(1e18) + rate)?)?)?)
         * time_stretch)
 }
 
 /// Calculates the share reserves after zeta adjustment, aka the effective share
 /// reserves: `$z_e = z - zeta$`.
 pub fn calculate_effective_share_reserves(
-    share_reserves: FixedPoint,
+    share_reserves: FixedPoint<U256>,
     share_adjustment: I256,
-) -> Result<FixedPoint> {
+) -> Result<FixedPoint<U256>> {
     let effective_share_reserves = I256::try_from(share_reserves)? - share_adjustment;
     if effective_share_reserves < I256::from(0) {
         return Err(eyre!("effective share reserves cannot be negative"));
@@ -69,12 +69,12 @@ pub fn calculate_effective_share_reserves(
 ///
 /// Returns the bond reserves that make the pool have a specified APR.
 pub fn calculate_bonds_given_effective_shares_and_rate(
-    effective_share_reserves: FixedPoint,
-    target_rate: FixedPoint,
-    initial_vault_share_price: FixedPoint,
-    position_duration: FixedPoint,
-    time_stretch: FixedPoint,
-) -> Result<FixedPoint> {
+    effective_share_reserves: FixedPoint<U256>,
+    target_rate: FixedPoint<U256>,
+    initial_vault_share_price: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+    time_stretch: FixedPoint<U256>,
+) -> Result<FixedPoint<U256>> {
     // NOTE: Round down to underestimate the initial bond reserves.
     //
     // Normalize the time to maturity to fractions of a year since the provided
@@ -114,9 +114,9 @@ pub fn calculate_bonds_given_effective_shares_and_rate(
 /// constant for 6 months, then `$t=0.5$`.
 /// In our case, `$t = \text{position_duration} / (60*60*24*365)$`.
 pub fn calculate_rate_given_fixed_price(
-    price: FixedPoint,
-    position_duration: FixedPoint,
-) -> FixedPoint {
+    price: FixedPoint<U256>,
+    position_duration: FixedPoint<U256>,
+) -> FixedPoint<U256> {
     let fixed_price_duration_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     (fixed!(1e18) - price) / (price * fixed_price_duration_in_years)
@@ -132,7 +132,7 @@ pub fn calculate_rate_given_fixed_price(
 ///
 /// where `$t$` is the holding period, in units of years. For example, if the
 /// holding period is 6 months, then `$t=0.5$`.
-pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint) -> Result<I256> {
+pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint<U256>) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     let (sign, apr_abs) = apr.into_sign_and_abs();
@@ -150,7 +150,7 @@ pub fn calculate_hpr_given_apr(apr: I256, position_duration: FixedPoint) -> Resu
 ///
 /// where `$t$` is the holding period, in units of years. For example, if the
 /// holding period is 6 months, then `$t=0.5$`.
-pub fn calculate_hpr_given_apy(apy: I256, position_duration: FixedPoint) -> Result<I256> {
+pub fn calculate_hpr_given_apy(apy: I256, position_duration: FixedPoint<U256>) -> Result<I256> {
     let holding_period_in_years =
         position_duration / FixedPoint::from(U256::from(60 * 60 * 24 * 365));
     let (sign, apy_abs) = apy.into_sign_and_abs();

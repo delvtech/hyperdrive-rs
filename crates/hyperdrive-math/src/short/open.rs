@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -48,9 +48,9 @@ impl State {
     /// ```
     pub fn calculate_open_short(
         &self,
-        bond_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // Ensure that the bond amount is greater than or equal to the minimum
         // transaction amount.
         if bond_amount < self.minimum_transaction_amount() {
@@ -169,10 +169,10 @@ impl State {
     /// ```
     pub fn calculate_open_short_derivative(
         &self,
-        bond_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
-        maybe_initial_spot_price: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        maybe_initial_spot_price: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         // We're avoiding negative interest, so we will cap the close share
         // price to be greater than or equal to the open share price. This
         // will assume the max loss for the trader, some of which may be
@@ -226,7 +226,10 @@ impl State {
     ///   \tfrac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     /// \right)^{\tfrac{1}{1 - t_s}}
     /// ```
-    pub fn calculate_short_principal(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
+    pub fn calculate_short_principal(
+        &self,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         self.calculate_shares_out_given_bonds_in_down(bond_amount)
     }
 
@@ -243,8 +246,8 @@ impl State {
     /// ```
     pub fn calculate_short_principal_derivative(
         &self,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // Avoid negative exponent by putting the term in the denominator.
         let lhs = fixed!(1e18).div_up(
             self.vault_share_price()
@@ -273,8 +276,8 @@ impl State {
     /// `state.share_reserves -= share_amount`.
     pub fn calculate_pool_state_after_open_short(
         &self,
-        bond_amount: FixedPoint,
-        maybe_share_amount: Option<FixedPoint>,
+        bond_amount: FixedPoint<U256>,
+        maybe_share_amount: Option<FixedPoint<U256>>,
     ) -> Result<Self> {
         let share_amount = match maybe_share_amount {
             Some(share_amount) => share_amount,
@@ -289,8 +292,8 @@ impl State {
     /// Calculate the share delta to be applied to the pool after opening a short.
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
-        bond_amount: FixedPoint,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
         let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
         let gov_curve_fee_shares = self
@@ -314,9 +317,9 @@ impl State {
     /// Arguments are deltas that would be applied to the pool.
     pub fn calculate_spot_price_after_short(
         &self,
-        bond_amount: FixedPoint,
-        maybe_base_amount: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        maybe_base_amount: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let share_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
             None => self.calculate_pool_share_delta_after_open_short(bond_amount)?,
@@ -341,9 +344,9 @@ impl State {
     /// druation.
     pub fn calculate_spot_rate_after_short(
         &self,
-        bond_amount: FixedPoint,
-        maybe_base_amount: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        maybe_base_amount: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let price = self.calculate_spot_price_after_short(bond_amount, maybe_base_amount)?;
         Ok(calculate_rate_given_fixed_price(
             price,
@@ -393,9 +396,9 @@ impl State {
     /// that from the opening cost, as they get it back upon closing the short.
     pub fn calculate_implied_rate(
         &self,
-        bond_amount: FixedPoint,
-        open_vault_share_price: FixedPoint,
-        variable_apy: FixedPoint,
+        bond_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        variable_apy: FixedPoint<U256>,
     ) -> Result<I256> {
         let full_base_paid = self.calculate_open_short(bond_amount, open_vault_share_price)?;
         let backpaid_interest = bond_amount
@@ -422,7 +425,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::U256;
-    use fixedpointmath::{fixed, int256};
+    use fixedpointmath::{fixed, fixed_u256, int256, FixedPointValue};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -439,7 +442,7 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_pool_state_after_open_short() -> Result<()> {
         // TODO: There must be a rounding error; we should not need a tolerance.
-        let share_adjustment_test_tolerance = fixed!(0);
+        let share_adjustment_test_tolerance = fixed_u256!(0);
         let bond_reserves_test_tolerance = fixed!(0);
         let share_reserves_test_tolerance = fixed!(1);
         // Initialize a test chain and agents.
@@ -541,7 +544,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=fixed!(10_000_000e18));
+                let value = rng.gen_range(fixed_u256!(0)..=fixed!(10_000_000e18));
                 if rng.gen() {
                     -I256::try_from(value).unwrap()
                 } else {
@@ -655,7 +658,7 @@ mod tests {
                     Ok(result) => result,
                     Err(_) => continue, // The amount resulted in the pool being insolvent.
                 },
-                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
             let f_x_plus_delta = match panic::catch_unwind(|| {
                 state.calculate_short_principal(bond_amount + empirical_derivative_epsilon)
@@ -664,7 +667,7 @@ mod tests {
                     Ok(result) => result,
                     Err(_) => continue, // The amount resulted in the pool being insolvent.
                 },
-                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
 
             // Sanity check
@@ -719,7 +722,7 @@ mod tests {
                     Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
-                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
             let f_x_plus_delta = match panic::catch_unwind(|| {
                 state.calculate_open_short(
@@ -731,7 +734,7 @@ mod tests {
                     Ok(result) => result,
                     Err(_) => continue, // The amount results in the pool being insolvent.
                 },
-                Err(_) => continue, // Overflow or underflow error from FixedPoint.
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
 
             // Sanity check
@@ -849,14 +852,10 @@ mod tests {
             // fails because we want to test the default behavior when the state
             // allows all actions.
             let state = rng.gen::<State>();
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
-                if rng.gen() {
-                    -I256::try_from(value).unwrap()
-                } else {
-                    I256::try_from(value).unwrap()
-                }
-            };
+            let checkpoint_exposure = rng
+                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
+                .raw()
+                .flip_sign_if(rng.gen());
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
@@ -869,7 +868,7 @@ mod tests {
                     Ok(max_bond_amount) => max_bond_amount,
                     Err(_) => continue, // Err; max short insolvent
                 },
-                Err(_) => continue, // panic; likely in FixedPoint
+                Err(_) => continue, // panic; likely in FixedPoint<U256>
             };
             if max_bond_amount == fixed!(0) {
                 continue;
@@ -1011,17 +1010,13 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::try_from(I256::MAX)?);
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
+            let checkpoint_exposure = rng
+                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
+                .raw()
+                .flip_sign_if(rng.gen());
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
-            // We need to catch panics because of FixedPoint overflows & underflows.
+            // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price()?,
@@ -1051,12 +1046,12 @@ mod tests {
                                 }
                                 Err(_) => continue, // Open threw an Err.
                             },
-                            Err(_) => continue, // Open threw a panic, likely due to FixedPoint under/over flow.
+                            Err(_) => continue, // Open threw a panic, likely due to FixedPoint<U256> under/over flow.
                         }
                     }
                     Err(_) => continue, // Max threw an Err.
                 },
-                Err(_) => continue, // Max thew an panic, likely due to FixedPoint under/over flow.
+                Err(_) => continue, // Max thew an panic, likely due to FixedPoint<U256> under/over flow.
             }
         }
 

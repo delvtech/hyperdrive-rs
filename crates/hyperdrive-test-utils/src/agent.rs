@@ -25,11 +25,11 @@ use crate::addresses::Addresses;
 
 #[derive(Clone, Default)]
 pub struct Wallet {
-    pub base: FixedPoint,
-    pub lp_shares: FixedPoint,
-    pub withdrawal_shares: FixedPoint,
-    pub longs: BTreeMap<FixedPoint, FixedPoint>,
-    pub shorts: BTreeMap<FixedPoint, FixedPoint>,
+    pub base: FixedPoint<U256>,
+    pub lp_shares: FixedPoint<U256>,
+    pub withdrawal_shares: FixedPoint<U256>,
+    pub longs: BTreeMap<FixedPoint<U256>, FixedPoint<U256>>,
+    pub shorts: BTreeMap<FixedPoint<U256>, FixedPoint<U256>>,
 }
 
 // TODO: This struct needs to be cleaned up.
@@ -190,8 +190,8 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     pub async fn initialize(
         &mut self,
-        rate: FixedPoint,
-        contribution: FixedPoint,
+        rate: FixedPoint<U256>,
+        contribution: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // Ensure that the agent has a sufficient base balance to initialize the pool.
@@ -243,7 +243,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     pub async fn add_liquidity(
         &mut self,
-        contribution: FixedPoint,
+        contribution: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // Ensure that the agent has a sufficient base balance to add liquidity.
@@ -297,7 +297,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     pub async fn remove_liquidity(
         &mut self,
-        shares: FixedPoint,
+        shares: FixedPoint<U256>,
         maybe_options: Option<Options>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<(U256, U256)> {
@@ -359,7 +359,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     pub async fn redeem_withdrawal_shares(
         &mut self,
-        shares: FixedPoint,
+        shares: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // Ensure that the agent has a sufficient balance of withdrawal shares.
@@ -435,7 +435,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
 
     /// Funds the wallet with some base tokens and sets the approval on the
     /// Hyperdrive contract.
-    pub async fn fund(&mut self, amount: FixedPoint) -> Result<()> {
+    pub async fn fund(&mut self, amount: FixedPoint<U256>) -> Result<()> {
         // Mint some base tokens.
         self.base
             .mint(amount.into())
@@ -468,7 +468,11 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
 
     /// Advances the chain's time and changes the pool's variable rate so that
     /// interest accrues.
-    pub async fn advance_time(&self, rate: FixedPoint, duration: FixedPoint) -> Result<()> {
+    pub async fn advance_time(
+        &self,
+        rate: FixedPoint<U256>,
+        duration: FixedPoint<U256>,
+    ) -> Result<()> {
         // Set the new variable rate.
         self.vault.set_rate(rate.into()).send().await?;
 
@@ -477,7 +481,7 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         // at the latest block's timestamp.
         self.client
             .provider()
-            .request::<[u128; 1], i128>("anvil_increaseTime", [duration.into()])
+            .request::<[u128; 1], i128>("anvil_increaseTime", [duration.try_into()?])
             .await?;
         self.client
             .provider()
@@ -507,23 +511,23 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         self.client.address()
     }
 
-    pub fn base(&self) -> FixedPoint {
+    pub fn base(&self) -> FixedPoint<U256> {
         self.wallet.base
     }
 
-    pub fn lp_shares(&self) -> FixedPoint {
+    pub fn lp_shares(&self) -> FixedPoint<U256> {
         self.wallet.lp_shares
     }
 
-    pub fn withdrawal_shares(&self) -> FixedPoint {
+    pub fn withdrawal_shares(&self) -> FixedPoint<U256> {
         self.wallet.withdrawal_shares
     }
 
-    pub fn longs(&self) -> &BTreeMap<FixedPoint, FixedPoint> {
+    pub fn longs(&self) -> &BTreeMap<FixedPoint<U256>, FixedPoint<U256>> {
         &self.wallet.longs
     }
 
-    pub fn shorts(&self) -> &BTreeMap<FixedPoint, FixedPoint> {
+    pub fn shorts(&self) -> &BTreeMap<FixedPoint<U256>, FixedPoint<U256>> {
         &self.wallet.shorts
     }
 

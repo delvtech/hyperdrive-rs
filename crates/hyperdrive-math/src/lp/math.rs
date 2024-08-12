@@ -22,9 +22,9 @@ impl State {
     /// target spot rate.
     pub fn calculate_initial_reserves(
         &self,
-        share_amount: FixedPoint,
-        target_apr: FixedPoint,
-    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+        share_amount: FixedPoint<U256>,
+        target_apr: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, I256, FixedPoint<U256>)> {
         // NOTE: Round down to underestimate the initial bond reserves.
         //
         // Normalize the time to maturity to fractions of a year since the provided
@@ -70,12 +70,12 @@ impl State {
     /// bond_reserves when updating liquidity with a `share_reserves_delta`.
     pub fn calculate_update_liquidity(
         &self,
-        share_reserves: FixedPoint,
+        share_reserves: FixedPoint<U256>,
         share_adjustment: I256,
-        bond_reserves: FixedPoint,
-        minimum_share_reserves: FixedPoint,
+        bond_reserves: FixedPoint<U256>,
+        minimum_share_reserves: FixedPoint<U256>,
         share_reserves_delta: I256,
-    ) -> Result<(FixedPoint, I256, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, I256, FixedPoint<U256>)> {
         // If the share reserves delta is zero, we can return early since no
         // action is needed.
         if share_reserves_delta == I256::zero() {
@@ -134,7 +134,10 @@ impl State {
     }
 
     /// Calculates the present value in shares of LP's capital in the pool.
-    pub fn calculate_present_value(&self, current_block_timestamp: U256) -> Result<FixedPoint> {
+    pub fn calculate_present_value(
+        &self,
+        current_block_timestamp: U256,
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the average time remaining for the longs and shorts.
 
         // To keep precision of long and short average maturity time (from contract call)
@@ -166,8 +169,8 @@ impl State {
 
     pub fn calculate_net_curve_trade(
         &self,
-        long_average_time_remaining: FixedPoint,
-        short_average_time_remaining: FixedPoint,
+        long_average_time_remaining: FixedPoint<U256>,
+        short_average_time_remaining: FixedPoint<U256>,
     ) -> Result<I256> {
         // NOTE: To underestimate the impact of closing the net curve position,
         // we round up the long side of the net curve position (since this
@@ -200,7 +203,8 @@ impl State {
         // from the share reserves, so we negate the result.
         match net_curve_position.cmp(&int256!(0)) {
             Ordering::Greater => {
-                let net_curve_position: FixedPoint = FixedPoint::try_from(net_curve_position)?;
+                let net_curve_position: FixedPoint<U256> =
+                    FixedPoint::try_from(net_curve_position)?;
                 let max_curve_trade =
                     match self.calculate_max_sell_bonds_in(self.minimum_share_reserves()) {
                         Ok(max_curve_trade) => max_curve_trade,
@@ -249,7 +253,8 @@ impl State {
                 }
             }
             Ordering::Less => {
-                let net_curve_position: FixedPoint = FixedPoint::try_from(-net_curve_position)?;
+                let net_curve_position: FixedPoint<U256> =
+                    FixedPoint::try_from(-net_curve_position)?;
                 let max_curve_trade = match self.calculate_max_buy_bonds_out() {
                     Ok(max_curve_trade) => max_curve_trade,
                     Err(_) => {
@@ -299,8 +304,8 @@ impl State {
     /// Calculates the result of closing the net flat position.
     pub fn calculate_net_flat_trade(
         &self,
-        long_average_time_remaining: FixedPoint,
-        short_average_time_remaining: FixedPoint,
+        long_average_time_remaining: FixedPoint<U256>,
+        short_average_time_remaining: FixedPoint<U256>,
     ) -> Result<I256> {
         if self.vault_share_price() == fixed!(0) {
             return Err(eyre!("Vault share price is zero."));
@@ -352,10 +357,10 @@ impl State {
     pub fn calculate_distribute_excess_idle(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint, // withdraw shares - ready to withdraw
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>, // withdraw shares - ready to withdraw
         max_iterations: u64,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         // Steps 1 and 2: Calculate the maximum amount the share reserves can be
         // debited. If the effective share reserves or the maximum share
         // reserves delta can't be calculated or if the maximum share reserves
@@ -449,10 +454,10 @@ impl State {
     fn calculate_distribute_excess_idle_withdrawal_shares_redeemed(
         &self,
         current_block_timestamp: U256,
-        share_reserves_delta: FixedPoint,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-    ) -> Result<FixedPoint> {
+        share_reserves_delta: FixedPoint<U256>,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the present value after debiting the share reserves delta.
         let updated_state =
             match self.get_state_after_liquidity_update(-I256::try_from(share_reserves_delta)?) {
@@ -502,11 +507,11 @@ impl State {
     fn calculate_distribute_excess_idle_share_proceeds(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint, // just the number of lp tokens
-        withdrawal_shares_total_supply: FixedPoint,
-        max_share_reserves_delta: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>, // just the number of lp tokens
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+        max_share_reserves_delta: FixedPoint<U256>,
         max_iterations: u64,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the LP total supply.
         let lp_total_supply = active_lp_total_supply + withdrawal_shares_total_supply;
 
@@ -810,11 +815,11 @@ impl State {
         &self,
         current_block_timestamp: U256,
         original_share_adjustment: I256,
-        original_share_reserves: FixedPoint,
-        starting_present_value: FixedPoint,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-    ) -> Result<(FixedPoint, bool)> {
+        original_share_reserves: FixedPoint<U256>,
+        starting_present_value: FixedPoint<U256>,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+    ) -> Result<(FixedPoint<U256>, bool)> {
         // If the original share adjustment is zero or negative, we cannot
         // calculate the share proceeds. This should never happen, but for
         // safety we return a failure flag and break the loop at this point.
@@ -838,7 +843,7 @@ impl State {
         //
         // rhs = (PV(0) / l) * (l - w) - net_f
         let rhs = {
-            let rhs: FixedPoint = starting_present_value.mul_div_up(
+            let rhs: FixedPoint<U256> = starting_present_value.mul_div_up(
                 active_lp_total_supply,
                 active_lp_total_supply + withdrawal_shares_total_supply,
             );
@@ -876,10 +881,10 @@ impl State {
     /// price plus the minimum tolerance.
     fn should_short_circuit_distribute_excess_idle_share_proceeds(
         &self,
-        active_lp_total_supply: FixedPoint, // just the total number of lp shares
-        starting_present_value: FixedPoint,
-        lp_total_supply: FixedPoint, // total lp shares and withdrawal shares - w.s. ready to withraw
-        present_value: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>, // just the total number of lp shares
+        starting_present_value: FixedPoint<U256>,
+        lp_total_supply: FixedPoint<U256>, // total lp shares and withdrawal shares - w.s. ready to withraw
+        present_value: FixedPoint<U256>,
     ) -> Result<bool> {
         Ok(
             // Ensure that new LP share price is greater than or equal to the
@@ -912,7 +917,7 @@ impl State {
     fn calculate_max_share_reserves_delta_safe(
         &self,
         current_block_timestamp: U256,
-    ) -> Result<(FixedPoint, bool)> {
+    ) -> Result<(FixedPoint<U256>, bool)> {
         let net_curve_trade =
             self.calculate_net_curve_trade_from_timestamp(current_block_timestamp)?;
         let idle = self.calculate_idle_share_reserves();
@@ -1024,11 +1029,11 @@ impl State {
     fn calculate_shares_delta_given_bonds_delta_derivative(
         &self,
         bond_amount: I256,
-        original_share_reserves: FixedPoint,
-        original_bond_reserves: FixedPoint,
-        original_effective_share_reserves: FixedPoint,
+        original_share_reserves: FixedPoint<U256>,
+        original_bond_reserves: FixedPoint<U256>,
+        original_effective_share_reserves: FixedPoint<U256>,
         original_share_adjustment: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Calculate the bond reserves after the bond amount is applied.
         let bond_reserves_after = if bond_amount >= I256::zero() {
             self.bond_reserves() + bond_amount.try_into()?
@@ -1125,7 +1130,7 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use fixedpointmath::uint256;
+    use fixedpointmath::{fixed_i256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS},
@@ -1563,7 +1568,7 @@ mod tests {
             let mut present_state = rng.gen::<State>();
 
             // Generate random variables.
-            let net_curve_trade = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e24)))?; // 1 million
+            let net_curve_trade = rng.gen_range(fixed_i256!(0)..=fixed!(1e24)).raw(); // 1 million
 
             // active_lp_total_supply and _withdrawal_shares_total_supply are just the token supplies.
             // Neither are supplied in the PoolInfo so we need to make them here.  lp_total_supply is defined as:
@@ -1727,7 +1732,7 @@ mod tests {
             let present_state = rng.gen::<State>();
 
             // Get the bond amount, which in this case is equal to the net_curve_trade.
-            let bond_amount = I256::try_from(rng.gen_range(fixed!(0)..=fixed!(1e24)))?; // 1 million
+            let bond_amount = rng.gen_range(fixed_i256!(0)..=fixed!(1e24)).raw(); // 1 million
 
             // Maturity time goes from 0 to position duration, so we'll just set
             // this to zero to make the math simpler.

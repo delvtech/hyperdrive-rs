@@ -79,7 +79,7 @@ pub async fn initialize_pool_with_random_state(
 }
 
 /// Conservative and safe estimate of the maximum long.
-fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint> {
+fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
     let checkpoint_exposure = I256::from(0);
 
@@ -132,7 +132,7 @@ fn get_max_short(
     state: State,
     checkpoint_exposure: I256,
     maybe_max_num_tries: Option<usize>,
-) -> Result<FixedPoint> {
+) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
 
     // We linearly interpolate between the current spot price and the minimum

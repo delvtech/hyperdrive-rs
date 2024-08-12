@@ -7,7 +7,7 @@ use crate::State;
 impl State {
     /// Calculates the number of share reserves that are not reserved by open
     /// positions.
-    pub fn calculate_idle_share_reserves(&self) -> FixedPoint {
+    pub fn calculate_idle_share_reserves(&self) -> FixedPoint<U256> {
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
         match self.share_reserves() > long_exposure + self.minimum_share_reserves() {
             true => self.share_reserves() - long_exposure - self.minimum_share_reserves(),
@@ -20,7 +20,7 @@ impl State {
     /// ```math
     /// s = z - \tfrac{\text{exposure}}{c} - z_{\text{min}}
     /// ```
-    pub fn calculate_solvency(&self) -> Result<FixedPoint> {
+    pub fn calculate_solvency(&self) -> Result<FixedPoint<U256>> {
         let share_reserves = self.share_reserves();
         let long_exposure_shares = self.long_exposure() / self.vault_share_price();
         let min_share_reserves = self.minimum_share_reserves();
@@ -36,7 +36,7 @@ impl State {
 
     /// Calculates the number of base reserves that are not reserved by open
     /// positions.
-    pub fn calculate_idle_share_reserves_in_base(&self) -> FixedPoint {
+    pub fn calculate_idle_share_reserves_in_base(&self) -> FixedPoint<U256> {
         // NOTE: Round up to underestimate the pool's idle.
         let long_exposure = self.long_exposure().div_up(self.vault_share_price());
 
@@ -51,13 +51,13 @@ impl State {
         idle_shares_in_base
     }
 
-    /// Given a scaled FixedPoint maturity time, calculate the normalized time
+    /// Given a scaled FixedPoint<U256> maturity time, calculate the normalized time
     /// remaining with high precision.
     pub fn calculate_scaled_normalized_time_remaining(
         &self,
-        scaled_maturity_time: FixedPoint,
+        scaled_maturity_time: FixedPoint<U256>,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> FixedPoint<U256> {
         let scaled_latest_checkpoint =
             FixedPoint::from(self.to_checkpoint(current_time)) * fixed!(1e36);
         let scaled_position_duration = self.position_duration() * fixed!(1e36);
