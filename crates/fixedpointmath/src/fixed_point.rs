@@ -5,9 +5,6 @@ use eyre::{bail, eyre, Result};
 
 use crate::{sign::FixedPointSign, utils::u256_from_str, value::FixedPointValue};
 
-// TODO: Remove decimals for now and open an issue to add support for variable
-// decimals in the future.
-
 /// A generic fixed point wrapper around the `U256` type from ethers-rs.
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct FixedPoint<T: FixedPointValue> {
