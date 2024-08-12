@@ -56,7 +56,11 @@ impl<T: FixedPointValue> FixedPoint<T> {
             FixedPointSign::Positive => Self::new(T::from_u256(abs)?),
             FixedPointSign::Negative => {
                 if abs == T::MIN.unsigned_abs() {
-                    // Avoid overflow
+                    // NOTE: The absolute MIN value of a two's-complement
+                    // integer is 1 greater than its MAX. Attempting to create a
+                    // positive `T` instance with this value then flipping the
+                    // sign after the fact will overflow, so we just return the
+                    // MIN value directly in this case.
                     Self::MIN
                 } else {
                     let raw = T::from_u256(abs)?.flip_sign();
