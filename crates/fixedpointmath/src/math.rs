@@ -93,7 +93,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
                 bail!("Cannot divide by zero.");
             }
 
-            one.div_down(abs_result);
+            return Ok(one.div_down(abs_result));
         }
 
         // If the exponent is 0, return 1.
