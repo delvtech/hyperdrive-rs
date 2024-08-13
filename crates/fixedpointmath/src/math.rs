@@ -54,7 +54,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
             panic!("Cannot divide by zero.");
         }
         let sign = self.sign().flip_if(other.sign() != divisor.sign());
-        let (abs_u512, rem_512) = self
+        let (abs_u512, rem) = self
             .raw()
             .unsigned_abs()
             .full_mul(other.raw().unsigned_abs())
@@ -63,7 +63,7 @@ impl<T: FixedPointValue> FixedPoint<T> {
             .map_err(|_| eyre!("FixedPoint operation overflowed: {self} * {other} / {divisor}"))
             .unwrap();
         Self::from_sign_and_abs(sign, abs).unwrap()
-            + Self::from_sign_and_abs(sign, U256::from(!rem_512.is_zero() as u8)).unwrap()
+            + Self::from_sign_and_abs(sign, U256::from(!rem.is_zero() as u8)).unwrap()
     }
 
     pub fn mul_down(self, other: Self) -> Self {
