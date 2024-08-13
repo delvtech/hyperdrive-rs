@@ -1,7 +1,7 @@
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use ethers::types::U256;
-use eyre::{bail, eyre, Result};
+use eyre::{eyre, Result};
 
 use crate::{exp, ln, FixedPoint, FixedPointValue};
 
