@@ -133,7 +133,7 @@ impl<T: FixedPointValue> Neg for FixedPoint<T> {
 
 /// Takes a mapping of operator traits to `FixedPoint` methods and implements
 /// the operator and assignment operator for each one.
-macro_rules! impl_mapped_operator {
+macro_rules! mapped_operator_impls {
     ($($trait:ident => $fn:ident),*) => {
         $(
             paste::paste! {
@@ -157,7 +157,7 @@ macro_rules! impl_mapped_operator {
     ($($tt:tt)*) => {};
 }
 
-impl_mapped_operator!(
+mapped_operator_impls!(
     // use `mul_down` for `*` and `*=`.
     Mul => mul_down,
     // use `div_down` for `/` and `/=`.
@@ -167,7 +167,7 @@ impl_mapped_operator!(
 /// Takes a list of operator traits and implements the operator and assignment
 /// operator for each one by forwarding to the corresponding method on the
 /// underlying `FixedPointValue`.
-macro_rules! impl_forwarded_operator {
+macro_rules! forwarded_operator_impls {
     ($($trait:ident),*) => {
         $(
             paste::paste! {
@@ -192,7 +192,7 @@ macro_rules! impl_forwarded_operator {
 }
 
 // Forward these operators to the underlying `FixedPointValue`.
-impl_forwarded_operator!(Add, Sub, Rem);
+forwarded_operator_impls!(Add, Sub, Rem);
 
 #[cfg(test)]
 mod tests {

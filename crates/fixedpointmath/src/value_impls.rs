@@ -8,7 +8,7 @@ use crate::{FixedPoint, FixedPointValue};
 /// # Example
 ///
 /// ```rs
-/// impl_fixed_point_value!(
+/// fixed_point_value_impl!(
 ///     type = U256,
 ///     MAX = U256::MAX,
 ///     MIN = U256::zero(),
@@ -25,7 +25,7 @@ use crate::{FixedPoint, FixedPointValue};
 /// - `from`: *(Optional)* Other types that can convert to the given type.
 /// - `try_from`: *(Optional)* Other types that can try to convert to the given type.
 #[macro_export]
-macro_rules! impl_fixed_point_value {
+macro_rules! fixed_point_value_impl {
   (
       type = $t:ty,
       MAX = $max:expr,
@@ -102,21 +102,21 @@ macro_rules! impl_fixed_point_value {
   }
 }
 
-impl_fixed_point_value!(
+fixed_point_value_impl!(
     type = i128,
     MAX = i128::MAX,
     MIN = i128::MIN,
     try_from = u128 | I256 | U256,
 );
 
-impl_fixed_point_value!(
+fixed_point_value_impl!(
     type = u128,
     MAX = u128::MAX,
     MIN = u128::MIN,
     try_from = i128 | I256 | U256,
 );
 
-impl_fixed_point_value!(
+fixed_point_value_impl!(
     type = I256,
     MAX = I256::MAX,
     MIN = I256::MIN,
@@ -124,7 +124,7 @@ impl_fixed_point_value!(
     try_from = U256,
 );
 
-impl_fixed_point_value!(
+fixed_point_value_impl!(
     type = U256,
     MAX = U256::MAX,
     MIN = U256::zero(),
