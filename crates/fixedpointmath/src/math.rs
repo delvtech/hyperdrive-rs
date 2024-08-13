@@ -1,7 +1,7 @@
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use ethers::types::U256;
-use eyre::{eyre, Result};
+use eyre::{bail, eyre, Result};
 
 use crate::{exp, ln, FixedPoint, FixedPointValue};
 
@@ -87,7 +87,13 @@ impl<T: FixedPointValue> FixedPoint<T> {
 
         // If the exponent is negative, return 1 / x^abs(y).
         if y.is_negative() {
-            return Ok(one.div_down(self.pow(y.abs())?));
+            let abs_result = self.pow(y.abs())?;
+
+            if abs_result.is_zero() {
+                bail!("Cannot divide by zero.");
+            }
+
+            one.div_down(abs_result);
         }
 
         // If the exponent is 0, return 1.
