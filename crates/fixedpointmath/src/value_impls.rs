@@ -11,7 +11,7 @@ use crate::{FixedPoint, FixedPointValue};
 /// impl_fixed_point_value!(
 ///     type = U256,
 ///     MAX = U256::MAX,
-///     MIN = U256([0, 0, 0, 0]),
+///     MIN = U256::zero(),
 ///     from = u128,
 ///     try_from = i128 | I256,
 /// );
@@ -127,7 +127,7 @@ impl_fixed_point_value!(
 impl_fixed_point_value!(
     type = U256,
     MAX = U256::MAX,
-    MIN = U256([0, 0, 0, 0]),
+    MIN = U256::zero(),
     from = u128,
     try_from = i128 | I256,
 );
