@@ -10,15 +10,15 @@ impl State {
     pub fn calculate_remove_liquidity(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-        lp_shares: FixedPoint,
-        total_vault_shares: FixedPoint,
-        total_vault_assets: FixedPoint,
-        min_output_per_share: FixedPoint,
-        minimum_transaction_amount: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+        lp_shares: FixedPoint<U256>,
+        total_vault_shares: FixedPoint<U256>,
+        total_vault_assets: FixedPoint<U256>,
+        min_output_per_share: FixedPoint<U256>,
+        minimum_transaction_amount: FixedPoint<U256>,
         as_base: bool,
-    ) -> Result<(FixedPoint, FixedPoint, State)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>, State)> {
         // Ensure that the amount of LP shares to remove is greater than or
         // equal to the minimum transaction amount.
         if lp_shares < minimum_transaction_amount {
@@ -57,20 +57,20 @@ impl State {
     pub fn redeem_withddrawal_shares(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
-        withdrawal_shares: FixedPoint,
-        total_supply: FixedPoint,
-        total_assets: FixedPoint,
-        min_output_per_share: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
+        withdrawal_shares: FixedPoint<U256>,
+        total_supply: FixedPoint<U256>,
+        total_assets: FixedPoint<U256>,
+        min_output_per_share: FixedPoint<U256>,
         as_base: bool,
-    ) -> Result<(FixedPoint, FixedPoint, State)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>, State)> {
         // Distribute the excess idle to the withdrawal pool. If the distribute
         // excess idle calculation fails, we proceed with the calculation since
         // LPs should be able to redeem their withdrawal shares for existing
         // withdrawal proceeds regardless of whether or not idle could be
         // distributed.
-        let (_withdrawal_shares_redeemed, share_proceeds, updated_state, _success) = self
+        let (_withdrawal_shares_redeemed, _share_proceeds, updated_state, _success) = self
             .distribute_excess_idle(
                 current_block_timestamp,
                 active_lp_total_supply,
@@ -128,10 +128,10 @@ impl State {
     fn distribute_excess_idle(
         &self,
         current_block_timestamp: U256,
-        active_lp_total_supply: FixedPoint,
-        withdrawal_shares_total_supply: FixedPoint,
+        active_lp_total_supply: FixedPoint<U256>,
+        withdrawal_shares_total_supply: FixedPoint<U256>,
         max_iterations: u64,
-    ) -> Result<(FixedPoint, FixedPoint, State, bool)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>, State, bool)> {
         let withdrawal_shares_total_supply =
             withdrawal_shares_total_supply - self.withdrawal_shares_ready_to_withdraw();
 
@@ -184,12 +184,12 @@ impl State {
 
     fn withdraw(
         &self,
-        shares: FixedPoint,
-        vault_share_price: FixedPoint,
-        total_shares: FixedPoint,
-        total_assets: FixedPoint,
+        shares: FixedPoint<U256>,
+        vault_share_price: FixedPoint<U256>,
+        total_shares: FixedPoint<U256>,
+        total_assets: FixedPoint<U256>,
         as_base: bool,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // Withdraw logic here, returning the amount withdrawn
         let base_amount = shares.mul_down(vault_share_price);
         let shares = self.convert_to_shares(base_amount, total_shares, total_assets)?;
@@ -203,19 +203,19 @@ impl State {
 
     fn convert_to_shares(
         &self,
-        base_amount: FixedPoint,
-        total_supply: FixedPoint,
-        total_assets: FixedPoint,
-    ) -> Result<FixedPoint> {
+        base_amount: FixedPoint<U256>,
+        total_supply: FixedPoint<U256>,
+        total_assets: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         Ok(base_amount.mul_div_down(total_supply, total_assets))
     }
 
     fn convert_to_assets(
         &self,
-        share_amount: FixedPoint,
-        total_supply: FixedPoint,
-        total_assets: FixedPoint,
-    ) -> Result<FixedPoint> {
+        share_amount: FixedPoint<U256>,
+        total_supply: FixedPoint<U256>,
+        total_assets: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         Ok(share_amount.mul_div_down(total_assets, total_supply))
     }
 }
@@ -273,8 +273,8 @@ mod tests {
             // Get total supply and total assets for the next block to make
             // sure rust has the same values as the solidity does.
             let timestamp = alice.now().await?;
-            let total_supply: FixedPoint = bob.vault().total_supply().call().await?.into();
-            let total_assets: FixedPoint = bob
+            let total_supply: FixedPoint<U256> = bob.vault().total_supply().call().await?.into();
+            let total_assets: FixedPoint<U256> = bob
                 .vault()
                 .total_assets_with_timestamp(timestamp + uint256!(1))
                 .call()
@@ -291,13 +291,13 @@ mod tests {
             // active_lp_total_supply and withdrawal_shares_total_supply are
             // just the token supplies.  Get them from the contract.
             let lp_token_asset_id = U256::zero();
-            let active_lp_total_supply: FixedPoint = bob
+            let active_lp_total_supply: FixedPoint<U256> = bob
                 .hyperdrive()
                 .total_supply(lp_token_asset_id)
                 .await?
                 .into();
             let withdrawal_share_asset_id = U256::from(3) << 248;
-            let withdrawal_shares_total_supply: FixedPoint = bob
+            let withdrawal_shares_total_supply: FixedPoint<U256> = bob
                 .hyperdrive()
                 .total_supply(withdrawal_share_asset_id)
                 .await?

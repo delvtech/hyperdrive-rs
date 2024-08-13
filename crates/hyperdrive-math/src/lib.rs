@@ -9,7 +9,7 @@ mod yield_space;
 
 use ethers::types::{Address, I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, FixedPoint};
+use fixedpointmath::{fixed, fixed_i256, FixedPoint};
 use hyperdrive_wrappers::wrappers::ihyperdrive::{Fees, PoolConfig, PoolInfo};
 use rand::{
     distributions::{Distribution, Standard},
@@ -65,7 +65,7 @@ impl Distribution<State> for Standard {
         let share_reserves = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
         let share_adjustment = {
             if rng.gen() {
-                -I256::try_from(rng.gen_range(fixed!(0)..=fixed!(100_000e18))).unwrap()
+                rng.gen_range(fixed_i256!(-100_000e18)..=fixed!(0)).raw()
             } else {
                 // We generate values that satisfy `z - zeta >= z_min`,
                 // so `z - z_min >= zeta`.
@@ -127,12 +127,12 @@ impl State {
     }
 
     /// Calculates the pool's spot price.
-    pub fn calculate_spot_price(&self) -> Result<FixedPoint> {
+    pub fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
         YieldSpace::calculate_spot_price(self)
     }
 
     /// Calculate the pool's current spot (aka "fixed") rate.
-    pub fn calculate_spot_rate(&self) -> Result<FixedPoint> {
+    pub fn calculate_spot_rate(&self) -> Result<FixedPoint<U256>> {
         Ok(calculate_rate_given_fixed_price(
             self.calculate_spot_price()?,
             self.position_duration(),
@@ -149,7 +149,7 @@ impl State {
         &self,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> FixedPoint<U256> {
         let latest_checkpoint = self.to_checkpoint(current_time);
         if maturity_time > latest_checkpoint {
             // NOTE: Round down to underestimate the time remaining.
@@ -191,10 +191,10 @@ impl State {
     ///   \right)^{1 - t_s}}
     /// \right)^{1 - t_s} \left( r_t \cdot t + 1 \right)^{\frac{1}{t_s}}
     /// ```
-    fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint>>(
+    fn reserves_given_rate_ignoring_exposure<F: Into<FixedPoint<U256>>>(
         &self,
         target_rate: F,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         let target_rate = target_rate.into();
 
         // First get the target share reserves
@@ -222,79 +222,79 @@ impl State {
         Ok((target_share_reserves, target_bond_reserves))
     }
 
-    fn position_duration(&self) -> FixedPoint {
+    fn position_duration(&self) -> FixedPoint<U256> {
         self.config.position_duration.into()
     }
 
-    fn annualized_position_duration(&self) -> FixedPoint {
+    fn annualized_position_duration(&self) -> FixedPoint<U256> {
         self.position_duration() / FixedPoint::from(U256::from(60 * 60 * 24 * 365))
     }
 
-    fn checkpoint_duration(&self) -> FixedPoint {
+    fn checkpoint_duration(&self) -> FixedPoint<U256> {
         self.config.checkpoint_duration.into()
     }
 
-    fn time_stretch(&self) -> FixedPoint {
+    fn time_stretch(&self) -> FixedPoint<U256> {
         self.config.time_stretch.into()
     }
 
-    fn initial_vault_share_price(&self) -> FixedPoint {
+    fn initial_vault_share_price(&self) -> FixedPoint<U256> {
         self.config.initial_vault_share_price.into()
     }
 
-    fn minimum_share_reserves(&self) -> FixedPoint {
+    fn minimum_share_reserves(&self) -> FixedPoint<U256> {
         self.config.minimum_share_reserves.into()
     }
 
-    fn minimum_transaction_amount(&self) -> FixedPoint {
+    fn minimum_transaction_amount(&self) -> FixedPoint<U256> {
         self.config.minimum_transaction_amount.into()
     }
 
-    fn curve_fee(&self) -> FixedPoint {
+    fn curve_fee(&self) -> FixedPoint<U256> {
         self.config.fees.curve.into()
     }
 
-    fn flat_fee(&self) -> FixedPoint {
+    fn flat_fee(&self) -> FixedPoint<U256> {
         self.config.fees.flat.into()
     }
 
-    fn governance_lp_fee(&self) -> FixedPoint {
+    fn governance_lp_fee(&self) -> FixedPoint<U256> {
         self.config.fees.governance_lp.into()
     }
 
-    pub fn vault_share_price(&self) -> FixedPoint {
+    pub fn vault_share_price(&self) -> FixedPoint<U256> {
         self.info.vault_share_price.into()
     }
 
-    fn share_reserves(&self) -> FixedPoint {
+    fn share_reserves(&self) -> FixedPoint<U256> {
         self.info.share_reserves.into()
     }
 
-    fn effective_share_reserves(&self) -> Result<FixedPoint> {
+    fn effective_share_reserves(&self) -> Result<FixedPoint<U256>> {
         calculate_effective_share_reserves(self.share_reserves(), self.share_adjustment())
     }
 
-    fn bond_reserves(&self) -> FixedPoint {
+    fn bond_reserves(&self) -> FixedPoint<U256> {
         self.info.bond_reserves.into()
     }
 
-    fn longs_outstanding(&self) -> FixedPoint {
+    fn longs_outstanding(&self) -> FixedPoint<U256> {
         self.info.longs_outstanding.into()
     }
 
-    fn long_average_maturity_time(&self) -> FixedPoint {
+    fn long_average_maturity_time(&self) -> FixedPoint<U256> {
         self.info.long_average_maturity_time.into()
     }
 
-    fn shorts_outstanding(&self) -> FixedPoint {
+    fn shorts_outstanding(&self) -> FixedPoint<U256> {
         self.info.shorts_outstanding.into()
     }
 
-    fn short_average_maturity_time(&self) -> FixedPoint {
+    fn short_average_maturity_time(&self) -> FixedPoint<U256> {
         self.info.short_average_maturity_time.into()
     }
 
-    fn long_exposure(&self) -> FixedPoint {
+    fn long_exposure(&self) -> FixedPoint<U256> {
         self.info.long_exposure.into()
     }
 
@@ -302,21 +302,21 @@ impl State {
         self.info.share_adjustment
     }
 
-    fn lp_total_supply(&self) -> FixedPoint {
+    fn lp_total_supply(&self) -> FixedPoint<U256> {
         self.info.lp_total_supply.into()
     }
 
-    fn withdrawal_shares_proceeds(&self) -> FixedPoint {
+    fn withdrawal_shares_proceeds(&self) -> FixedPoint<U256> {
         self.info.withdrawal_shares_proceeds.into()
     }
 
-    fn withdrawal_shares_ready_to_withdraw(&self) -> FixedPoint {
+    fn withdrawal_shares_ready_to_withdraw(&self) -> FixedPoint<U256> {
         self.info.withdrawal_shares_ready_to_withdraw.into()
     }
 }
 
 impl YieldSpace for State {
-    fn z(&self) -> FixedPoint {
+    fn z(&self) -> FixedPoint<U256> {
         self.share_reserves()
     }
 
@@ -324,19 +324,19 @@ impl YieldSpace for State {
         self.share_adjustment()
     }
 
-    fn y(&self) -> FixedPoint {
+    fn y(&self) -> FixedPoint<U256> {
         self.bond_reserves()
     }
 
-    fn mu(&self) -> FixedPoint {
+    fn mu(&self) -> FixedPoint<U256> {
         self.initial_vault_share_price()
     }
 
-    fn c(&self) -> FixedPoint {
+    fn c(&self) -> FixedPoint<U256> {
         self.vault_share_price()
     }
 
-    fn t(&self) -> FixedPoint {
+    fn t(&self) -> FixedPoint<U256> {
         self.time_stretch()
     }
 }

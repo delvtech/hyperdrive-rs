@@ -1,4 +1,4 @@
-use ethers::types::I256;
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -27,7 +27,7 @@ impl State {
     /// ```math
     /// p = \left( \tfrac{\mu \cdot z_{min}}{y_{max}} \right)^{t_s}
     /// ```
-    pub fn calculate_min_spot_price(&self) -> Result<FixedPoint> {
+    pub fn calculate_min_spot_price(&self) -> Result<FixedPoint<U256>> {
         let y_max = (self.k_up()?
             - (self.vault_share_price() / self.initial_vault_share_price())
                 * (self.initial_vault_share_price() * self.minimum_share_reserves())
@@ -51,14 +51,18 @@ impl State {
     /// on the realized price that the short will pay. This is used to help the
     /// algorithm converge faster in real world situations. If this is `None`,
     /// then we'll use the theoretical worst case realized price.
-    pub fn calculate_max_short<F1: Into<FixedPoint>, F2: Into<FixedPoint>, I: Into<I256>>(
+    pub fn calculate_max_short<
+        F1: Into<FixedPoint<U256>>,
+        F2: Into<FixedPoint<U256>>,
+        I: Into<I256>,
+    >(
         &self,
         budget: F1,
         open_vault_share_price: F2,
         checkpoint_exposure: I,
-        maybe_conservative_price: Option<FixedPoint>, // TODO: Is there a nice way of abstracting the inner type?
+        maybe_conservative_price: Option<FixedPoint<U256>>, // TODO: Is there a nice way of abstracting the inner type?
         maybe_max_iterations: Option<usize>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
         let open_vault_share_price = open_vault_share_price.into();
         let checkpoint_exposure = checkpoint_exposure.into();
@@ -230,11 +234,11 @@ impl State {
     /// convergence of Newton's method.
     fn max_short_guess(
         &self,
-        budget: FixedPoint,
-        spot_price: FixedPoint,
-        open_vault_share_price: FixedPoint,
-        maybe_conservative_price: Option<FixedPoint>,
-    ) -> FixedPoint {
+        budget: FixedPoint<U256>,
+        spot_price: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        maybe_conservative_price: Option<FixedPoint<U256>>,
+    ) -> FixedPoint<U256> {
         // If a conservative price is given, we can use it to solve for an
         // initial guess for what the max short is. If this conservative price
         // is an overestimate or if a conservative price isn't given, we revert
@@ -294,7 +298,7 @@ impl State {
 
     /// Calculates the max short that can be opened on the YieldSpace curve
     /// without considering solvency constraints.
-    fn calculate_max_short_upper_bound(&self) -> Result<FixedPoint> {
+    fn calculate_max_short_upper_bound(&self) -> Result<FixedPoint<U256>> {
         // We have the twin constraints that $z \geq z_{min}$ and
         // $z - \zeta \geq z_{min}$. Combining these together, we calculate
         // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
@@ -332,10 +336,10 @@ impl State {
     /// pool's solvency constraints.
     pub fn calculate_absolute_max_short(
         &self,
-        spot_price: FixedPoint,
+        spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
         maybe_max_iterations: Option<usize>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
         let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
@@ -428,9 +432,9 @@ impl State {
     /// ```
     fn absolute_max_short_guess(
         &self,
-        spot_price: FixedPoint,
+        spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
                 .div_down(self.vault_share_price());
@@ -478,9 +482,9 @@ impl State {
     /// ```
     fn solvency_after_short(
         &self,
-        bond_amount: FixedPoint,
+        bond_amount: FixedPoint<U256>,
         checkpoint_exposure: I256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
         if self.share_reserves() < share_delta {
             return Err(eyre!(
@@ -529,9 +533,9 @@ impl State {
     /// doesn't support negative values.
     fn solvency_after_short_derivative(
         &self,
-        bond_amount: FixedPoint,
-        spot_price: FixedPoint,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        spot_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let lhs = self.calculate_short_principal_derivative(bond_amount)?;
         let rhs = self.curve_fee()
             * (fixed!(1e18) - spot_price)

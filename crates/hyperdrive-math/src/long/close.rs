@@ -6,12 +6,12 @@ use crate::{State, YieldSpace};
 
 impl State {
     /// Calculates the amount of shares the trader will receive after fees for closing a long
-    pub fn calculate_close_long<F: Into<FixedPoint>>(
+    pub fn calculate_close_long<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
 
         if bond_amount < self.config.minimum_transaction_amount.into() {
@@ -27,12 +27,12 @@ impl State {
     }
 
     /// Calculate the amount of shares returned when selling bonds without considering fees.
-    fn calculate_close_long_flat_plus_curve<F: Into<FixedPoint>>(
+    fn calculate_close_long_flat_plus_curve<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
@@ -65,12 +65,12 @@ impl State {
     ///
     /// `$\Delta y = \text{bond_amount}$`
     /// `$c = \text{close_vault_share_price (current if non-matured)}$`
-    pub fn calculate_market_value_long<F: Into<FixedPoint>>(
+    pub fn calculate_market_value_long<F: Into<FixedPoint<U256>>>(
         &self,
         bond_amount: F,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
 
         let spot_price = self.calculate_spot_price()?;
@@ -178,7 +178,6 @@ mod tests {
 
             let state = rng.gen::<State>();
             let bond_amount = state.minimum_transaction_amount();
-            let open_vault_share_price = rng.gen_range(fixed!(0.5e18)..=fixed!(2.5e18));
             let maturity_time = U256::try_from(state.position_duration())?;
             let current_time = rng.gen_range(fixed!(0)..=FixedPoint::from(maturity_time));
 
@@ -212,17 +211,19 @@ mod tests {
                 current_time.into(),
             )?;
 
-            let error = if spot_valuation > hyperdrive_valuation {
-                I256::try_from(spot_valuation - hyperdrive_valuation)?
-            } else {
-                I256::try_from(hyperdrive_valuation - spot_valuation)?
-            };
+            let diff = spot_valuation
+                .abs_diff(hyperdrive_valuation)
+                .change_type::<I256>()?
+                .raw();
 
             assert!(
-                error < scaled_tolerance,
-                "error {:?} exceeds tolerance of {}",
-                error,
-                scaled_tolerance
+                diff < scaled_tolerance,
+                r#"
+    hyperdrive_valuation: {hyperdrive_valuation}
+          spot_valuation: {spot_valuation}
+                    diff: {diff}
+               tolerance: {scaled_tolerance}
+"#,
             );
         }
 

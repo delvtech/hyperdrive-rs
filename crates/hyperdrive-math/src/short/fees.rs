@@ -13,7 +13,7 @@ impl State {
     /// ```math
     /// \Phi_{c,os}(\Delta y) = \phi_c \cdot (1 - p) \cdot \Delta y
     /// ```
-    pub fn open_short_curve_fee(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
+    pub fn open_short_curve_fee(&self, bond_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         // NOTE: Round up to overestimate the curve fee.
         Ok(self
             .curve_fee()
@@ -32,9 +32,9 @@ impl State {
     /// ```
     pub fn open_short_governance_fee(
         &self,
-        bond_amount: FixedPoint,
-        maybe_curve_fee: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        bond_amount: FixedPoint<U256>,
+        maybe_curve_fee: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let curve_fee = match maybe_curve_fee {
             Some(maybe_curve_fee) => maybe_curve_fee,
             None => self.open_short_curve_fee(bond_amount)?,
@@ -56,10 +56,10 @@ impl State {
     /// where $t$ is the normalized time remaining until bond maturity.
     pub fn close_short_curve_fee(
         &self,
-        bond_amount: FixedPoint,
+        bond_amount: FixedPoint<U256>,
         maturity_time: U256,
         current_time: U256,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
         // NOTE: Round up to overestimate the curve fee.
@@ -83,11 +83,11 @@ impl State {
     /// NOTE: Round down to underestimate the governance curve fee
     pub fn close_short_governance_fee(
         &self,
-        bond_amount: FixedPoint,
+        bond_amount: FixedPoint<U256>,
         maturity_time: U256,
         current_time: U256,
-        maybe_curve_fee: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        maybe_curve_fee: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let curve_fee = match maybe_curve_fee {
             Some(maybe_curve_fee) => maybe_curve_fee,
             None => self.close_short_curve_fee(bond_amount, maturity_time, current_time)?,
@@ -109,10 +109,10 @@ impl State {
     /// where `$t$` is the normalized time remaining until bond maturity.
     pub fn close_short_flat_fee(
         &self,
-        bond_amount: FixedPoint,
+        bond_amount: FixedPoint<U256>,
         maturity_time: U256,
         current_time: U256,
-    ) -> FixedPoint {
+    ) -> FixedPoint<U256> {
         let normalized_time_remaining =
             self.calculate_normalized_time_remaining(maturity_time, current_time);
         // NOTE: Round up to overestimate the flat fee.

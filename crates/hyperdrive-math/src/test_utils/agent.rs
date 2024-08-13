@@ -21,25 +21,29 @@ pub trait HyperdriveMathAgent {
     async fn latest_checkpoint(&self) -> Result<U256>;
 
     /// Calculates the spot price.
-    async fn calculate_spot_price(&self) -> Result<FixedPoint>;
+    async fn calculate_spot_price(&self) -> Result<FixedPoint<U256>>;
 
     /// Calculates the long amount that will be opened for a given base amount.
-    async fn calculate_open_long(&self, base_amount: FixedPoint) -> Result<FixedPoint>;
+    async fn calculate_open_long(&self, base_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>>;
 
     /// Calculates the deposit required to short a given amount of bonds with the
     /// current market state.
-    async fn calculate_open_short(&self, bond_amount: FixedPoint) -> Result<FixedPoint>;
+    async fn calculate_open_short(&self, bond_amount: FixedPoint<U256>)
+        -> Result<FixedPoint<U256>>;
 
     /// Calculates the max long that can be opened in the current checkpoint.
-    async fn calculate_max_long(&self, maybe_max_iterations: Option<usize>) -> Result<FixedPoint>;
+    async fn calculate_max_long(
+        &self,
+        maybe_max_iterations: Option<usize>,
+    ) -> Result<FixedPoint<U256>>;
 
     /// Gets the long that moves the fixed rate to a target value.
     async fn calculate_targeted_long(
         &self,
-        target_rate: FixedPoint,
+        target_rate: FixedPoint<U256>,
         maybe_max_iterations: Option<usize>,
-        maybe_allowable_error: Option<FixedPoint>,
-    ) -> Result<FixedPoint>;
+        maybe_allowable_error: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>>;
 
     /// Calculates the max short that can be opened in the current checkpoint.
     ///
@@ -48,36 +52,36 @@ pub trait HyperdriveMathAgent {
     /// tolerance to lower the revert rate.
     async fn calculate_max_short(
         &self,
-        maybe_slippage_tolerance: Option<FixedPoint>,
-    ) -> Result<FixedPoint>;
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>>;
 
     async fn open_long(
         &mut self,
-        base_paid: FixedPoint,
-        maybe_slippage_tolerance: Option<FixedPoint>,
+        base_paid: FixedPoint<U256>,
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()>;
 
     async fn close_long(
         &mut self,
-        maturity_time: FixedPoint,
-        bond_amount: FixedPoint,
+        maturity_time: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()>;
 
     async fn open_short(
         &mut self,
-        bond_amount: FixedPoint,
-        maybe_slippage_tolerance: Option<FixedPoint>,
+        bond_amount: FixedPoint<U256>,
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<(FixedPoint, FixedPoint)>;
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)>;
 
     async fn close_short(
         &mut self,
-        maturity_time: FixedPoint,
-        bond_amount: FixedPoint,
+        maturity_time: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<FixedPoint>;
+    ) -> Result<FixedPoint<U256>>;
 }
 
 impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
@@ -93,18 +97,21 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         Ok(self.get_state().await?.to_checkpoint(self.now().await?))
     }
     /// Calculates the spot price.
-    async fn calculate_spot_price(&self) -> Result<FixedPoint> {
+    async fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
         self.get_state().await?.calculate_spot_price()
     }
 
     /// Calculates the long amount that will be opened for a given base amount.
-    async fn calculate_open_long(&self, base_amount: FixedPoint) -> Result<FixedPoint> {
+    async fn calculate_open_long(&self, base_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
         state.calculate_open_long(base_amount)
     }
     /// Calculates the deposit required to short a given amount of bonds with the
     /// current market state.
-    async fn calculate_open_short(&self, bond_amount: FixedPoint) -> Result<FixedPoint> {
+    async fn calculate_open_short(
+        &self,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
         let Checkpoint {
             vault_share_price: open_vault_share_price,
@@ -114,7 +121,10 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     }
 
     /// Calculates the max long that can be opened in the current checkpoint.
-    async fn calculate_max_long(&self, maybe_max_iterations: Option<usize>) -> Result<FixedPoint> {
+    async fn calculate_max_long(
+        &self,
+        maybe_max_iterations: Option<usize>,
+    ) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
         let checkpoint_exposure = self
             .hyperdrive()
@@ -132,10 +142,10 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     /// Gets the long that moves the fixed rate to a target value.
     async fn calculate_targeted_long(
         &self,
-        target_rate: FixedPoint,
+        target_rate: FixedPoint<U256>,
         maybe_max_iterations: Option<usize>,
-        maybe_allowable_error: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        maybe_allowable_error: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
         let checkpoint_exposure = self
             .hyperdrive()
@@ -159,8 +169,8 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     /// tolerance to lower the revert rate.
     async fn calculate_max_short(
         &self,
-        maybe_slippage_tolerance: Option<FixedPoint>,
-    ) -> Result<FixedPoint> {
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
+    ) -> Result<FixedPoint<U256>> {
         let budget =
             self.wallet.base * (fixed!(1e18) - maybe_slippage_tolerance.unwrap_or(fixed!(0.01e18)));
 
@@ -203,8 +213,8 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     async fn open_long(
         &mut self,
-        base_paid: FixedPoint,
-        maybe_slippage_tolerance: Option<FixedPoint>,
+        base_paid: FixedPoint<U256>,
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // Ensure that the agent has a sufficient base balance to open the long.
@@ -267,8 +277,8 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     async fn close_long(
         &mut self,
-        maturity_time: FixedPoint,
-        bond_amount: FixedPoint,
+        maturity_time: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<()> {
         // TODO: It would probably be better for this part of the agent to just
@@ -344,10 +354,10 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     async fn open_short(
         &mut self,
-        bond_amount: FixedPoint,
-        maybe_slippage_tolerance: Option<FixedPoint>,
+        bond_amount: FixedPoint<U256>,
+        maybe_slippage_tolerance: Option<FixedPoint<U256>>,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<(FixedPoint, FixedPoint)> {
+    ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         // Open the short and record the trade in the wallet.
         let log = {
             let max_deposit = {
@@ -404,10 +414,10 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     #[instrument(skip(self))]
     async fn close_short(
         &mut self,
-        maturity_time: FixedPoint,
-        bond_amount: FixedPoint,
+        maturity_time: FixedPoint<U256>,
+        bond_amount: FixedPoint<U256>,
         maybe_tx_options: Option<TxOptions>,
-    ) -> Result<FixedPoint> {
+    ) -> Result<FixedPoint<U256>> {
         // If the wallet has a sufficient balance of shorts, update the short
         // balance. Otherwise, return an error.
         match self.wallet.shorts.entry(maturity_time) {
