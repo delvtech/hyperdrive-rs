@@ -1818,6 +1818,28 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("totalShares"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("totalShares"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("totalSupply"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -3771,6 +3793,14 @@ pub mod i_hyperdrive {
         > {
             self.0
                 .method_hash([243, 247, 7, 7], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `totalShares` (0x3a98ef39) function
+        pub fn total_shares(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([58, 152, 239, 57], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `totalSupply` (0xbd85b039) function
@@ -7055,6 +7085,21 @@ pub mod i_hyperdrive {
     )]
     #[ethcall(name = "target4", abi = "target4()")]
     pub struct Target4Call;
+    ///Container type for all input parameters for the `totalShares` function with signature `totalShares()` and selector `0x3a98ef39`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "totalShares", abi = "totalShares()")]
+    pub struct TotalSharesCall;
     ///Container type for all input parameters for the `totalSupply` function with signature `totalSupply(uint256)` and selector `0xbd85b039`
     #[derive(
         Clone,
@@ -7211,6 +7256,7 @@ pub mod i_hyperdrive {
         Target2(Target2Call),
         Target3(Target3Call),
         Target4(Target4Call),
+        TotalShares(TotalSharesCall),
         TotalSupply(TotalSupplyCall),
         TransferFrom(TransferFromCall),
         TransferFromBridge(TransferFromBridgeCall),
@@ -7472,6 +7518,11 @@ pub mod i_hyperdrive {
             ) {
                 return Ok(Self::Target4(decoded));
             }
+            if let Ok(decoded) = <TotalSharesCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::TotalShares(decoded));
+            }
             if let Ok(decoded) = <TotalSupplyCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -7629,6 +7680,9 @@ pub mod i_hyperdrive {
                 Self::Target2(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Target3(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::Target4(element) => ::ethers::core::abi::AbiEncode::encode(element),
+                Self::TotalShares(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::TotalSupply(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -7708,6 +7762,7 @@ pub mod i_hyperdrive {
                 Self::Target2(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Target3(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Target4(element) => ::core::fmt::Display::fmt(element, f),
+                Self::TotalShares(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TotalSupply(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferFrom(element) => ::core::fmt::Display::fmt(element, f),
                 Self::TransferFromBridge(element) => {
@@ -7968,6 +8023,11 @@ pub mod i_hyperdrive {
             Self::Target4(value)
         }
     }
+    impl ::core::convert::From<TotalSharesCall> for IHyperdriveCalls {
+        fn from(value: TotalSharesCall) -> Self {
+            Self::TotalShares(value)
+        }
+    }
     impl ::core::convert::From<TotalSupplyCall> for IHyperdriveCalls {
         fn from(value: TotalSupplyCall) -> Self {
             Self::TotalSupply(value)
@@ -8204,11 +8264,6 @@ pub mod i_hyperdrive {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
     )]
     pub struct GetPoolConfigReturn(pub PoolConfig);
     ///Container type for all return fields from the `getPoolInfo` function with signature `getPoolInfo()` and selector `0x60246c88`
@@ -8218,11 +8273,6 @@ pub mod i_hyperdrive {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
     )]
     pub struct GetPoolInfoReturn(pub PoolInfo);
     ///Container type for all return fields from the `getUncollectedGovernanceFees` function with signature `getUncollectedGovernanceFees()` and selector `0xc69e16ad`
@@ -8533,6 +8583,20 @@ pub mod i_hyperdrive {
         Hash
     )]
     pub struct Target4Return(pub ::ethers::core::types::Address);
+    ///Container type for all return fields from the `totalShares` function with signature `totalShares()` and selector `0x3a98ef39`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct TotalSharesReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `totalSupply` function with signature `totalSupply(uint256)` and selector `0xbd85b039`
     #[derive(
         Clone,

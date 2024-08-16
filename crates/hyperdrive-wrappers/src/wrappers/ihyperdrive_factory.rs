@@ -7232,6 +7232,11 @@ pub mod i_hyperdrive_factory {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
     )]
     pub struct DeployAndInitializeReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `deployTarget` function with signature `deployTarget(bytes32,address,(address,address,address,bytes32,uint256,uint256,uint256,uint256,uint256,uint256,address,address,address,address,(uint256,uint256,uint256,uint256)),bytes,uint256,uint256,uint256,bytes32)` and selector `0x49f13de7`
@@ -7241,6 +7246,11 @@ pub mod i_hyperdrive_factory {
         ::ethers::contract::EthAbiCodec,
         serde::Serialize,
         serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
     )]
     pub struct DeployTargetReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `deployerCoordinatorManager` function with signature `deployerCoordinatorManager()` and selector `0xe4e7148f`
