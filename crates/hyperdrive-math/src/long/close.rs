@@ -18,12 +18,21 @@ impl State {
             return Err(eyre!("MinimumTransactionAmount: Input amount too low"));
         }
 
+        // Calculate the long proceeds and fees
+        let long_proceeds =
+            self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)?;
+        let long_curve_fee = self.close_long_curve_fee(bond_amount, maturity_time, current_time)?;
+        let long_flat_fee = self.close_long_flat_fee(bond_amount, maturity_time, current_time);
+
+        // Catch the underflow caused by the fees exceeding the proceeds
+        if long_proceeds < (long_curve_fee + long_flat_fee) {
+            return Err(eyre!(
+                "Closing the long results in fees exceeding the long proceeds."
+            ));
+        }
+
         // Subtract the fees from the trade
-        Ok(
-            self.calculate_close_long_flat_plus_curve(bond_amount, maturity_time, current_time)?
-                - self.close_long_curve_fee(bond_amount, maturity_time, current_time)?
-                - self.close_long_flat_fee(bond_amount, maturity_time, current_time),
-        )
+        Ok(long_proceeds - long_curve_fee - long_flat_fee)
     }
 
     /// Calculate the amount of shares returned when selling bonds without considering fees.
