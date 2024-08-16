@@ -1,3 +1,5 @@
+use std::cmp::min;
+
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
@@ -36,6 +38,26 @@ impl State {
 
         ((self.initial_vault_share_price() * self.minimum_share_reserves()) / y_max)
             .pow(self.time_stretch())
+    }
+
+    /// Calculate a conservative realized price of bonds for a short given the
+    /// current state.
+    ///
+    /// The result is guaranteed to be a lower bound on the spot price.
+    pub fn calculate_conservative_price(
+        &self,
+        trade_amount_in_base: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
+        // We linearly interpolate between the current spot price and the
+        // minimum price that the pool can support. This is a conservative
+        // estimate of the short's realized price.
+        let min_price = self.calculate_min_spot_price()?;
+        let spot_price = self.calculate_spot_price()?;
+        let base_reserves = FixedPoint::from(self.info.vault_share_price)
+            * (FixedPoint::from(self.info.share_reserves));
+        let weight = (min(trade_amount_in_base, base_reserves) / base_reserves)
+            .pow(fixed!(1e18) - FixedPoint::from(self.config.time_stretch))?;
+        Ok(spot_price * (fixed!(1e18) - weight) + min_price * weight)
     }
 
     // TODO: Make it clear to the consumer that the maximum number of iterations
@@ -568,8 +590,38 @@ mod tests {
 
     use super::*;
     use crate::test_utils::{
-        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+        agent::HyperdriveMathAgent,
+        preamble::{get_max_short, initialize_pool_with_random_state},
     };
+
+    #[tokio::test]
+    async fn fuzz_calculate_conservative_price() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let current_spot_price = state.calculate_spot_price()?;
+            let min_spot_price = state.calculate_min_spot_price()?;
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(max_short_deposit) => {
+                    let base_amount =
+                        rng.gen_range(state.minimum_transaction_amount()..=max_short_deposit);
+                    let conservative_price = state.calculate_conservative_price(base_amount)?;
+                    assert!(conservative_price >= min_spot_price);
+                    assert!(conservative_price <= current_spot_price);
+                }
+                Err(_) => continue,
+            };
+        }
+        Ok(())
+    }
 
     /// This test differentially fuzzes the `calculate_max_short` function against
     /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
