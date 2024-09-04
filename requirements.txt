@@ -1,2 +1,0 @@
-hyperdrivetypes>=1.0.18.4
-web3>=7.2.0

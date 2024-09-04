@@ -10,6 +10,11 @@ requires-python = ">=3.8"
 # We point this readme to the one in hyperdrivepy
 readme = "bindings/hyperdrivepy/README.md"
 
+dependencies = [
+  "hyperdrivetypes >= 1.0.18.4",
+  "web3 >= 7.2.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/delvtech/hyperdrive-rs"
 Issues = "https://github.com/delvtech/hyperdrive-rs/issues"
@@ -37,7 +42,6 @@ ignore = [
   ".venv",
   ".vscode",
   "docs",
-  "pypechain_types"
 ]
 notes = ["FIXME"]
 max-line-length = 120
@@ -53,7 +57,6 @@ exclude = [
   ".venv",
   ".vscode",
   "docs",
-  "**/pypechain_types",
   "**/__pycache__"
 ]
 reportMissingImports = false
