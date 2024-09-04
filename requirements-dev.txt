@@ -4,7 +4,6 @@ cibuildwheel
 jinja2
 platformdirs
 pylint
-pypechain[all]
 pyright
 pytest
 setuptools

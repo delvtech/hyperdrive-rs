@@ -1,1 +1,2 @@
-web3>=6.20.2
+hyperdrivetypes>=1.0.18.4
+web3>=7.2.0
