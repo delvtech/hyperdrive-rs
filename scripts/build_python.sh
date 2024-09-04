@@ -3,7 +3,7 @@
 # hyperdrivepy install for Linux-based platforms
 
 echo "install required packages for building wheels"
-python -m pip install --upgrade -r requirements-dev.txt
+python -m pip install --upgrade .[all]
 python -m pip install auditwheel
 
 echo "build the wheel for the current platform"
