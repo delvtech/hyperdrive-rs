@@ -2,7 +2,7 @@
 
 import hyperdrivepy
 import pytest
-from hyperdrivepy.pypechain_types import Fees, PoolConfig, PoolInfo
+from hyperdrivetypes import Fees, PoolConfig, PoolInfo
 
 POOL_CONFIG = PoolConfig(
     baseToken="0x1234567890abcdef1234567890abcdef12345678",
