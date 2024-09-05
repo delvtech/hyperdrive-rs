@@ -29,9 +29,9 @@ repository = "https://github.com/delvtech/hyperdrive-rs"
 description = "API for simulating Hyperdrive smart contract transactions."
 
 [workspace.dependencies]
-fixedpointmath = { version = "0.17.1", path="crates/fixedpointmath" }
-hyperdrive-wrappers = { version = "0.17.1", path="crates/hyperdrive-wrappers" }
-hyperdrive-math = { version = "0.17.1", path="crates/hyperdrive-math" }
+fixedpointmath = { version = "0.18.0", path="crates/fixedpointmath" }
+hyperdrive-wrappers = { version = "0.18.0", path="crates/hyperdrive-wrappers" }
+hyperdrive-math = { version = "0.18.0", path="crates/hyperdrive-math" }
 
 [workspace.lints.clippy]
 comparison_chain = "allow"
