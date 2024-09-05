@@ -1,6 +1,6 @@
 [project]
 name = "hyperdrivepy"
-version = "0.17.1"
+version = "0.18.0"
 authors = [
     { name = "Dylan Paiton", email = "dylan@delv.tech" },
     { name = "Matthew Brown", email = "matt@delv.tech" },
@@ -9,6 +9,29 @@ authors = [
 requires-python = ">=3.8"
 # We point this readme to the one in hyperdrivepy
 readme = "bindings/hyperdrivepy/README.md"
+
+dependencies = [
+  "hyperdrivetypes >= 1.0.18.5",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black==24.*",
+  "build",
+  "cibuildwheel",
+  "jinja2",
+  "platformdirs",
+  "pylint",
+  "pyright",
+  "pytest",
+  "setuptools",
+  "setuptools-rust",
+  "twine",
+  "wheel",
+]
+
+all = ["hyperdrivepy[dev]"]
+
 
 [project.urls]
 Homepage = "https://github.com/delvtech/hyperdrive-rs"
@@ -37,7 +60,6 @@ ignore = [
   ".venv",
   ".vscode",
   "docs",
-  "pypechain_types"
 ]
 notes = ["FIXME"]
 max-line-length = 120
@@ -53,7 +75,6 @@ exclude = [
   ".venv",
   ".vscode",
   "docs",
-  "**/pypechain_types",
   "**/__pycache__"
 ]
 reportMissingImports = false
