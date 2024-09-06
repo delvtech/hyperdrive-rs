@@ -44,7 +44,7 @@ impl State {
     /// current state.
     ///
     /// The result is guaranteed to be a lower bound on the spot price.
-    pub fn calculate_conservative_price(
+    pub fn calculate_conservative_short_price(
         &self,
         trade_amount_in_base: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
@@ -72,14 +72,8 @@ impl State {
         let max_iterations = maybe_max_iterations.unwrap_or(1_000);
         let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
         // Start with a conservative estimate of the bonds shorted & base paid.
-        let conservative_price = self.calculate_conservative_price(base_deposit_amount)?;
-        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        // We ignore the short principal so that we have a closed-form inversion of the short deposit equation.
-        let mut last_good_bond_amount = base_deposit_amount
-            / (((fixed!(1e18) / self.vault_share_price())
-                * (close_vault_share_price / open_vault_share_price)
-                + self.flat_fee())
-                + self.curve_fee() * (fixed!(1e18) - conservative_price));
+        let conservative_price = self.calculate_conservative_short_price(base_deposit_amount)?;
+        // let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
         let mut last_good_base_amount =
             self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
         println!("base_deposit_amount = {:#?}", base_deposit_amount);
@@ -738,7 +732,8 @@ mod tests {
                 Ok(max_short_deposit) => {
                     let base_amount =
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_deposit);
-                    let conservative_price = state.calculate_conservative_price(base_amount)?;
+                    let conservative_price =
+                        state.calculate_conservative_short_price(base_amount)?;
                     assert!(conservative_price >= min_spot_price);
                     assert!(conservative_price <= current_spot_price);
                 }
