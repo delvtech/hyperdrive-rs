@@ -67,13 +67,21 @@ impl State {
         maybe_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
-        // SGA parameters.
-        let mut learning_rate = fixed!(1e17);
+        // SGD parameters.
+        let mut learning_rate = fixed!(1e18);
         let max_iterations = maybe_max_iterations.unwrap_or(1_000);
-        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
+        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e5));
         // Start with a conservative estimate of the bonds shorted & base paid.
         let conservative_price = self.calculate_conservative_short_price(base_deposit_amount)?;
         // let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+        // We ignore the short principal so that we have a closed-form inversion
+        // of the short deposit equation.
+        // let mut last_good_bond_amount = base_deposit_amount
+        //     / (((fixed!(1e18) / self.vault_share_price())
+        //         * (close_vault_share_price / open_vault_share_price)
+        //         + self.flat_fee())
+        //         + self.curve_fee() * (fixed!(1e18) - conservative_price));
+        let mut last_good_bond_amount = self.minimum_transaction_amount();
         let mut last_good_base_amount =
             self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
         println!("base_deposit_amount = {:#?}", base_deposit_amount);
@@ -97,9 +105,10 @@ impl State {
             // Within tolerance, but bond amount must be >= 0.
             return Ok(last_good_bond_amount.max(fixed!(0)).change_type::<U256>()?);
         }
-        // Run Stochastic Gradient Ascent to iteratively adjust the bond amount.
-        // We know the conservative bond amount is less than the target, so we can assert gradient ascent.
-        for _ in 0..max_iterations {
+        // Run Stochastic Gradient Descent to adjust the bond amount.
+        for iter in 0..max_iterations {
+            println!("\n----\niter {:#?}", iter);
+            println!("learning_rate {:#?}", learning_rate);
             // Calculate the current deposit.
             let base_amount =
                 self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
@@ -107,39 +116,58 @@ impl State {
             let base_amount_derivative = self.calculate_open_short_derivative(
                 last_good_bond_amount,
                 open_vault_share_price,
-                None,
+                Some(self.calculate_spot_price()?),
             )?;
-            // If we overshot here, we set the error to zero and then the new_bond_amount = last_good_bond_amount.
-            let error = if base_amount > base_deposit_amount {
-                base_amount - base_deposit_amount
+            // If we overshot here, we set the error to zero and then the
+            // new_bond_amount = last_good_bond_amount.
+            println!("last_good_bond_amount={:#?}", last_good_bond_amount);
+            println!("base_amount={:#?}", base_amount);
+            println!("base_deposit_amount={:#?}", base_deposit_amount);
+            let error = if base_amount < base_deposit_amount {
+                base_deposit_amount - base_amount
             } else {
                 fixed!(0)
             };
+            println!("error={:#?}", error);
             // Calculate the new bond amount.
+            // The update rule is: x_1 = x_0 - \eta * L(y,y_t) * dL(y,y_t)/dx,
+            // where \eta is the learning rate, L is the error, y is
+            // open_short(x), and y_t is the target deposit. The derivative of
+            // L(y,y_t) wrt x is -base_amount_derivative. So we add here instead
+            // of subtracting a negative.
             let new_bond_amount =
                 last_good_bond_amount + learning_rate * error * base_amount_derivative;
             // If we overshot, lower the learning rate and try again.
-            // Otherwise, check convergence to either return or continue iterating.
+            // Otherwise, check convergence to either return or continue.
             match self.calculate_open_short(new_bond_amount, open_vault_share_price) {
                 Ok(new_base_amount) => {
-                    println!("new_base_amount {:#?}", new_base_amount);
+                    println!(
+                        "new_base_amount={:#?}; base_deposit_amount={:#?}",
+                        new_base_amount, base_deposit_amount
+                    );
                     if new_base_amount > base_deposit_amount {
-                        learning_rate = (learning_rate / fixed!(100e18)).max(fixed!(1));
+                        let error_magnitude = new_base_amount / base_deposit_amount;
+                        println!("error_magnitude={:#?}", error_magnitude);
+                        // If the values are too close then the error magnitude
+                        // will round to 1.0 and the rate will not change.
+                        learning_rate = if error_magnitude <= fixed!(1e18) {
+                            (learning_rate / fixed!(2e18)).max(fixed!(1))
+                        } else {
+                            (learning_rate / error_magnitude).max(fixed!(1))
+                        };
                     } else {
                         last_good_bond_amount = new_bond_amount;
                         last_good_base_amount = new_base_amount;
                         // Check for convergence.
                         if (base_deposit_amount - last_good_base_amount) <= tolerance {
                             // Within tolerance, but bond amount must be >= 0.
-                            return Ok(last_good_bond_amount
-                                .max(fixed!(0))
-                                .change_type::<U256>()?);
+                            return Ok(last_good_bond_amount.max(fixed!(0)));
                         }
                         // Amount was good but we did not converge; keep going.
                     }
                 }
                 Err(_) => {
-                    learning_rate = (learning_rate / fixed!(10)).max(fixed!(1));
+                    learning_rate = (learning_rate / fixed!(10e18)).max(fixed!(1));
                 }
             }
         }
@@ -692,18 +720,28 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_short_bonds_given_deposit() -> Result<()> {
-        let test_tolerance = fixed!(1e9);
+        let test_tolerance = fixed!(1e6);
+        let max_iterations = 10_000;
         let mut rng = thread_rng();
-        for _ in 0..*FUZZ_RUNS {
+        for _ in 0..*SLOW_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            let max_short_trade = get_max_short(state.clone(), checkpoint_exposure, None)?;
             let target_base_amount =
-                rng.gen_range(state.minimum_transaction_amount()..=fixed!(10_000e18));
+                rng.gen_range(state.minimum_transaction_amount()..=max_short_trade);
             let bond_amount = state.calculate_short_bonds_given_deposit(
                 target_base_amount,
                 open_vault_share_price,
                 Some(test_tolerance),
-                None,
+                Some(max_iterations),
             )?;
             let computed_base_amount =
                 state.calculate_open_short(bond_amount, open_vault_share_price)?;
