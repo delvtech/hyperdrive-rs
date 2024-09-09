@@ -134,23 +134,10 @@ pub fn get_max_short(
     maybe_max_num_tries: Option<usize>,
 ) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-
     // We linearly interpolate between the current spot price and the minimum
     // price that the pool can support. This is a conservative estimate of
     // the short's realized price.
-    let conservative_price = {
-        // We estimate the minimum price that short will pay by a
-        // weighted average of the spot price and the minimum possible
-        // spot price the pool can quote. We choose the weights so that this
-        // is an underestimate of the worst case realized price.
-        let spot_price = state.calculate_spot_price()?;
-        let min_price = state.calculate_min_spot_price()?;
-
-        // Calculate the linear interpolation.
-        let weight = fixed!(1e18).pow(fixed!(1e18) - state.time_stretch())?;
-        spot_price * (fixed!(1e18) - weight) + min_price * weight
-    };
-
+    let conservative_price = state.calculate_conservative_short_price(fixed!(1e18))?;
     // Compute the max short.
     let mut max_short = match panic::catch_unwind(|| {
         state.calculate_max_short(
