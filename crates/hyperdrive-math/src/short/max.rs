@@ -2,9 +2,9 @@ use std::cmp::min;
 
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, fixed_i256, FixedPoint};
+use fixedpointmath::{fixed, FixedPoint};
 
-use crate::{base, calculate_effective_share_reserves, short::open, State, YieldSpace};
+use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
     /// Calculates the minimum price that the pool can support.
@@ -60,6 +60,28 @@ impl State {
         Ok(spot_price * (fixed!(1e18) - weight) + min_price * weight)
     }
 
+    /// Use a conservative short price to calculate an estimate of the bonds
+    /// that would be shorte given a base deposit amount.
+    ///
+    /// By assuming that the LP principal is $p' * \Delta y$, we can calculate
+    /// a closed form approximation fo the inverse of opening a short. The
+    /// approximated deposit amount is guaranteed to be less than the provided
+    /// base deposit amount.
+    pub fn calculate_approximate_short_bonds_given_deposit(
+        &self,
+        base_deposit_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+        let conservative_price = self.calculate_conservative_short_price(base_deposit_amount)?;
+        let bond_amount = base_deposit_amount
+            / ((close_vault_share_price / open_vault_share_price)
+                + self.flat_fee()
+                + (self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?))
+                - conservative_price);
+        Ok(bond_amount)
+    }
+
     /// Use SGD with rate reduction to find the amount of bonds shorted for a
     /// given base deposit amount.
     pub fn calculate_short_bonds_given_deposit(
@@ -76,18 +98,13 @@ impl State {
         let min_learning_rate = fixed!(1e2);
 
         // Start with a conservative estimate of the bonds shorted & base paid.
-        // Assuming the LP short principal is equal to some relized price times
+        // By approximating the LP short principal as some relized price times
         // the bond amount, we can calculate a lower bound using a conservative
         // price.
-        let conservative_price = self.calculate_conservative_short_price(base_deposit_amount)?;
-        println!("conservative_price = {:#?}", conservative_price);
-        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let mut last_good_bond_amount = base_deposit_amount
-            / ((close_vault_share_price / open_vault_share_price)
-                + self.flat_fee()
-                + (self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?))
-                - conservative_price);
-
+        let mut last_good_bond_amount = self.calculate_approximate_short_bonds_given_deposit(
+            base_deposit_amount,
+            open_vault_share_price,
+        )?;
         let mut last_good_base_amount =
             self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
         println!("base_deposit_amount = {:#?}", base_deposit_amount);
@@ -135,12 +152,12 @@ impl State {
             )?;
             println!("base_amount_derivative={:#?}", base_amount_derivative);
             // Calculate the new bond amount.
-            // FIXME: swap x & y so it's bonds & base
-            // The update rule is: x_1 = x_0 - \eta * L(y,y_t) * dL(y,y_t)/dx,
-            // where x is the deposit in base, \eta is the learning rate, y is
-            // open_short(x), y_t is the target deposit, and L is (y_t - y).
-            // The derivative of L(y,y_t) wrt x is -base_amount_derivative,
-            // so we add here instead of subtracting a negative.
+            // The update rule is: y_1 = y_0 - \eta * L(x,x_t) * dL(x,x_t)/dy,
+            // where y is the bond amount, x is the base deposit returned by
+            // calculate_open_short(y), x_t is the target deposit, \eta is the
+            // learning rate, and L is the loss (x_t - x). The derivative of
+            // L(x, x_t) wrt y is -base_amount_derivative, so we add here
+            // instead of subtracting a negative.
             let new_bond_amount =
                 last_good_bond_amount + learning_rate * error * base_amount_derivative;
             println!("new_bond_amount={:#?}", new_bond_amount);
@@ -721,6 +738,72 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn fuzz_calculate_approximate_short_bonds_given_deposit() -> Result<()> {
+        let mut rng = thread_rng();
+        for iter in 0..*FAST_FUZZ_RUNS {
+            println!("\n----\niter {:#?}", iter);
+            let state = rng.gen::<State>();
+            let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            // Get the short trade in bonds.
+            let max_short_trade = match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(max_short_trade) => max_short_trade,
+                Err(_) => continue,
+            };
+            let target_bond_amount =
+                rng.gen_range(state.minimum_transaction_amount()..=max_short_trade);
+            println!("target_bond_amount {:#?}", target_bond_amount);
+            // The typical flow is to open a short, which receives bonds and
+            // returns base.
+            let target_base_amount =
+                state.calculate_open_short(target_bond_amount, open_vault_share_price)?;
+            println!("target_base_amount {:#?}", target_base_amount);
+            // We approximately invert this flow, so we receive base and return
+            // bonds.
+            let approximate_bond_amount = state.calculate_approximate_short_bonds_given_deposit(
+                target_base_amount,
+                open_vault_share_price,
+            )?;
+            println!("approximate_bond_amount {:#?}", approximate_bond_amount);
+            // We want to make sure that the approximation is safe, so the
+            // approximate amount should be less than or equal to the target.
+            assert!(
+                target_bond_amount >= approximate_bond_amount,
+                "{:#?} not >= {:#?}",
+                target_bond_amount,
+                approximate_bond_amount
+            );
+            // As a final sanity check, lets make sure we can open a short
+            // with this approximate bond amount, and again check that the
+            // resulting deposit is less than the target deposit.
+            match state.calculate_open_short(approximate_bond_amount, open_vault_share_price) {
+                Ok(approximate_base_amount) => {
+                    println!("approximate_base_amount {:#?}", approximate_base_amount);
+                    assert!(
+                        target_base_amount >= approximate_base_amount,
+                        "{:#?} not >= {:#?}",
+                        target_base_amount,
+                        approximate_base_amount,
+                    );
+                }
+                Err(_) => assert!(
+                    false,
+                    "Failed to run calculate_open_short with the approximate bond amount = {:#?}.",
+                    approximate_bond_amount
+                ),
+            };
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fuzz_calculate_short_bonds_given_deposit() -> Result<()> {
         let test_tolerance = fixed!(1e9);
         let max_iterations = 10_000;
@@ -728,7 +811,7 @@ mod tests {
         for fuzz_iter in 0..*SLOW_FUZZ_RUNS {
             println!("fuzz_iter {:#?}", fuzz_iter);
             let state = rng.gen::<State>();
-            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
                 if rng.gen() {
