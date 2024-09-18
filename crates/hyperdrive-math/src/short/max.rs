@@ -4,7 +4,8 @@ use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
-use crate::{calculate_effective_share_reserves, State, YieldSpace};
+use super::open;
+use crate::{base, calculate_effective_share_reserves, State, YieldSpace};
 
 impl State {
     /// Calculates the minimum price that the pool can support.
@@ -61,24 +62,58 @@ impl State {
     }
 
     /// Use a conservative short price to calculate an estimate of the bonds
-    /// that would be shorte given a base deposit amount.
+    /// that would be shorted given a base deposit amount.
     ///
-    /// By assuming that the LP principal is $p' * \Delta y$, we can calculate
-    /// a closed form approximation fo the inverse of opening a short. The
-    /// approximated deposit amount is guaranteed to be less than the provided
-    /// base deposit amount.
-    pub fn calculate_approximate_short_bonds_given_deposit(
+    /// By assuming that the short (LP) principal in shares is
+    /// `$p' * \Delta y$`, we can calculate a closed form approximation fo the
+    /// inverse of opening a short. The bonds to short given a base deposit,
+    /// `$D$`, are:
+    ///
+    /// ```math
+    /// P_{adj}(\Delta y) =
+    ///   \tfrac{\Delta y}{c} \cdot (\tfrac{c_{1}{c_{0}} + \phi_f) \\
+    ///
+    /// P_{lp}(\Delta y) \approx
+    ///   \Delta y * p' //
+    ///
+    /// \Phi_{c,os}(\Delta y) =
+    ///   \tfrac{\Delta y}{c} \cdot \phi_c \cdot (1 - p_{0}) \\
+    ///
+    /// D = P_{adj}(\Delta y) - (P_{lp}(\Delta y) + \Phi_{c,os}(\Delta y)) \\
+    ///
+    /// \therefore \\
+    ///
+    /// \Delta y =
+    ///   \frac{D}{
+    ///     \tfrac{1}{c} \cdot (\tfrac{c_{1}{c_{0}} + \phi_f)
+    ///     - p'
+    ///     + \tfrac{1}{c} \cdot \phi_c \cdot (1 - p_{0})
+    ///   }
+    /// ```
+    ///
+    /// The approximated deposit amount is guaranteed to be less than the
+    /// provided base deposit amount.
+    pub fn calculate_approximate_short_bonds_given_base_deposit(
         &self,
         base_deposit_amount: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let conservative_price = self.calculate_conservative_short_price(base_deposit_amount)?;
-        let bond_amount = base_deposit_amount
-            / ((close_vault_share_price / open_vault_share_price)
-                + self.flat_fee()
-                + (self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?))
-                - conservative_price);
+        // We round up in the denominator to make final amount smaller.
+        let flat_fee_adjustment_shares = (close_vault_share_price.div_up(open_vault_share_price)
+            + self.flat_fee())
+        .div_up(self.vault_share_price());
+        let short_principal_adjustment_shares =
+            self.calculate_conservative_short_price(base_deposit_amount)?;
+        let curve_fee_adjustment_shares = (self
+            .curve_fee()
+            .mul_up(fixed!(1e18) - self.calculate_spot_price()?))
+        .div_up(self.vault_share_price());
+        let share_deposit_amount = base_deposit_amount.div_down(self.vault_share_price());
+        let bond_amount = share_deposit_amount.div_down(
+            (flat_fee_adjustment_shares + curve_fee_adjustment_shares)
+                - short_principal_adjustment_shares,
+        );
         Ok(bond_amount)
     }
 
@@ -101,7 +136,7 @@ impl State {
         // By approximating the LP short principal as some relized price times
         // the bond amount, we can calculate a lower bound using a conservative
         // price.
-        let mut last_good_bond_amount = self.calculate_approximate_short_bonds_given_deposit(
+        let mut last_good_bond_amount = self.calculate_approximate_short_bonds_given_base_deposit(
             base_deposit_amount,
             open_vault_share_price,
         )?;
@@ -744,6 +779,8 @@ mod tests {
             println!("\n----\niter {:#?}", iter);
             let state = rng.gen::<State>();
             let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
+            println!("open_vault_share_price  {:#?}", open_vault_share_price);
+            println!("vault_share_price       {:#?}", state.vault_share_price());
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
                 if rng.gen() {
@@ -752,6 +789,7 @@ mod tests {
                     I256::try_from(value)?
                 }
             };
+            println!("checkpoint_exposure     {:#?}", checkpoint_exposure);
             // Get the short trade in bonds.
             let max_short_trade = match get_max_short(state.clone(), checkpoint_exposure, None) {
                 Ok(max_short_trade) => max_short_trade,
@@ -759,18 +797,31 @@ mod tests {
             };
             let target_bond_amount =
                 rng.gen_range(state.minimum_transaction_amount()..=max_short_trade);
-            println!("target_bond_amount {:#?}", target_bond_amount);
             // The typical flow is to open a short, which receives bonds and
             // returns base.
             let target_base_amount =
                 state.calculate_open_short(target_bond_amount, open_vault_share_price)?;
-            println!("target_base_amount {:#?}", target_base_amount);
             // We approximately invert this flow, so we receive base and return
             // bonds.
-            let approximate_bond_amount = state.calculate_approximate_short_bonds_given_deposit(
-                target_base_amount,
-                open_vault_share_price,
-            )?;
+            let approximate_bond_amount = state
+                .calculate_approximate_short_bonds_given_base_deposit(
+                    target_base_amount,
+                    open_vault_share_price,
+                )?;
+            println!(
+                "spot_price              {:#?}",
+                state.calculate_spot_price()?
+            );
+            println!(
+                "conservative_price      {:#?}",
+                state.calculate_conservative_short_price(target_base_amount)?
+            );
+            println!(
+                "actual_price            {:#?}",
+                target_bond_amount / (target_base_amount / state.vault_share_price())
+            );
+            println!("max_short_trade_bonds   {:#?}", max_short_trade);
+            println!("target_bond_amount      {:#?}", target_bond_amount);
             println!("approximate_bond_amount {:#?}", approximate_bond_amount);
             // We want to make sure that the approximation is safe, so the
             // approximate amount should be less than or equal to the target.
@@ -780,6 +831,7 @@ mod tests {
                 target_bond_amount,
                 approximate_bond_amount
             );
+            println!("target_base_amount      {:#?}", target_base_amount);
             // As a final sanity check, lets make sure we can open a short
             // with this approximate bond amount, and again check that the
             // resulting deposit is less than the target deposit.

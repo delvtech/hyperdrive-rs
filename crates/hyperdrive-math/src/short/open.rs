@@ -112,8 +112,8 @@ impl State {
         // accrued during the current checkpoint.
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
 
-        // Now we can calculate adjusted proceeds account for the backdated
-        // vault price:
+        // Now we can calculate adjusted proceeds amount for the backdated vault
+        // price:
         //
         // ```math
         // \text{base_proceeds} = (
