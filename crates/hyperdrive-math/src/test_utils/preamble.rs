@@ -139,7 +139,7 @@ pub fn get_max_short(
     // the short's realized price.
     let conservative_price = state.calculate_conservative_short_price(fixed!(1e18))?;
     // Compute the max short.
-    let mut max_short = match panic::catch_unwind(|| {
+    let mut max_short_bonds = match panic::catch_unwind(|| {
         state.calculate_max_short(
             U256::from(U128::MAX),
             state.vault_share_price(),
@@ -157,22 +157,22 @@ pub fn get_max_short(
     let mut num_tries = 0;
     let mut success = false;
     while !success {
-        max_short = match panic::catch_unwind(|| {
-            state.calculate_open_short(max_short, state.vault_share_price())
+        max_short_bonds = match panic::catch_unwind(|| {
+            state.calculate_open_short(max_short_bonds, state.vault_share_price())
         }) {
             Ok(short_result_no_panic) => match short_result_no_panic {
                 Ok(_) => {
                     success = true;
-                    max_short
+                    max_short_bonds
                 }
-                Err(_) => max_short / fixed!(10e18),
+                Err(_) => max_short_bonds / fixed!(10e18),
             },
-            Err(_) => max_short / fixed!(10e18),
+            Err(_) => max_short_bonds / fixed!(10e18),
         };
-        if max_short < state.minimum_transaction_amount() {
+        if max_short_bonds < state.minimum_transaction_amount() {
             return Err(eyre!(
                 "max_short={} was less than minimum_transaction_amount={}.",
-                max_short,
+                max_short_bonds,
                 state.minimum_transaction_amount()
             ));
         }
@@ -180,11 +180,11 @@ pub fn get_max_short(
         if num_tries > max_num_tries {
             return Err(eyre!(
                 "Failed to find a max short. Last attempted value was {}",
-                max_short,
+                max_short_bonds,
             ));
         }
     }
-    Ok(max_short)
+    Ok(max_short_bonds)
 }
 
 #[cfg(test)]

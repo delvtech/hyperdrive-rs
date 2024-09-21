@@ -773,6 +773,45 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn fuzz_calculate_conservative_price() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let original_spot_price = state.calculate_spot_price()?;
+            let min_spot_price = state.calculate_min_spot_price()?;
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(max_short_bonds) => {
+                    let bond_amount =
+                        rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
+                    let base_amount =
+                        state.calculate_open_short(bond_amount, state.vault_share_price())?;
+                    let conservative_price =
+                        state.calculate_conservative_short_price(base_amount)?;
+                    assert!(conservative_price >= min_spot_price);
+                    assert!(conservative_price <= original_spot_price);
+                    let realized_price = base_amount / bond_amount;
+                    assert!(
+                        conservative_price <= realized_price,
+                        "conservative_price={:#?} > realized_price={:#?}",
+                        conservative_price,
+                        realized_price
+                    );
+                }
+                Err(_) => continue,
+            };
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fuzz_calculate_approximate_short_bonds_given_deposit() -> Result<()> {
         let mut rng = thread_rng();
         for iter in 0..*FAST_FUZZ_RUNS {
@@ -888,36 +927,6 @@ mod tests {
                 state.calculate_open_short(bond_amount, open_vault_share_price)?;
             assert!(target_base_amount >= computed_base_amount);
             assert!(target_base_amount - computed_base_amount <= test_tolerance);
-        }
-        Ok(())
-    }
-
-    #[tokio::test]
-    async fn fuzz_calculate_conservative_price() -> Result<()> {
-        let mut rng = thread_rng();
-        for _ in 0..*FUZZ_RUNS {
-            let state = rng.gen::<State>();
-            let current_spot_price = state.calculate_spot_price()?;
-            let min_spot_price = state.calculate_min_spot_price()?;
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
-            match get_max_short(state.clone(), checkpoint_exposure, None) {
-                Ok(max_short_deposit) => {
-                    let base_amount =
-                        rng.gen_range(state.minimum_transaction_amount()..=max_short_deposit);
-                    let conservative_price =
-                        state.calculate_conservative_short_price(base_amount)?;
-                    assert!(conservative_price >= min_spot_price);
-                    assert!(conservative_price <= current_spot_price);
-                }
-                Err(_) => continue,
-            };
         }
         Ok(())
     }
