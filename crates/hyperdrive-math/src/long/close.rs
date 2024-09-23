@@ -125,7 +125,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
-            let maturity_time = state.checkpoint_duration();
+            let maturity_time = state.position_duration();
             let early_time = rng.gen_range(fixed!(0)..=maturity_time);
             let base_earned_before_maturity =
                 state.calculate_close_long(in_, maturity_time.into(), early_time.into())?
@@ -166,7 +166,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
-            let maturity_time = state.checkpoint_duration();
+            let maturity_time = state.position_duration();
             let current_time = rng.gen_range(fixed!(0)..=maturity_time);
             let normalized_time_remaining = state
                 .calculate_normalized_time_remaining(maturity_time.into(), current_time.into());
