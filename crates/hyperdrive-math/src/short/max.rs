@@ -44,7 +44,7 @@ impl State {
     /// Calculate a conservative realized price of bonds for a short given the
     /// current state.
     ///
-    /// The result is guaranteed to be a lower bound on the spot price.
+    /// The result is guaranteed to be a lower bound on the realized price.
     pub fn calculate_conservative_short_price(
         &self,
         trade_amount_in_base: FixedPoint<U256>,
@@ -55,9 +55,11 @@ impl State {
         let min_price = self.calculate_min_spot_price()?;
         let spot_price = self.calculate_spot_price()?;
         let base_reserves = FixedPoint::from(self.info.vault_share_price)
-            * (FixedPoint::from(self.info.share_reserves));
-        let weight = (min(trade_amount_in_base, base_reserves) / base_reserves)
-            .pow(fixed!(1e18) - FixedPoint::from(self.config.time_stretch))?;
+            * FixedPoint::from(self.info.share_reserves);
+        // Base reserves are decreased by the proceeds from selling the short.
+        let trade_portion = min(trade_amount_in_base, base_reserves) / base_reserves; // <= 1
+        let weight =
+            trade_portion.pow(fixed!(1e18) - FixedPoint::from(self.config.time_stretch))?;
         Ok(spot_price * (fixed!(1e18) - weight) + min_price * weight)
     }
 
