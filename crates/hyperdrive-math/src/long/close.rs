@@ -120,7 +120,45 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn fuzz_calculate_close_long_flat_plus_curve() -> Result<()> {
+    async fn fuzz_calculate_close_long_after_maturity() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
+            let maturity_time = state.checkpoint_duration();
+            let early_time = rng.gen_range(fixed!(0)..=maturity_time);
+            let base_earned_before_maturity =
+                state.calculate_close_long(in_, maturity_time.into(), early_time.into())?
+                    * state.vault_share_price();
+            let base_earned_just_after_maturity = state.calculate_close_long(
+                in_,
+                maturity_time.into(),
+                (maturity_time + fixed!(1e2)).into(),
+            )? * state.vault_share_price();
+            let base_earned_well_after_maturity = state.calculate_close_long(
+                in_,
+                maturity_time.into(),
+                (maturity_time + fixed!(1e9)).into(),
+            )? * state.vault_share_price();
+            assert!(
+                base_earned_before_maturity <= base_earned_just_after_maturity,
+                "User lost money holding the long: earnings_before={:?} > earnings_after={:?}",
+                base_earned_before_maturity,
+                base_earned_just_after_maturity
+            );
+            assert!(
+                base_earned_well_after_maturity == base_earned_just_after_maturity,
+                "User should not have earned any more after maturity. {:?} != {:?}",
+                base_earned_well_after_maturity,
+                base_earned_just_after_maturity
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_sol_calculate_close_long_flat_plus_curve() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
