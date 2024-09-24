@@ -148,7 +148,7 @@ mod tests {
             // Check that no extra money was earned.
             assert!(
                 base_earned_well_after_maturity == base_earned_just_after_maturity,
-                "User should not have earned any more after maturity:
+                "Trader should not have earned any more after maturity:
                 earned_well_after_maturity={:?} != earned_just_after_maturity={:?}",
                 base_earned_well_after_maturity,
                 base_earned_just_after_maturity
