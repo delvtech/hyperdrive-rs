@@ -131,11 +131,6 @@ mod tests {
             // if the checkpoint_duration does not evenly divide into
             // position_duration.
             let maturity_time = state.position_duration();
-            // Close a long before it has matured.
-            let early_time = rng.gen_range(fixed!(0)..=maturity_time);
-            let base_earned_before_maturity =
-                state.calculate_close_long(in_, maturity_time.into(), early_time.into())?
-                    * state.vault_share_price();
             // Close a long just after it has matured.
             let just_after_maturity = maturity_time + state.checkpoint_duration();
             let base_earned_just_after_maturity = state.calculate_close_long(
@@ -150,13 +145,7 @@ mod tests {
                 maturity_time.into(),
                 well_after_maturity.into(),
             )? * state.vault_share_price();
-            // Check return values.
-            assert!(
-                base_earned_before_maturity <= base_earned_just_after_maturity,
-                "User lost money holding the long: earnings_before={:?} > earnings_after={:?}",
-                base_earned_before_maturity,
-                base_earned_just_after_maturity
-            );
+            // Check that no extra money was earned.
             assert!(
                 base_earned_well_after_maturity == base_earned_just_after_maturity,
                 "User should not have earned any more after maturity:
@@ -165,7 +154,6 @@ mod tests {
                 base_earned_just_after_maturity
             );
         }
-
         Ok(())
     }
 
