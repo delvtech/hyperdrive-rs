@@ -353,7 +353,7 @@ mod tests {
             // if the checkpoint_duration does not evenly divide into
             // position_duration.
             let maturity_time = state.position_duration();
-            // Close a lshort just after it has matured.
+            // Close a short just after it has matured.
             let just_after_maturity = maturity_time + state.checkpoint_duration();
             let base_earned_just_after_maturity = state.calculate_close_short(
                 in_,
