@@ -50,30 +50,20 @@ impl State {
         trade_amount_in_base: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        // // We linearly interpolate between the current spot price and the
-        // // minimum price that the pool can support. This is a conservative
-        // // estimate of the short's realized price.
-        // let min_price = self.calculate_min_spot_price()?;
-        // let spot_price = self.calculate_spot_price()?;
-        // let base_reserves = FixedPoint::from(self.info.vault_share_price)
-        //     * FixedPoint::from(self.info.share_reserves);
-        // // Base reserves are decreased by the proceeds from selling the short.
-        // let trade_portion = min(trade_amount_in_base, base_reserves) / base_reserves; // <= 1
-        // let weight =
-        //     trade_portion.pow(fixed!(1e18) - FixedPoint::from(self.config.time_stretch))?;
-        // Ok(spot_price * (fixed!(1e18) - weight) + min_price * weight)
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
         let trade_amount_in_shares = trade_amount_in_base * self.vault_share_price();
-        let price_adjustment_factor = (fixed!(1e18) / self.vault_share_price())
-            * (close_vault_share_price / open_vault_share_price + self.flat_fee());
-        let curve_fee_factor = self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?)
-            / self.vault_share_price();
-        let share_reserves_delta_for_min_trade =
-            self.calculate_short_principal(self.minimum_transaction_amount())?;
-        let price_estimate = ((price_adjustment_factor + curve_fee_factor)
-            * trade_amount_in_shares)
-            / (trade_amount_in_shares + share_reserves_delta_for_min_trade);
-        Ok(price_estimate)
+        let fee_and_price_adjustment = (close_vault_share_price / open_vault_share_price)
+            + self.flat_fee()
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+        let price_plus_one = (fee_and_price_adjustment * trade_amount_in_shares)
+            / (self.vault_share_price()
+                * (trade_amount_in_shares + self.effective_share_reserves()?));
+        // max(0, 1 - price_plus_one)
+        if price_plus_one >= fixed!(1e18) {
+            return Ok(fixed!(0));
+        } else {
+            return Ok(fixed!(1e18) - price_plus_one);
+        }
     }
 
     /// Use a conservative short price to calculate an estimate of the bonds
@@ -808,13 +798,31 @@ mod tests {
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
                     let base_amount =
                         state.calculate_open_short(bond_amount, state.vault_share_price())?;
+                    let realized_price = fixed!(1e18) - (base_amount / bond_amount);
+                    // Sanity check on the realized price.
+                    assert!(
+                        realized_price <= original_spot_price,
+                        "realized_price={:#?} > original_spot_price={:#?}",
+                        realized_price,
+                        original_spot_price
+                    );
+                    // Now test the conservative price estimate.
                     let conservative_price = state.calculate_conservative_short_price(
                         base_amount,
                         state.vault_share_price(),
                     )?;
-                    assert!(conservative_price >= min_spot_price);
-                    assert!(conservative_price <= original_spot_price);
-                    let realized_price = base_amount / bond_amount;
+                    assert!(
+                        conservative_price >= min_spot_price,
+                        "conservative_price={:#?} < min_spot_price={:#?}",
+                        conservative_price,
+                        min_spot_price
+                    );
+                    assert!(
+                        conservative_price <= original_spot_price,
+                        "conservative_price={:#?} > original_spot_price={:#?}",
+                        conservative_price,
+                        original_spot_price
+                    );
                     assert!(
                         conservative_price <= realized_price,
                         "conservative_price={:#?} > realized_price={:#?}",
