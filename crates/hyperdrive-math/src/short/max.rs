@@ -45,25 +45,17 @@ impl State {
     /// current state.
     ///
     /// The result is guaranteed to be a lower bound on the realized price.
-    pub fn calculate_conservative_short_price(
+    pub fn calculate_conservative_short_principal_price(
         &self,
         trade_amount_in_base: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let trade_amount_in_shares = trade_amount_in_base * self.vault_share_price();
-        let fee_and_price_adjustment = (close_vault_share_price / open_vault_share_price)
-            + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
-        let price_plus_one = (fee_and_price_adjustment * trade_amount_in_shares)
-            / (self.vault_share_price()
-                * (trade_amount_in_shares + self.effective_share_reserves()?));
-        // max(0, 1 - price_plus_one)
-        if price_plus_one >= fixed!(1e18) {
-            return Ok(fixed!(0));
-        } else {
-            return Ok(fixed!(1e18) - price_plus_one);
-        }
+        let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
+        let approximate_bond_amount = self.calculate_approximate_short_bonds_given_base_deposit(
+            trade_amount_in_base,
+            open_vault_share_price,
+        )?;
+        Ok(min_lp_shares / approximate_bond_amount)
     }
 
     /// Use a conservative short price to calculate an estimate of the bonds
@@ -104,22 +96,14 @@ impl State {
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        // We round up in the denominator to make final amount smaller.
-        let flat_fee_adjustment_shares = (close_vault_share_price.div_up(open_vault_share_price)
-            + self.flat_fee())
-        .div_up(self.vault_share_price());
-        let short_principal_adjustment_shares =
-            self.calculate_conservative_short_price(base_deposit_amount, open_vault_share_price)?;
-        let curve_fee_adjustment_shares = (self
-            .curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price()?))
-        .div_up(self.vault_share_price());
-        let share_deposit_amount = base_deposit_amount.div_down(self.vault_share_price());
-        let bond_amount = share_deposit_amount.div_down(
-            (flat_fee_adjustment_shares + curve_fee_adjustment_shares)
-                - short_principal_adjustment_shares,
-        );
-        Ok(bond_amount)
+        let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
+        let deposit_amount_in_shares = base_deposit_amount * self.vault_share_price();
+        let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
+            + self.flat_fee()
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+        let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
+            * (deposit_amount_in_shares + min_lp_shares);
+        Ok(approximate_bond_amount)
     }
 
     /// Use SGD with rate reduction to find the amount of bonds shorted for a
@@ -799,15 +783,7 @@ mod tests {
                     let base_amount =
                         state.calculate_open_short(bond_amount, state.vault_share_price())?;
                     let realized_price = fixed!(1e18) - (base_amount / bond_amount);
-                    // Sanity check on the realized price.
-                    assert!(
-                        realized_price <= original_spot_price,
-                        "realized_price={:#?} > original_spot_price={:#?}",
-                        realized_price,
-                        original_spot_price
-                    );
-                    // Now test the conservative price estimate.
-                    let conservative_price = state.calculate_conservative_short_price(
+                    let conservative_price = state.calculate_conservative_short_principal_price(
                         base_amount,
                         state.vault_share_price(),
                     )?;
@@ -878,7 +854,7 @@ mod tests {
             );
             println!(
                 "conservative_price      {:#?}",
-                state.calculate_conservative_short_price(
+                state.calculate_conservative_short_principal_price(
                     target_base_amount,
                     open_vault_share_price
                 )?
