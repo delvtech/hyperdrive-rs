@@ -782,7 +782,8 @@ mod tests {
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
                     let base_amount =
                         state.calculate_open_short(bond_amount, state.vault_share_price())?;
-                    let realized_price = fixed!(1e18) - (base_amount / bond_amount);
+                    let lp_share_amount = state.calculate_short_principal(bond_amount)?;
+                    let realized_lp_price = lp_share_amount / bond_amount;
                     let conservative_price = state.calculate_conservative_short_principal_price(
                         base_amount,
                         state.vault_share_price(),
@@ -800,10 +801,10 @@ mod tests {
                         original_spot_price
                     );
                     assert!(
-                        conservative_price <= realized_price,
+                        conservative_price <= realized_lp_price,
                         "conservative_price={:#?} > realized_price={:#?}",
                         conservative_price,
-                        realized_price
+                        realized_lp_price
                     );
                 }
                 Err(_) => continue,
@@ -830,70 +831,52 @@ mod tests {
                 }
             };
             println!("checkpoint_exposure     {:#?}", checkpoint_exposure);
-            // Get the short trade in bonds.
-            let max_short_trade = match get_max_short(state.clone(), checkpoint_exposure, None) {
-                Ok(max_short_trade) => max_short_trade,
-                Err(_) => continue,
-            };
-            let target_bond_amount =
-                rng.gen_range(state.minimum_transaction_amount()..=max_short_trade);
-            // The typical flow is to open a short, which receives bonds and
-            // returns base.
-            let target_base_amount =
-                state.calculate_open_short(target_bond_amount, open_vault_share_price)?;
-            // We approximately invert this flow, so we receive base and return
-            // bonds.
-            let approximate_bond_amount = state
-                .calculate_approximate_short_bonds_given_base_deposit(
-                    target_base_amount,
-                    open_vault_share_price,
-                )?;
-            println!(
-                "spot_price              {:#?}",
-                state.calculate_spot_price()?
-            );
-            println!(
-                "conservative_price      {:#?}",
-                state.calculate_conservative_short_principal_price(
-                    target_base_amount,
-                    open_vault_share_price
-                )?
-            );
-            println!(
-                "actual_price            {:#?}",
-                target_bond_amount / (target_base_amount / state.vault_share_price())
-            );
-            println!("max_short_trade_bonds   {:#?}", max_short_trade);
-            println!("target_bond_amount      {:#?}", target_bond_amount);
-            println!("approximate_bond_amount {:#?}", approximate_bond_amount);
-            // We want to make sure that the approximation is safe, so the
-            // approximate amount should be less than or equal to the target.
-            assert!(
-                target_bond_amount >= approximate_bond_amount,
-                "{:#?} not >= {:#?}",
-                target_bond_amount,
-                approximate_bond_amount
-            );
-            println!("target_base_amount      {:#?}", target_base_amount);
-            // As a final sanity check, lets make sure we can open a short
-            // with this approximate bond amount, and again check that the
-            // resulting deposit is less than the target deposit.
-            match state.calculate_open_short(approximate_bond_amount, open_vault_share_price) {
-                Ok(approximate_base_amount) => {
-                    println!("approximate_base_amount {:#?}", approximate_base_amount);
+            match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(max_short_bonds) => {
+                    let bond_amount =
+                        rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
+                    let base_amount =
+                        state.calculate_open_short(bond_amount, open_vault_share_price)?;
+                    // We approximately invert this flow, so we receive base and return
+                    // bonds.
+                    let approximate_bond_amount = state
+                        .calculate_approximate_short_bonds_given_base_deposit(
+                            base_amount,
+                            open_vault_share_price,
+                        )?;
+                    println!("bond_amount             {:#?}", bond_amount);
+                    println!("approximate_bond_amount {:#?}", approximate_bond_amount);
+                    println!("base_amount             {:#?}", base_amount);
+                    // We want to make sure that the approximation is safe, so the
+                    // approximate amount should be less than or equal to the target.
                     assert!(
-                        target_base_amount >= approximate_base_amount,
-                        "{:#?} not >= {:#?}",
-                        target_base_amount,
-                        approximate_base_amount,
+                        approximate_bond_amount <= bond_amount,
+                        "approximate_bond_amount={:#?} not <= bond_amount={:#?}",
+                        approximate_bond_amount,
+                        bond_amount
                     );
+                    // As a final sanity check, lets make sure we can open a short
+                    // with this approximate bond amount, and again check that the
+                    // resulting deposit is less than the target deposit.
+                    match state.calculate_open_short(approximate_bond_amount, open_vault_share_price) {
+                        Ok(approximate_base_amount) => {
+                            println!("approximate_base_amount {:#?}", approximate_base_amount);
+                            assert!(
+                                approximate_base_amount <= base_amount,
+                                "approximate_base_amount={:#?} not <= base_amount={:#?}",
+                                approximate_base_amount,
+                                base_amount
+                            );
+                        }
+                        Err(_) => assert!(
+                            false,
+                            "Failed to run calculate_open_short with the approximate bond amount = {:#?}.",
+                            approximate_bond_amount
+                        ),
+                    };
                 }
-                Err(_) => assert!(
-                    false,
-                    "Failed to run calculate_open_short with the approximate bond amount = {:#?}.",
-                    approximate_bond_amount
-                ),
-            };
+                Err(_) => continue,
+            }
         }
         Ok(())
     }
