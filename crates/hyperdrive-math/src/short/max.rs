@@ -76,38 +76,31 @@ impl State {
         Ok(approximate_base_deposit / short_bonds)
     }
 
-    /// Use a conservative short price to calculate an estimate of the bonds
-    /// that would be shorted given a base deposit amount.
+    /// Estimate the bonds that would be shorted given a base deposit amount.
     ///
-    /// By assuming that the short (LP) principal in shares is
-    /// `$p' * \Delta y$`, we can calculate a closed form approximation fo the
-    /// inverse of opening a short. The bonds to short given a base deposit,
-    /// `$D$`, are:
+    /// The LP principal in shares is bounded from below by
+    /// $S(min)$, which is the output of calculating the short principal on the
+    /// minimum transaction amount.
+    ///
+    /// Given this, we can compute the a conservative estimate of the bonds
+    /// shorted, $\Delta y$, given the trader's base deposit amount,
+    /// $c \cdot D(\Delta y)$:
     ///
     /// ```math
-    /// P_{adj}(\Delta y) =
-    ///   \tfrac{\Delta y}{c} \cdot (\tfrac{c_{1}{c_{0}} + \phi_f) \\
+    /// A = \frac{c_1}{c_0} + \phi_f + \phi_c \cdot (1 - p) \\
     ///
-    /// P_{lp}(\Delta y) \approx
-    ///   \Delta y * p' //
+    /// D(\Delta y) = A \cdot \frac{\Delta y}{c} - S(\Delta y) \\
     ///
-    /// \Phi_{c,os}(\Delta y) =
-    ///   \tfrac{\Delta y}{c} \cdot \phi_c \cdot (1 - p_{0}) \\
-    ///
-    /// D = P_{adj}(\Delta y) - (P_{lp}(\Delta y) + \Phi_{c,os}(\Delta y)) \\
+    /// S(\text{min\_tx}) \le S(\Delta y) \\
     ///
     /// \therefore \\
     ///
-    /// \Delta y =
-    ///   \frac{D}{
-    ///     \tfrac{1}{c} \cdot (\tfrac{c_{1}{c_{0}} + \phi_f)
-    ///     - p'
-    ///     + \tfrac{1}{c} \cdot \phi_c \cdot (1 - p_{0})
-    ///   }
+    /// \Delta y(D) &\ge \frac{c}{A} \cdot \left( D + S(\text{min\_tx}) \right)
+    ///
     /// ```
     ///
-    /// The approximated deposit amount is guaranteed to be less than the
-    /// provided base deposit amount.
+    /// The resulting bond amount is guaranteed to cost a trader less than or
+    /// equal to the provided base deposit amount.
     pub fn calculate_approximate_short_bonds_given_base_deposit(
         &self,
         base_deposit: FixedPoint<U256>,
@@ -125,6 +118,28 @@ impl State {
         Ok(approximate_bond_amount)
     }
 
+    /// Estimate the base deposit required for shorting a given amount of bonds.
+    ///
+    /// The LP principal in shares is bounded from above by
+    /// $z_{e} - z_{\text{min}}$, which is the pool's total available reserves.
+    ///
+    /// Given this, we can compute the a conservative estimate of the base
+    /// deposit, $D(\Delta y)$, given the number of bonds shorted, $\Delta y$.
+    ///
+    /// ```math
+    /// A = \frac{c_1}{c_0} + \phi_f + \phi_c \cdot (1 - p) \\
+    ///
+    /// D(\Delta y) = A \cdot \frac{\Delta y}{c} - S(\Delta y) \\
+    ///
+    /// S(\Delta y) \le z_e - z_{\text{min}} \\
+    ///
+    /// \therefore \\
+    ///
+    /// D(\Delta y) \ge A \cdot \frac{\Delta y}{c} - (z_e - z_{\text{min}}) \\
+    /// ```
+    ///
+    /// The resulting base deposit amount is guaranteed to cost a trader less
+    /// than or equal to the actual base deposit amount required.
     pub fn calculate_approximate_base_deposit_given_short_bonds(
         &self,
         short_bonds: FixedPoint<U256>,
@@ -817,7 +832,7 @@ mod tests {
                         state.calculate_open_short(bond_amount, state.vault_share_price())?;
                     let lp_share_amount = state.calculate_short_principal(bond_amount)?;
                     let realized_lp_price = lp_share_amount / bond_amount;
-                    let conservative_price = state.calculate_conservative_short_principal_price(
+                    let conservative_price = state.calculate_conservative_lp_price_given_deposit(
                         base_amount,
                         state.vault_share_price(),
                     )?;
