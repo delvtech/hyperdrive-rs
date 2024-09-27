@@ -418,13 +418,55 @@ impl State {
             )?)
         }
     }
+
+    /// Estimate the bonds that would be shorted given a base deposit amount.
+    ///
+    /// The LP principal in shares is bounded from below by
+    /// $S(min)$, which is the output of calculating the short principal on the
+    /// minimum transaction amount.
+    ///
+    /// Given this, we can compute the a conservative estimate of the bonds
+    /// shorted, $\Delta y$, given the trader's base deposit amount,
+    /// $c \cdot D(\Delta y)$:
+    ///
+    /// ```math
+    /// A = \frac{c_1}{c_0} + \phi_f + \phi_c \cdot (1 - p) \\
+    ///
+    /// D(\Delta y) = A \cdot \frac{\Delta y}{c} - S(\Delta y) \\
+    ///
+    /// S(\text{min\_tx}) \le S(\Delta y) \\
+    ///
+    /// \therefore \\
+    ///
+    /// \Delta y(D) &\ge \frac{c}{A} \cdot \left( D + S(\text{min\_tx}) \right)
+    ///
+    /// ```
+    ///
+    /// The resulting bond amount is guaranteed to cost a trader less than or
+    /// equal to the provided base deposit amount.
+    pub fn calculate_approximate_short_bonds_given_base_deposit(
+        &self,
+        base_deposit: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+        let shares_deposit = base_deposit / self.vault_share_price();
+        let minimum_short_principal =
+            self.calculate_short_principal(self.minimum_transaction_amount())?;
+        let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
+            + self.flat_fee()
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+        let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
+            * (shares_deposit + minimum_short_principal);
+        Ok(approximate_bond_amount)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use std::panic;
 
-    use ethers::types::U256;
+    use ethers::types::{U128, U256};
     use fixedpointmath::{fixed, fixed_u256, int256, FixedPointValue};
     use hyperdrive_test_utils::{
         chain::TestChain,
@@ -436,7 +478,8 @@ mod tests {
 
     use super::*;
     use crate::test_utils::{
-        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+        agent::HyperdriveMathAgent,
+        preamble::{get_max_short, initialize_pool_with_random_state},
     };
 
     #[tokio::test]
@@ -1174,6 +1217,66 @@ mod tests {
             celine.reset(Default::default()).await?;
         }
 
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn fuzz_calculate_approximate_short_bonds_given_deposit() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(max_short_bonds) => {
+                    let bond_amount =
+                        rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
+                    let base_amount =
+                        state.calculate_open_short(bond_amount, open_vault_share_price)?;
+                    // We approximately invert this flow, so we receive base and return
+                    // bonds.
+                    let approximate_bond_amount = state
+                        .calculate_approximate_short_bonds_given_base_deposit(
+                            base_amount,
+                            open_vault_share_price,
+                        )?;
+                    // We want to make sure that the approximation is safe, so the
+                    // approximate amount should be less than or equal to the target.
+                    assert!(
+                        approximate_bond_amount <= bond_amount,
+                        "approximate_bond_amount={:#?} not <= bond_amount={:#?}",
+                        approximate_bond_amount,
+                        bond_amount
+                    );
+                    // Make sure we can open a short with this approximate bond
+                    // amount, and again check that the resulting deposit is
+                    // less than the target deposit.
+                    match state.calculate_open_short(approximate_bond_amount, open_vault_share_price) {
+                        Ok(approximate_base_amount) => {
+                            assert!(
+                                approximate_base_amount <= base_amount,
+                                "approximate_base_amount={:#?} not <= base_amount={:#?}",
+                                approximate_base_amount,
+                                base_amount
+                            );
+                        }
+                        Err(_) => assert!(
+                            false,
+                            "Failed to run calculate_open_short with the approximate bond amount = {:#?}.",
+                            approximate_bond_amount
+                        ),
+                    };
+                }
+                Err(_) => continue,
+            }
+        }
         Ok(())
     }
 }
