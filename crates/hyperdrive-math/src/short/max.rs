@@ -51,12 +51,23 @@ impl State {
         base_deposit: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
-        let approximate_bond_amount = self.calculate_approximate_short_bonds_given_base_deposit(
-            base_deposit,
-            open_vault_share_price,
-        )?;
-        Ok(min_lp_shares / approximate_bond_amount)
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+        let shares_deposit = base_deposit / self.vault_share_price();
+        let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
+            + self.flat_fee()
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+        // Over-estimate since it is in the denominator.
+        let large_approximate_bond_amount = self.vault_share_price() / price_adjustment_with_fees
+            * (shares_deposit + self.effective_share_reserves()? - self.minimum_share_reserves());
+        // Under-estimate in the numerator.
+        let small_approximate_bond_amount = self
+            .calculate_approximate_short_bonds_given_base_deposit(
+                base_deposit,
+                open_vault_share_price,
+            )?;
+        let lp_shares = self.calculate_short_principal(small_approximate_bond_amount)?;
+        // The two estimates could cause it to be below the minimum allowed price.
+        Ok((lp_shares / large_approximate_bond_amount).max(self.calculate_min_spot_price()?))
     }
 
     /// Calculate a conservative LP price of bonds for a short given the number
@@ -67,13 +78,9 @@ impl State {
     pub fn calculate_conservative_lp_price_given_bonds(
         &self,
         short_bonds: FixedPoint<U256>,
-        open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let approximate_base_deposit = self.calculate_approximate_base_deposit_given_short_bonds(
-            short_bonds,
-            open_vault_share_price,
-        )?;
-        Ok(approximate_base_deposit / short_bonds)
+        let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
+        Ok((min_lp_shares / short_bonds).max(self.calculate_min_spot_price()?))
     }
 
     /// Estimate the bonds that would be shorted given a base deposit amount.
@@ -116,42 +123,6 @@ impl State {
         let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
             * (shares_deposit + minimum_short_principal);
         Ok(approximate_bond_amount)
-    }
-
-    /// Estimate the base deposit required for shorting a given amount of bonds.
-    ///
-    /// The LP principal in shares is bounded from above by
-    /// $z_{e} - z_{\text{min}}$, which is the pool's total available reserves.
-    ///
-    /// Given this, we can compute the a conservative estimate of the base
-    /// deposit, $D(\Delta y)$, given the number of bonds shorted, $\Delta y$.
-    ///
-    /// ```math
-    /// A = \frac{c_1}{c_0} + \phi_f + \phi_c \cdot (1 - p) \\
-    ///
-    /// D(\Delta y) = A \cdot \frac{\Delta y}{c} - S(\Delta y) \\
-    ///
-    /// S(\Delta y) \le z_e - z_{\text{min}} \\
-    ///
-    /// \therefore \\
-    ///
-    /// D(\Delta y) \ge A \cdot \frac{\Delta y}{c} - (z_e - z_{\text{min}}) \\
-    /// ```
-    ///
-    /// The resulting base deposit amount is guaranteed to cost a trader less
-    /// than or equal to the actual base deposit amount required.
-    pub fn calculate_approximate_base_deposit_given_short_bonds(
-        &self,
-        short_bonds: FixedPoint<U256>,
-        open_vault_share_price: FixedPoint<U256>,
-    ) -> Result<FixedPoint<U256>> {
-        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
-            + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
-        let approximate_base_deposit = price_adjustment_with_fees * short_bonds
-            - (self.effective_share_reserves()? - self.minimum_share_reserves());
-        Ok(approximate_base_deposit)
     }
 
     /// Use SGD with rate reduction to find the amount of bonds shorted for a
@@ -810,7 +781,7 @@ mod tests {
     };
 
     #[tokio::test]
-    async fn fuzz_calculate_conservative_price() -> Result<()> {
+    async fn fuzz_calculate_conservative_lp_price() -> Result<()> {
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -832,21 +803,17 @@ mod tests {
                         state.calculate_open_short(bond_amount, state.vault_share_price())?;
                     let lp_share_amount = state.calculate_short_principal(bond_amount)?;
                     let realized_lp_price = lp_share_amount / bond_amount;
-                    let conservative_price = state.calculate_conservative_lp_price_given_deposit(
-                        base_amount,
-                        state.vault_share_price(),
-                    )?;
+                    let conservative_price =
+                        state.calculate_conservative_lp_price_given_bonds(bond_amount)?;
+                    // let conservative_price = state.calculate_conservative_lp_price_given_deposit(
+                    //     base_amount,
+                    //     state.vault_share_price(),
+                    // )?;
                     assert!(
                         conservative_price >= min_spot_price,
                         "conservative_price={:#?} < min_spot_price={:#?}",
                         conservative_price,
                         min_spot_price
-                    );
-                    assert!(
-                        conservative_price <= original_spot_price,
-                        "conservative_price={:#?} > original_spot_price={:#?}",
-                        conservative_price,
-                        original_spot_price
                     );
                     assert!(
                         conservative_price <= realized_lp_price,

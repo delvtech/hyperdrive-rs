@@ -186,7 +186,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             budget,
             open_vault_share_price,
             checkpoint_exposure,
-            Some(state.calculate_conservative_short_principal_price(
+            Some(state.calculate_conservative_lp_price_given_deposit(
                 self.wallet.base,
                 open_vault_share_price.into(),
             )?),

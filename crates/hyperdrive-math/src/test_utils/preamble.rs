@@ -134,11 +134,8 @@ pub fn get_max_short(
     maybe_max_num_tries: Option<usize>,
 ) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-    // We linearly interpolate between the current spot price and the minimum
-    // price that the pool can support. This is a conservative estimate of
-    // the short's realized price.
-    let conservative_price =
-        state.calculate_conservative_short_principal_price(fixed!(1e18), state.vault_share_price())?;
+    let conservative_price = state
+        .calculate_conservative_lp_price_given_deposit(fixed!(1e18), state.vault_share_price())?;
     // Compute the max short.
     let mut max_short_bonds = match panic::catch_unwind(|| {
         state.calculate_max_short(
