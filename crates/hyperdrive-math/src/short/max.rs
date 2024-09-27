@@ -41,21 +41,39 @@ impl State {
             .pow(self.time_stretch())
     }
 
-    /// Calculate a conservative realized price of bonds for a short given the
-    /// current state.
+    /// Calculate a conservative LP price of bonds for a short given a total
+    /// base deposit amount and the current state.
     ///
-    /// The result is guaranteed to be a lower bound on the realized price.
-    pub fn calculate_conservative_short_principal_price(
+    /// The result is guaranteed to be a lower bound on the LP short principal
+    /// price.
+    pub fn calculate_conservative_lp_price_given_deposit(
         &self,
-        trade_amount_in_base: FixedPoint<U256>,
+        base_deposit: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
         let approximate_bond_amount = self.calculate_approximate_short_bonds_given_base_deposit(
-            trade_amount_in_base,
+            base_deposit,
             open_vault_share_price,
         )?;
         Ok(min_lp_shares / approximate_bond_amount)
+    }
+
+    /// Calculate a conservative LP price of bonds for a short given the number
+    /// of bonds being shorted and the current state.
+    ///
+    /// The result is guaranteed to be a lower bound on the LP short principal
+    /// price.
+    pub fn calculate_conservative_lp_price_given_bonds(
+        &self,
+        short_bonds: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
+        let approximate_base_deposit = self.calculate_approximate_base_deposit_given_short_bonds(
+            short_bonds,
+            open_vault_share_price,
+        )?;
+        Ok(approximate_base_deposit / short_bonds)
     }
 
     /// Use a conservative short price to calculate an estimate of the bonds
@@ -92,19 +110,33 @@ impl State {
     /// provided base deposit amount.
     pub fn calculate_approximate_short_bonds_given_base_deposit(
         &self,
-        base_deposit_amount: FixedPoint<U256>,
+        base_deposit: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let deposit_amount_in_shares = base_deposit_amount / self.vault_share_price();
+        let shares_deposit = base_deposit / self.vault_share_price();
         let minimum_short_principal =
             self.calculate_short_principal(self.minimum_transaction_amount())?;
         let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
             + self.flat_fee()
             + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
         let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
-            * (deposit_amount_in_shares + minimum_short_principal);
+            * (shares_deposit + minimum_short_principal);
         Ok(approximate_bond_amount)
+    }
+
+    pub fn calculate_approximate_base_deposit_given_short_bonds(
+        &self,
+        short_bonds: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+    ) -> Result<FixedPoint<U256>> {
+        let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
+        let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
+            + self.flat_fee()
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+        let approximate_base_deposit = price_adjustment_with_fees * short_bonds
+            - (self.effective_share_reserves()? - self.minimum_share_reserves());
+        Ok(approximate_base_deposit)
     }
 
     /// Use SGD with rate reduction to find the amount of bonds shorted for a
