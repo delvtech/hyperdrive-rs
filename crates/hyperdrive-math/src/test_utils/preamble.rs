@@ -79,7 +79,7 @@ pub async fn initialize_pool_with_random_state(
 }
 
 /// Conservative and safe estimate of the maximum long.
-fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
+pub fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
     let checkpoint_exposure = I256::from(0);
 
@@ -128,31 +128,16 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
 }
 
 /// Conservative and safe estimate of the maximum short.
-fn get_max_short(
+pub fn get_max_short(
     state: State,
     checkpoint_exposure: I256,
     maybe_max_num_tries: Option<usize>,
 ) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-
-    // We linearly interpolate between the current spot price and the minimum
-    // price that the pool can support. This is a conservative estimate of
-    // the short's realized price.
-    let conservative_price = {
-        // We estimate the minimum price that short will pay by a
-        // weighted average of the spot price and the minimum possible
-        // spot price the pool can quote. We choose the weights so that this
-        // is an underestimate of the worst case realized price.
-        let spot_price = state.calculate_spot_price()?;
-        let min_price = state.calculate_min_spot_price()?;
-
-        // Calculate the linear interpolation.
-        let weight = fixed!(1e18).pow(fixed!(1e18) - state.time_stretch())?;
-        spot_price * (fixed!(1e18) - weight) + min_price * weight
-    };
-
+    let conservative_price = state
+        .calculate_conservative_lp_price_given_deposit(fixed!(1e18), state.vault_share_price())?;
     // Compute the max short.
-    let mut max_short = match panic::catch_unwind(|| {
+    let mut max_short_bonds = match panic::catch_unwind(|| {
         state.calculate_max_short(
             U256::from(U128::MAX),
             state.vault_share_price(),
@@ -170,22 +155,22 @@ fn get_max_short(
     let mut num_tries = 0;
     let mut success = false;
     while !success {
-        max_short = match panic::catch_unwind(|| {
-            state.calculate_open_short(max_short, state.vault_share_price())
+        max_short_bonds = match panic::catch_unwind(|| {
+            state.calculate_open_short(max_short_bonds, state.vault_share_price())
         }) {
             Ok(short_result_no_panic) => match short_result_no_panic {
                 Ok(_) => {
                     success = true;
-                    max_short
+                    max_short_bonds
                 }
-                Err(_) => max_short / fixed!(10e18),
+                Err(_) => max_short_bonds / fixed!(10e18),
             },
-            Err(_) => max_short / fixed!(10e18),
+            Err(_) => max_short_bonds / fixed!(10e18),
         };
-        if max_short < state.minimum_transaction_amount() {
+        if max_short_bonds < state.minimum_transaction_amount() {
             return Err(eyre!(
                 "max_short={} was less than minimum_transaction_amount={}.",
-                max_short,
+                max_short_bonds,
                 state.minimum_transaction_amount()
             ));
         }
@@ -193,11 +178,11 @@ fn get_max_short(
         if num_tries > max_num_tries {
             return Err(eyre!(
                 "Failed to find a max short. Last attempted value was {}",
-                max_short,
+                max_short_bonds,
             ));
         }
     }
-    Ok(max_short)
+    Ok(max_short_bonds)
 }
 
 #[cfg(test)]

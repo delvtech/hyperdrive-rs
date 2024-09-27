@@ -111,7 +111,7 @@ impl State {
         // calculate the proceeds as the sum of the trading proceeds, the
         // interest proceeds, and the margin released.
         if total_value > share_amount {
-            // proceeds = (c1 / c0 * c) * dy - dz
+            // proceeds = (c1 / c0 + phi_f) * dy/c - dz
             total_value - share_amount
         } else {
             fixed!(0)

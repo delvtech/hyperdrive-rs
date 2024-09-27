@@ -120,7 +120,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn fuzz_calculate_close_long_flat_plus_curve() -> Result<()> {
+    async fn fuzz_sol_calculate_close_long_flat_plus_curve() -> Result<()> {
         let chain = TestChain::new().await?;
 
         // Fuzz the rust and solidity implementations against each other.
