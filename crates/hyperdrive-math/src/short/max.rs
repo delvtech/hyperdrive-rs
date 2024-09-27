@@ -96,13 +96,14 @@ impl State {
         open_vault_share_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let close_vault_share_price = open_vault_share_price.max(self.vault_share_price());
-        let min_lp_shares = self.calculate_short_principal(self.minimum_transaction_amount())?;
-        let deposit_amount_in_shares = base_deposit_amount * self.vault_share_price();
+        let deposit_amount_in_shares = base_deposit_amount / self.vault_share_price();
+        let minimum_short_principal =
+            self.calculate_short_principal(self.minimum_transaction_amount())?;
         let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
             + self.flat_fee()
             + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
         let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
-            * (deposit_amount_in_shares + min_lp_shares);
+            * (deposit_amount_in_shares + minimum_short_principal);
         Ok(approximate_bond_amount)
     }
 
@@ -855,9 +856,9 @@ mod tests {
                         approximate_bond_amount,
                         bond_amount
                     );
-                    // As a final sanity check, lets make sure we can open a short
-                    // with this approximate bond amount, and again check that the
-                    // resulting deposit is less than the target deposit.
+                    // Make sure we can open a short with this approximate bond
+                    // amount, and again check that the resulting deposit is
+                    // less than the target deposit.
                     match state.calculate_open_short(approximate_bond_amount, open_vault_share_price) {
                         Ok(approximate_base_amount) => {
                             println!("approximate_base_amount {:#?}", approximate_base_amount);
