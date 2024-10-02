@@ -11,8 +11,9 @@ impl State {
     /// minimum price that the pool can support. This is the price at which the
     /// share reserves are equal to the minimum share reserves.
     ///
-    /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the share reserves
-    /// being equal to `$z_{\text{min}}$` using the current k value:
+    /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the
+    /// share reserves being equal to `$z_{\text{min}}$` using the current k
+    /// value:
     ///
     /// ```math
     /// k = \tfrac{c}{\mu} \cdot \left( \mu \cdot z_{min} \right)^{1 - t_s}
@@ -203,10 +204,12 @@ impl State {
         }
 
         // To avoid the case where Newton's method overshoots and stays on
-        // the invalid side of the optimization equation (i.e., when deposit > budget),
-        // we artificially set the target budget to be less than the actual budget.
+        // the invalid side of the optimization equation (i.e., when deposit >
+        // budget), we artificially set the target budget to be less than the
+        // actual budget.
         //
-        // If the budget is less than the minimum transaction amount, then we return early.
+        // If the budget is less than the minimum transaction amount, then we
+        // return early.
         let target_budget = if budget < self.minimum_transaction_amount() {
             return Err(eyre!(
                 "expected budget={} >= min_transaction_amount={}",
@@ -220,7 +223,8 @@ impl State {
         else if budget == self.minimum_transaction_amount() {
             return Ok(self.minimum_transaction_amount());
         }
-        // If the budget is greater than the minimum transaction amount, then we set the target budget.
+        // If the budget is greater than the minimum transaction amount, then we
+        // set the target budget.
         else {
             budget - self.minimum_transaction_amount()
         };
@@ -237,13 +241,15 @@ impl State {
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
         let spot_price = self.calculate_spot_price()?;
-        // The initial guess should be guaranteed correct, and we should only get better from there.
+        // The initial guess should be guaranteed correct, and we should only
+        // get better from there.
         let absolute_max_bond_amount = self.calculate_absolute_max_short(
             spot_price,
             checkpoint_exposure,
             maybe_max_iterations,
         )?;
-        // The max bond amount might be below the pool's minimum. If so, no short can be opened.
+        // The max bond amount might be below the pool's minimum. If so, no
+        // short can be opened.
         if absolute_max_bond_amount < self.minimum_transaction_amount() {
             return Err(eyre!("No solvent short is possible."));
         }
@@ -278,23 +284,25 @@ impl State {
         // function as:
         //
         // ```math
-        // F(x) = B - D(x)
+        // F(\Delta y) = B - D(\Delta y)
         // ```
         //
-        // Since `$B$` is just a constant, `$F'(x) = -D'(x)$`. Given the current guess
-        // of `$x_n$`, Newton's method gives us an updated guess of `$x_{n+1}$`:
+        // Since `$B$` is just a constant, `$F'(\Delta y) = -D'(\Delta y)$`.
+        // Given the current guess of `$x_n$`, Newton's method gives us an
+        // updated guess of `$x_{n+1}$`:
         //
         // ```math
         // \begin{aligned}
-        // x_{n+1} &= x_n - \tfrac{F(x_n)}{F'(x_n)} \\
-        // &= x_n + \tfrac{B - D(x_n)}{D'(x_n)}
+        // \Delta y_{n+1} &= x_n - \tfrac{F(\Delta y_n)}{F'(\Delta y_n)} \\
+        // &= \Delta y_n + \tfrac{B - D(\Delta y_n)}{D'(\Delta y_n)}
         // \end{aligned}
         // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         //
-        // TODO: This can get stuck in a loop if the Newton update pushes the bond amount to be too large.
+        // TODO: This can get stuck in a loop if the Newton update pushes the
+        // bond amount to be too large.
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
             let deposit = match self.calculate_open_short(max_bond_amount, open_vault_share_price) {
                 Ok(valid_deposit) => valid_deposit,
@@ -371,25 +379,26 @@ impl State {
         // is an overestimate or if a conservative price isn't given, we revert
         // to using the theoretical worst case scenario as our guess.
         if let Some(conservative_price) = maybe_conservative_price {
-            // Given our conservative price `$p_c$`, we can write the short deposit
-            // function as:
+            // Given our conservative price `$p_c$`, we can write the short
+            // deposit function as:
             //
             // ```math
-            // D(x) = \left( \tfrac{c}{c_0} - $p_c$ \right) \cdot x
-            //        + \phi_{flat} \cdot x + \phi_{curve} \cdot (1 - p) \cdot x
+            // D(\Delta y) = \left( \tfrac{c}{c_0} - $p_c$ \right)
+            //        \cdot \Delta y + \phi_{flat} \cdot \Delta y
+            //        + \phi_{curve} \cdot (1 - p) \cdot \Delta y
             // ```
             //
-            // We then solve for $x^*$ such that $D(x^*) = B$, which gives us a
-            // guess of:
+            // We then solve for $\Delta y^*$ such that $D(\Delta y^*) = B$,
+            // which gives us a guess of:
             //
             // ```math
-            // x^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat}
+            // \Delta y^* = \tfrac{B}{\tfrac{c}{c_0} - $p_c$ + \phi_{flat}
             // + \phi_{curve} \cdot (1 - p)}
             // ```
             //
-            // If the budget can cover the actual short deposit on `$x^*$`, we
-            // return it as our guess. Otherwise, we revert to the worst case
-            // scenario.
+            // If the budget can cover the actual short deposit on
+            // `$\Delta y^*$`, we return it as our guess. Otherwise, we revert
+            // to the worst case scenario.
             let guess = budget
                 / (self.vault_share_price().div_up(open_vault_share_price)
                     + self.flat_fee()
@@ -459,8 +468,8 @@ impl State {
         Ok(optimal_bond_reserves - self.bond_reserves())
     }
 
-    /// Calculates the absolute max short that can be opened without violating the
-    /// pool's solvency constraints.
+    /// Calculates the absolute max short that can be opened without violating
+    /// the pool's solvency constraints.
     pub fn calculate_absolute_max_short(
         &self,
         spot_price: FixedPoint<U256>,
@@ -469,29 +478,29 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
-        let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
+        let yieldspace_max_delta_bonds = self.calculate_max_short_upper_bound()?;
         if self
-            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
+            .solvency_after_short(yieldspace_max_delta_bonds, checkpoint_exposure)
             .is_ok()
         {
-            return Ok(absolute_max_bond_amount);
+            return Ok(yieldspace_max_delta_bonds);
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
-        // solvency $S(x)$ w.r.t. the amount of bonds shorted $x$ as our
-        // objective function, which will converge to the maximum short amount
-        // when $S(x) = 0$. The derivative of $S(x)$ is negative (since solvency
-        // decreases as more shorts are opened). The fixed point library doesn't
-        // support negative numbers, so we use the negation of the derivative to
-        // side-step the issue.
+        // solvency $S(\Delta y)$ w.r.t. the amount of bonds shorted $\Delta y$
+        // as our objective function, which will converge to the maximum short
+        // amount when $S(\Delta y) = 0$. The derivative of $S(\Delta y)$ is
+        // negative (since solvency decreases as more shorts are opened). We use
+        // the negation of the derivative to side-step handling negatives.
         //
-        // Given the current guess of $x_n$, Newton's method gives us an updated
-        // guess of $x_{n+1}$:
+        // Given the current guess of $\Delta y_n$, Newton's method gives us an
+        // updated guess of $\Delta y_{n+1}$:
         //
         // ```math
         // \begin{aligned}
-        // x_{n+1} &= x_n - \tfrac{S(x_n)}{S'(x_n)} \\
-        // &= x_n + \tfrac{S(x_n)}{-S'(x_n)}
+        // \Delta y_{n+1}
+        // &= \Delta y_n - \tfrac{S(\Delta y_n)}{S'(\Delta y_n)} \\
+        // &= \Delta y_n + \tfrac{S(\Delta y_n)}{-S'(\Delta y_n)}
         // \end{aligned}
         // ```
         //
@@ -515,7 +524,7 @@ impl State {
                 Err(_) => break,
             };
             let possible_max_bond_amount = max_bond_guess + solvency / derivative;
-            if possible_max_bond_amount > absolute_max_bond_amount {
+            if possible_max_bond_amount > yieldspace_max_delta_bonds {
                 break;
             }
 
@@ -534,28 +543,29 @@ impl State {
         Ok(max_bond_guess)
     }
 
-    /// Calculates an initial guess for the absolute max short. This is a conservative
-    /// guess that will be less than the true absolute max short, which is what
-    /// we need to start Newton's method.
+    /// Calculates an initial guess for the absolute max short. This is a
+    /// conservative guess that will be less than the true absolute max short,
+    /// which is what we need to start Newton's method.
     ///
     /// To calculate our guess, we assume an unrealistically good realized
     /// price `$p_r$` for opening the short. This allows us to approximate
-    /// `$P(x) \approx \tfrac{1}{c} \cdot p_r \cdot x$`. Plugging this
-    /// into our solvency function `$S(x)$`, we get an approximation of our
-    /// solvency as:
+    /// `$P(\Delta y) \approx \tfrac{1}{c} \cdot p_r \cdot \Delta y$`. Plugging
+    /// this into our solvency function `$S(\Delta y)$`, we get an approximation
+    /// of our solvency as:
     ///
     /// ```math
-    /// S(x) \approx (z_0 - \tfrac{1}{c} \cdot (
-    ///                  p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
-    ///              )) - \tfrac{e_0 - max(e_{c}, 0)}{c} - z_{min}
+    /// S(\Delta y) \approx (z_0 - \tfrac{1}{c} \cdot (
+    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c}
+    ///     \cdot (1 - p))) - \tfrac{e_0 - max(e_{c}, 0)}{c}
+    ///     - z_{min}
     /// ```
     ///
     /// Setting this equal to zero, we can solve for our initial guess:
     ///
     /// ```math
-    /// x = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
-    ///         p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
-    ///     }
+    /// \Delta y = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
+    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
+    ///  }
     /// ```
     fn absolute_max_short_guess(
         &self,
@@ -575,37 +585,41 @@ impl State {
 
     /// Calculates the pool's solvency after opening a short.
     ///
-    /// We can express the pool's solvency after opening a short of `$x$` bonds
-    /// as:
+    /// We can express the pool's solvency after opening a short of `$\Delta y$`
+    /// bonds as:
     ///
     /// ```math
-    /// s(x) = z(x) - \tfrac{e(x)}{c} - z_{min}
+    /// s(\Delta y) = z(\Delta y) - \tfrac{e(\Delta y)}{c} - z_{min}
     /// ```
     ///
-    /// where `$z(x)$` represents the pool's share reserves after opening the
+    /// where `$z(\Delta y)$` represents the pool's share reserves after opening
+    /// the short:
+    ///
+    /// ```math
+    /// z(\Delta y) = z_0 - \left(
+    ///     P(\Delta y) - \left( \tfrac{c(\Delta y)}{c}
+    ///     - \tfrac{g(\Delta y)}{c} \right)
+    /// \right)
+    /// ```
+    ///
+    /// and `$e(\Delta y)$` represents the pool's exposure after opening the
     /// short:
     ///
     /// ```math
-    /// z(x) = z_0 - \left(
-    ///            P(x) - \left( \tfrac{c(x)}{c} - \tfrac{g(x)}{c} \right)
-    ///        \right)
+    /// e(\Delta y) = e_0 - min(\Delta y + D(\Delta y), max(e_{c}, 0))
     /// ```
     ///
-    /// and `$e(x)$` represents the pool's exposure after opening the short:
+    /// We simplify our `$e(\Delta y)$` formula by noting that the max short is
+    /// only constrained by solvency when
+    /// `$\Delta y + D(\Delta y) > max(e_{c}, 0)$` since
+    /// `$\Delta y + D(\Delta y)$` grows faster than
+    /// `$P(\Delta y) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot \Delta y$`.
+    /// With this in mind,
+    /// `$min(\Delta y + D(\Delta y), max(e_{c}, 0)) = max(e_{c}, 0)$` whenever
+    /// solvency is actually a constraint, so we can write:
     ///
     /// ```math
-    /// e(x) = e_0 - min(x + D(x), max(e_{c}, 0))
-    /// ```
-    ///
-    /// We simplify our `$e(x)$` formula by noting that the max short is only
-    /// constrained by solvency when `$x + D(x) > max(e_{c}, 0)$` since
-    /// `$x + D(x)$` grows faster than
-    /// `$P(x) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot x$`.
-    /// With this in mind, `$min(x + D(x), max(e_{c}, 0)) = max(e_{c}, 0)$`
-    /// whenever solvency is actually a constraint, so we can write:
-    ///
-    /// ```math
-    /// e(x) = e_0 - max(e_{c}, 0)
+    /// e(\Delta y) = e_0 - max(e_{c}, 0)
     /// ```
     fn solvency_after_short(
         &self,
@@ -647,9 +661,10 @@ impl State {
     ///
     /// ```math
     /// \begin{aligned}
-    /// s'(x) &= z'(x) - 0 - 0
-    ///       &= 0 - \left( P'(x) - \frac{(c'(x) - g'(x))}{c} \right)
-    ///       &= -P'(x) + \frac{
+    /// s'(\Delta y) &= z'(\Delta y) - 0 - 0
+    ///       &= 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
+    ///          - g'(\Delta y))}{c} \right)
+    ///       &= -P'(\Delta y) + \frac{
     ///              \phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})
     ///          }{c}
     /// \end{aligned}
