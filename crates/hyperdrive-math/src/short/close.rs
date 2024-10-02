@@ -341,6 +341,49 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    async fn fuzz_calculate_close_short_after_maturity() -> Result<()> {
+        // TODO: This simulates a 0% variable rate because the vault share price
+        // does not change over time. We should write one with a positive rate.
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let in_ = rng.gen_range(fixed!(0)..=state.effective_share_reserves()?);
+            let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
+            // NOTE: The actual maturity time could be shy of position_duration
+            // if the checkpoint_duration does not evenly divide into
+            // position_duration.
+            let maturity_time = state.position_duration();
+            // Close a short just after it has matured.
+            let just_after_maturity = maturity_time + state.checkpoint_duration();
+            let base_earned_just_after_maturity = state.calculate_close_short(
+                in_,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                just_after_maturity.into(),
+            )? * state.vault_share_price();
+            // Close a short a good while after it has matured.
+            let well_after_maturity = just_after_maturity + fixed!(1e10);
+            let base_earned_well_after_maturity = state.calculate_close_short(
+                in_,
+                open_vault_share_price,
+                state.vault_share_price(),
+                maturity_time.into(),
+                well_after_maturity.into(),
+            )? * state.vault_share_price();
+            // Check that no extra money was earned.
+            assert!(
+                base_earned_well_after_maturity == base_earned_just_after_maturity,
+                "Trader should not have earned any more after maturity:
+                earned_well_after_maturity={:?} != earned_just_after_maturity={:?}",
+                base_earned_well_after_maturity,
+                base_earned_just_after_maturity
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fuzz_sol_calculate_short_proceeds_up() -> Result<()> {
         let chain = TestChain::new().await?;
 
