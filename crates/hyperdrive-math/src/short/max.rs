@@ -469,6 +469,62 @@ impl State {
         Ok(optimal_bond_reserves - self.bond_reserves())
     }
 
+    /// Calculates an initial guess for the absolute max short. This is a
+    /// conservative guess that will be less than the true absolute max short,
+    /// which is what we need to start Newton's method.
+    ///
+    /// To calculate our guess, we assume an unrealistically good realized
+    /// price `$p_r$` for opening the short. This allows us to approximate
+    /// `$P(\Delta y) \approx \tfrac{1}{c} \cdot p_r \cdot \Delta y$`. Plugging
+    /// this into our solvency function `$S(\Delta y)$`, we get an approximation
+    /// of our solvency as:
+    ///
+    /// ```math
+    /// S(\Delta y) \approx (z_0 - \tfrac{1}{c} \cdot (
+    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c}
+    ///     \cdot (1 - p))) - \tfrac{e_0 - max(e_{c}, 0)}{c}
+    ///     - z_{min}
+    /// ```
+    ///
+    /// Setting this equal to zero, we can solve for our initial guess:
+    ///
+    /// ```math
+    /// \Delta y = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
+    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
+    ///  }
+    /// ```
+    fn absolute_max_short_guess(
+        &self,
+        spot_price: FixedPoint<U256>,
+        checkpoint_exposure: I256,
+    ) -> Result<FixedPoint<U256>> {
+        let checkpoint_exposure_shares =
+            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
+                .div_down(self.vault_share_price());
+
+        // z1 = z0 - H(\Delta y) + f(\Delta y)*(1-phi_g)
+        // z1 = max(ze, z) - z_min
+        // (max(ze, z) - z_min) + H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)
+        // H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)  - (max(ze, z) - z_min)
+        // 
+        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
+        // k = (c / mu) * mu**(1-t_s) * (z' - zeta)**(1-t_s) + y' ** (1 - t_s)
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s)) = (z' - zeta)**(1-t_s))
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) = z' - zeta
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta = z'
+        // \Delta z = H(\Delta y) = z0 - (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta
+        //
+        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
+
+        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
+        let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
+        let guess = self.vault_share_price().mul_down(solvency);
+        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
+        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
+        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
+    }
+
+
     /// Calculates the absolute max short that can be opened without violating
     /// the pool's solvency constraints.
     pub fn calculate_absolute_max_short(
@@ -568,61 +624,6 @@ impl State {
             solvency,
             tolerance
         ));
-    }
-
-    /// Calculates an initial guess for the absolute max short. This is a
-    /// conservative guess that will be less than the true absolute max short,
-    /// which is what we need to start Newton's method.
-    ///
-    /// To calculate our guess, we assume an unrealistically good realized
-    /// price `$p_r$` for opening the short. This allows us to approximate
-    /// `$P(\Delta y) \approx \tfrac{1}{c} \cdot p_r \cdot \Delta y$`. Plugging
-    /// this into our solvency function `$S(\Delta y)$`, we get an approximation
-    /// of our solvency as:
-    ///
-    /// ```math
-    /// S(\Delta y) \approx (z_0 - \tfrac{1}{c} \cdot (
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c}
-    ///     \cdot (1 - p))) - \tfrac{e_0 - max(e_{c}, 0)}{c}
-    ///     - z_{min}
-    /// ```
-    ///
-    /// Setting this equal to zero, we can solve for our initial guess:
-    ///
-    /// ```math
-    /// \Delta y = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
-    ///  }
-    /// ```
-    fn absolute_max_short_guess(
-        &self,
-        spot_price: FixedPoint<U256>,
-        checkpoint_exposure: I256,
-    ) -> Result<FixedPoint<U256>> {
-        let checkpoint_exposure_shares =
-            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
-                .div_down(self.vault_share_price());
-
-        // z1 = z0 - H(\Delta y) + f(\Delta y)*(1-phi_g)
-        // z1 = max(ze, z) - z_min
-        // (max(ze, z) - z_min) + H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)
-        // H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)  - (max(ze, z) - z_min)
-        // 
-        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
-        // k = (c / mu) * mu**(1-t_s) * (z' - zeta)**(1-t_s) + y' ** (1 - t_s)
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s)) = (z' - zeta)**(1-t_s))
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) = z' - zeta
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta = z'
-        // \Delta z = H(\Delta y) = z0 - (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta
-        //
-        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
-
-        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
-        let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
-        let guess = self.vault_share_price().mul_down(solvency);
-        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
-        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
-        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
     }
 
     /// Calculates the pool's solvency after opening a short.
