@@ -480,9 +480,12 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
         let max_iterations = maybe_max_iterations.unwrap_or(7);
+        println!("tolerance={:#?}", tolerance);
+
         // We start by calculating the maximum short that can be opened on the
-        // YieldSpace curve.
+        // YieldSpace curve. The Hyperdrive max is less than this.
         let yieldspace_max_delta_bonds = self.calculate_max_short_upper_bound()?;
+        println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
         // TODO: Write test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
         if self
             .solvency_after_short(yieldspace_max_delta_bonds, checkpoint_exposure)
@@ -490,6 +493,7 @@ impl State {
         {
             return Ok(yieldspace_max_delta_bonds);
         }
+        println!("Not solvent with absolute_max_trade={:#?}", yieldspace_max_delta_bonds);
         if yieldspace_max_delta_bonds < self.minimum_transaction_amount() {
             return Err(eyre!(
                 "The YieldSpace max is less than the minimum transaction amount."
@@ -518,6 +522,7 @@ impl State {
         // we converge to the solution.
         let mut last_good_bond_amount =
             self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+        println!("max_short_guess={:#?}", last_good_bond_amount);
         let mut current_bond_amount: FixedPoint<U256>;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = FixedPoint::from(U256::MAX);
@@ -525,6 +530,7 @@ impl State {
             println!("iter={:#?}", iter);
             // Calculate the current solvency.
             solvency = self.solvency_after_short(last_good_bond_amount, checkpoint_exposure)?;
+            println!("solvency={:#?}", solvency);
 
             // Calculate the derivative to determine the next iteration of
             // Newton's method.
@@ -550,6 +556,7 @@ impl State {
                     // below the last good amount.
                     Err(_) => last_good_bond_amount - tolerance,
                 };
+            println!("last_good_bond_amount={:#?}", last_good_bond_amount);
         }
         // We did not find a solution within tolerance in the provided number of
         // iterations.
@@ -595,6 +602,21 @@ impl State {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
                 .div_down(self.vault_share_price());
+
+        // z1 = z0 - H(\Delta y) + f(\Delta y)*(1-phi_g)
+        // z1 = max(ze, z) - z_min
+        // (max(ze, z) - z_min) + H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)
+        // H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)  - (max(ze, z) - z_min)
+        // 
+        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
+        // k = (c / mu) * mu**(1-t_s) * (z' - zeta)**(1-t_s) + y' ** (1 - t_s)
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s)) = (z' - zeta)**(1-t_s))
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) = z' - zeta
+        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta = z'
+        // \Delta z = H(\Delta y) = z0 - (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta
+        //
+        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
+
         // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
         let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
         let guess = self.vault_share_price().mul_down(solvency);
@@ -915,18 +937,21 @@ mod tests {
 
             // Initialize the pool.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            println!("pool initialized...");
 
             // Get the max short.
             let state = alice.get_state().await?;
             let checkpoint_exposure = alice
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
+            println!("checkpoint_exposure={:#?}", checkpoint_exposure);
             let absolute_max_short = state.calculate_absolute_max_short(
                 state.calculate_spot_price()?,
                 checkpoint_exposure,
                 Some(tolerance),
                 Some(max_iterations),
             )?;
+            println!("absolute_max_short        ={:#?}", absolute_max_short);
 
             // There should be a max short possible.
             assert!(absolute_max_short >= state.minimum_transaction_amount());
