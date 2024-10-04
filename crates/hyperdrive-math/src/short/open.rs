@@ -600,6 +600,7 @@ mod tests {
                     state.calculate_spot_price()?,
                     checkpoint_exposure,
                     None,
+                    None,
                 )
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
@@ -904,6 +905,7 @@ mod tests {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price()?,
                     checkpoint_exposure,
+                    None,
                     Some(3),
                 )
             }) {
@@ -1064,6 +1066,7 @@ mod tests {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price()?,
                     checkpoint_exposure,
+                    None,
                     Some(max_iterations),
                 )
             });

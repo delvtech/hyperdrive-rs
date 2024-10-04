@@ -246,6 +246,7 @@ impl State {
         let absolute_max_bond_amount = self.calculate_absolute_max_short(
             spot_price,
             checkpoint_exposure,
+            None,
             maybe_max_iterations,
         )?;
         // The max bond amount might be below the pool's minimum. If so, no
@@ -474,16 +475,25 @@ impl State {
         &self,
         spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
+        maybe_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
+        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
+        let max_iterations = maybe_max_iterations.unwrap_or(7);
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
         let yieldspace_max_delta_bonds = self.calculate_max_short_upper_bound()?;
+        // TODO: Write test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
         if self
             .solvency_after_short(yieldspace_max_delta_bonds, checkpoint_exposure)
             .is_ok()
         {
             return Ok(yieldspace_max_delta_bonds);
+        }
+        if yieldspace_max_delta_bonds < self.minimum_transaction_amount() {
+            return Err(eyre!(
+                "The YieldSpace max is less than the minimum transaction amount."
+            ));
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
@@ -506,41 +516,51 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+        let mut last_good_bond_amount =
+            self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+        let mut current_bond_amount: FixedPoint<U256>;
         // If the initial guess is insolvent, we need to throw an error.
-        let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
-        for _ in 0..maybe_max_iterations.unwrap_or(7) {
-            // TODO: It may be better to gracefully handle crossing over the
-            // root by extending the fixed point math library to handle negative
-            // numbers or even just using an if-statement to handle the negative
-            // numbers.
-            //
-            // Calculate the next iteration of Newton's method. If the candidate
-            // is larger than the absolute max, we've gone too far and something
-            // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative(max_bond_guess, spot_price)
-            {
-                Ok(derivative) => derivative,
-                Err(_) => break,
-            };
-            let possible_max_bond_amount = max_bond_guess + solvency / derivative;
-            if possible_max_bond_amount > yieldspace_max_delta_bonds {
-                break;
-            }
+        let mut solvency = FixedPoint::from(U256::MAX);
+        for iter in 0..max_iterations {
+            println!("iter={:#?}", iter);
+            // Calculate the current solvency.
+            solvency = self.solvency_after_short(last_good_bond_amount, checkpoint_exposure)?;
+
+            // Calculate the derivative to determine the next iteration of
+            // Newton's method.
+            let solvency_derivative =
+                self.solvency_after_short_derivative(last_good_bond_amount, spot_price)?;
+
+            // Update our guess.
+            current_bond_amount = last_good_bond_amount + solvency / solvency_derivative;
 
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
-            solvency =
-                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure) {
+            last_good_bond_amount =
+                match self.solvency_after_short(current_bond_amount, checkpoint_exposure) {
                     Ok(solvency) => {
-                        max_bond_guess = possible_max_bond_amount;
-                        solvency
+                        // If solvency is close enough to zero, return.
+                        if solvency <= tolerance {
+                            return Ok(last_good_bond_amount);
+                        }
+                        // Otherwise, iterate.
+                        current_bond_amount
                     }
-                    Err(_) => break,
+                    // The new bond amount is not solvent. Start again from slightly
+                    // below the last good amount.
+                    Err(_) => last_good_bond_amount - tolerance,
                 };
         }
-
-        Ok(max_bond_guess)
+        // We did not find a solution within tolerance in the provided number of
+        // iterations.
+        return Err(eyre!(
+            "Could not converge to a bond amount given max iterations = {:#?}.
+            solvency={:#?}
+            tolerance={:#?}",
+            max_iterations,
+            solvency,
+            tolerance
+        ));
     }
 
     /// Calculates an initial guess for the absolute max short. This is a
@@ -811,7 +831,8 @@ mod tests {
     /// trade returned is always valid.
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short() -> Result<()> {
-        let max_iterations = 7;
+        let tolerance = fixed_u256!(1e9);
+        let max_iterations = 100;
 
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
@@ -829,8 +850,12 @@ mod tests {
         let mut celine = chain.celine().await?;
 
         // Run the fuzz tests
-        for fuzz_iter in 0..*FAST_FUZZ_RUNS {
+        for fuzz_iter in 0..*SLOW_FUZZ_RUNS {
             println!("fuzz_iter {:#?}", fuzz_iter);
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Initialize the pool.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
             // Get the max short.
@@ -841,6 +866,7 @@ mod tests {
             let absolute_max_short = state.calculate_absolute_max_short(
                 state.calculate_spot_price()?,
                 checkpoint_exposure,
+                Some(tolerance),
                 Some(max_iterations),
             )?;
 
@@ -859,8 +885,8 @@ mod tests {
             // If zeta is positive, then the effective share reserves should equal the minimum.
             if new_zeta > fixed!(0) {
                 assert!(
-                    new_state.effective_share_reserves()? >=
-                    new_state.minimum_share_reserves(),
+                    new_state.effective_share_reserves()? - 
+                    new_state.minimum_share_reserves() <= tolerance,
                     "Opening a short for bonds={:#?} should have drained the pool's effective_share_reserves={:#?} to the minimum={:#?}.",
                     absolute_max_short,
                     new_state.effective_share_reserves()?,
@@ -870,8 +896,8 @@ mod tests {
             // If zeta is negative, then the share reserves should equal the minimum
             else {
                 assert!(
-                    new_state.share_reserves() >=
-                    new_state.minimum_share_reserves(),
+                    new_state.share_reserves()- 
+                    new_state.minimum_share_reserves() <= tolerance,
                     "Opening a short for bonds={:#?} should have drained the pool's share_reserves={:#?} to the minimum={:#?}.",
                     absolute_max_short,
                     new_state.share_reserves(),
@@ -896,9 +922,16 @@ mod tests {
             //     .calculate_absolute_max_short(
             //         new_state.calculate_spot_price()?,
             //         new_checkpoint_exposure,
+            //         Some(tolerance),
             //         Some(max_iterations)
             //     )
             //     .is_err());
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
         }
         Ok(())
     }
@@ -933,6 +966,7 @@ mod tests {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price()?,
                     checkpoint_exposure,
+                    None,
                     Some(max_iterations),
                 )
             });
@@ -1051,6 +1085,7 @@ mod tests {
                 state.calculate_spot_price()?,
                 checkpoint_exposure,
                 None,
+                None,
             )?;
 
             // Bob should always be budget constrained when trying to open the short.
@@ -1161,6 +1196,7 @@ mod tests {
                         state.calculate_absolute_max_short(
                             state.calculate_spot_price()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
@@ -1279,6 +1315,7 @@ mod tests {
                         state.calculate_absolute_max_short(
                             state.calculate_spot_price()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
