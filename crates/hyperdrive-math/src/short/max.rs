@@ -435,7 +435,7 @@ impl State {
 
     /// Calculates the max short that can be opened on the YieldSpace curve
     /// without considering solvency constraints.
-    fn calculate_max_short_upper_bound(&self) -> Result<FixedPoint<U256>> {
+    fn calculate_yieldspace_absolute_max_short(&self) -> Result<FixedPoint<U256>> {
         // We have the twin constraints that $z \geq z_{min}$ and
         // $z - \zeta \geq z_{min}$. Combining these together, we calculate
         // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
@@ -484,7 +484,7 @@ impl State {
 
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve. The Hyperdrive max is less than this.
-        let yieldspace_max_delta_bonds = self.calculate_max_short_upper_bound()?;
+        let yieldspace_max_delta_bonds = self.calculate_yieldspace_absolute_max_short()?;
         println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
         // TODO: Write test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
         if self
@@ -882,14 +882,14 @@ mod tests {
             let state = alice.get_state().await?;
 
             // Get the max.
-            let yieldspace_max_delta_bonds = state.calculate_max_short_upper_bound()?;
+            let yieldspace_max_delta_bonds: FixedPoint<U256> = state.calculate_yieldspace_absolute_max_short()?;
 
             // Open the short.
             celine.fund(yieldspace_max_delta_bonds).await?;
             celine.open_short(yieldspace_max_delta_bonds, None, None).await?;
 
             // Get the max again
-            let yieldspace_max_delta_bonds = state.calculate_max_short_upper_bound()?;
+            let yieldspace_max_delta_bonds = state.calculate_yieldspace_absolute_max_short()?;
             println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
             if yieldspace_max_delta_bonds > biggest_bonds_after_max_short {
                 biggest_bonds_after_max_short = yieldspace_max_delta_bonds;
