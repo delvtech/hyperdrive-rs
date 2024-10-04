@@ -128,7 +128,7 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
 }
 
 /// Conservative and safe estimate of the maximum short.
-fn get_max_short(
+pub fn get_max_short(
     state: State,
     checkpoint_exposure: I256,
     maybe_max_num_tries: Option<usize>,
