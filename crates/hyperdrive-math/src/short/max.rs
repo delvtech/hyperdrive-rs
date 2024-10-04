@@ -716,7 +716,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::{U128, U256};
-    use fixedpointmath::{fixed, uint256};
+    use fixedpointmath::{fixed, fixed_u256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -757,6 +757,7 @@ mod tests {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price()?,
                     checkpoint_exposure,
+                    Some(test_tolerance),
                     Some(max_iterations),
                 )
             }) {
@@ -826,6 +827,63 @@ mod tests {
         Ok(())
     }
 
+    /// Temp test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
+    /// FIXME: rewrite later to be a more meaningful test
+    #[tokio::test]
+    async fn fuzz_calculate_max_short_upper_bound() -> Result<()> {
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+
+        // Spawn a test chain and create the agents.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+
+        // Run the fuzz tests
+        let mut biggest_bonds_after_max_short = fixed_u256!(0);
+        for fuzz_iter in 0..*FUZZ_RUNS {
+            println!("fuzz_iter {:#?}", fuzz_iter);
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+
+            // Initialize the pool.
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            println!("pool initialized...");
+
+            let state = alice.get_state().await?;
+
+            // Get the max.
+            let yieldspace_max_delta_bonds = state.calculate_max_short_upper_bound()?;
+
+            // Open the short.
+            celine.fund(yieldspace_max_delta_bonds).await?;
+            celine.open_short(yieldspace_max_delta_bonds, None, None).await?;
+
+            // Get the max again
+            let yieldspace_max_delta_bonds = state.calculate_max_short_upper_bound()?;
+            println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
+            if yieldspace_max_delta_bonds > biggest_bonds_after_max_short {
+                biggest_bonds_after_max_short = yieldspace_max_delta_bonds;
+            }
+
+            // Revert to the snapshot and reset the agent's wallets.
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
+
+        }
+        println!("biggest_bonds_after_max_short={:#?}", biggest_bonds_after_max_short);
+        assert!(false);
+        Ok(())
+    }
     /// This test ensures that a pool is fully drained after opening a short for
     /// the absolute maximum amount. It also verifies that the absolute maximum
     /// trade returned is always valid.
