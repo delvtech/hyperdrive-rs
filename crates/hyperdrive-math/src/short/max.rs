@@ -38,6 +38,133 @@ impl State {
             .pow(self.time_stretch())
     }
 
+    /// Use Newton's method with rate reduction to find the amount of bonds
+    /// shorted for a given base deposit amount.
+    pub fn calculate_short_bonds_given_deposit(
+        &self,
+        target_base_amount: FixedPoint<U256>,
+        open_vault_share_price: FixedPoint<U256>,
+        absolute_max_bond_amount: FixedPoint<U256>,
+        maybe_tolerance: Option<FixedPoint<U256>>,
+        maybe_max_iterations: Option<usize>,
+    ) -> Result<FixedPoint<U256>> {
+        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
+        let max_iterations = maybe_max_iterations.unwrap_or(500);
+
+        // The max bond amount might be below the pool's minimum.
+        // If so, no short can be opened.
+        if absolute_max_bond_amount < self.minimum_transaction_amount() {
+            return Err(eyre!("No solvent short is possible."));
+        }
+
+        // Figure out the base deposit for the absolute max bond amount.
+        let absolute_max_base_amount =
+            self.calculate_open_short(absolute_max_bond_amount, open_vault_share_price)?;
+        if target_base_amount > absolute_max_base_amount {
+            return Err(eyre!(
+                "Input too large.
+                target_base_amount={:#?}
+                max_base_amount   ={:#?}",
+                target_base_amount,
+                absolute_max_base_amount
+            ));
+        }
+        // If the absolute max is within tolerance, return it.
+        if absolute_max_base_amount - target_base_amount <= tolerance {
+            return Ok(absolute_max_bond_amount);
+        }
+
+        // Compute a conservative estimate of the bonds shorted & base paid.
+        let mut last_good_bond_amount = self.calculate_approximate_short_bonds_given_base_deposit(
+            target_base_amount,
+            open_vault_share_price,
+        )?;
+
+        // Run Newton's Method to adjust the bond amount.
+        let mut loss = FixedPoint::from(U256::MAX);
+        for _ in 0..max_iterations {
+            // Calculate the current deposit.
+            let current_base_amount =
+                self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
+
+            // Calculate the current loss.
+            loss = if current_base_amount < target_base_amount {
+                // It's possible that a nudge from failure cases in the previous
+                // iteration put us within the tolerance.
+                if (target_base_amount - current_base_amount) <= tolerance {
+                    return Ok(last_good_bond_amount);
+                }
+                target_base_amount - current_base_amount
+            } else {
+                current_base_amount - target_base_amount
+            };
+
+            // Calculate the update amount.
+            let base_amount_derivative = self.calculate_open_short_derivative(
+                last_good_bond_amount,
+                open_vault_share_price,
+                Some(self.calculate_spot_price()?),
+            )?;
+            let dy = loss.div_up(base_amount_derivative); // div up to discourage dy == 0
+
+            // Calculate the new bond amount.
+            // The update rule is: y_1 = y_0 - L(x, x_t) / dL(x, x_t)/dy,
+            // where y is the bond amount, x is the base deposit returned by
+            // calculate_open_short(y), x_t is the target deposit, L is the loss
+            // (x_t - x), and dL(x, x_t)/dy = -base_amount_derivative. We avoid
+            // negative numbers using a conditional.
+            let new_bond_amount = if current_base_amount < target_base_amount {
+                last_good_bond_amount + dy
+            } else {
+                last_good_bond_amount - dy
+            };
+
+            // Check solvency with the latest bond amount.
+            match self.calculate_open_short(new_bond_amount, open_vault_share_price) {
+                Ok(new_base_amount) => {
+                    if new_base_amount <= target_base_amount {
+                        last_good_bond_amount = new_bond_amount;
+                    }
+                    // We overshot the zero crossing & the amount was solvent.
+                    // It's possible that we are so close in base amounts that
+                    // dy is zero, but we are still overshooting. In this case,
+                    // nudge the bond amount down by the error and continue.
+                    else {
+                        let error = new_base_amount - target_base_amount;
+                        last_good_bond_amount = new_bond_amount - error;
+                    }
+                }
+                // New bond amount is not solvent. Start again from slightly
+                // below the absolute max.
+                Err(_) => {
+                    // We know abs max is solvent and we know the target bond
+                    // amount is less than the absolute max. So we overshot, but
+                    // we can safely overshoot by less.
+                    if new_bond_amount >= absolute_max_bond_amount {
+                        last_good_bond_amount = absolute_max_bond_amount - tolerance;
+                    } else {
+                        return Err(eyre!(
+                            "current_bond_amount={:#?} is less than the expected absolute_max={:#?}, but still not solvent.",
+                            new_bond_amount,
+                            absolute_max_bond_amount
+                        ));
+                    }
+                }
+            }
+        }
+        // Did not hit tolerance in max iterations.
+        return Err(eyre!(
+            "Could not converge to a bond amount given max iterations = {:#?}.
+            Target base deposit = {:#?}
+            Error               = {:#?}
+            Tolerance           = {:#?}",
+            max_iterations,
+            target_base_amount,
+            loss,
+            tolerance,
+        ));
+    }
+
     // TODO: Make it clear to the consumer that the maximum number of iterations
     // is 2 * max_iterations.
     //
@@ -568,8 +695,101 @@ mod tests {
 
     use super::*;
     use crate::test_utils::{
-        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
+        agent::HyperdriveMathAgent,
+        preamble::{get_max_short, initialize_pool_with_random_state},
     };
+
+    #[tokio::test]
+    async fn fuzz_calculate_short_bonds_given_deposit() -> Result<()> {
+        let test_tolerance = fixed!(1e9);
+        let max_iterations = 500;
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            // TODO: Absolute max doesn't always work. Sometimes the random
+            // state causes an overflow when calculating absolute max.
+            // Unlikely: fix the state generator so that the random state always has a valid max.
+            // Likely: fix absolute max short such that the output is guaranteed to be solvent.
+            match panic::catch_unwind(|| {
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price()?,
+                    checkpoint_exposure,
+                    Some(max_iterations),
+                )
+            }) {
+                Ok(max_bond_no_panic) => {
+                    match max_bond_no_panic {
+                        Ok(absolute_max_bond_amount) => {
+                            // Get random input parameters.
+                            let open_vault_share_price =
+                                rng.gen_range(fixed!(1e5)..=state.vault_share_price());
+                            match panic::catch_unwind(|| {
+                                state.calculate_open_short(
+                                    absolute_max_bond_amount,
+                                    open_vault_share_price,
+                                )
+                            }) {
+                                Ok(result_no_panic) => match result_no_panic {
+                                    Ok(_) => (),
+                                    Err(_) => continue,
+                                },
+                                Err(_) => continue,
+                            }
+                            let max_short_bonds =
+                                match get_max_short(state.clone(), checkpoint_exposure, None) {
+                                    Ok(max_short_trade) => {
+                                        max_short_trade.min(absolute_max_bond_amount)
+                                    }
+                                    Err(_) => continue,
+                                };
+                            let max_short_base = state
+                                .calculate_open_short(max_short_bonds, open_vault_share_price)?;
+                            let target_base_amount =
+                                rng.gen_range(state.minimum_transaction_amount()..=max_short_base);
+                            // Run the function to be tested.
+                            let bond_amount = state.calculate_short_bonds_given_deposit(
+                                target_base_amount,
+                                open_vault_share_price,
+                                absolute_max_bond_amount,
+                                Some(test_tolerance),
+                                Some(max_iterations),
+                            )?;
+                            // Verify outputs.
+                            let computed_base_amount =
+                                state.calculate_open_short(bond_amount, open_vault_share_price)?;
+                            assert!(
+                                target_base_amount >= computed_base_amount,
+                                "target is less than computed base amount:
+                                target_base_amount  ={:#?}
+                                computed_base_amount={:#?}",
+                                target_base_amount,
+                                computed_base_amount
+                            );
+                            assert!(
+                                target_base_amount - computed_base_amount <= test_tolerance,
+                                "target - computed base amounts are greater than tolerance:
+                                error     = {:#?}
+                                tolerance = {:#?}",
+                                target_base_amount - computed_base_amount,
+                                test_tolerance
+                            );
+                        }
+                        Err(_) => continue, // absolute max threw an error
+                    }
+                }
+                Err(_) => continue, // absolute max threw a panic
+            }
+        }
+        Ok(())
+    }
 
     /// This test differentially fuzzes the `calculate_max_short` function against
     /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
