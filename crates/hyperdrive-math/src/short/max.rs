@@ -88,8 +88,6 @@ impl State {
                 self.calculate_open_short(last_good_bond_amount, open_vault_share_price)?;
 
             // Calculate the current loss.
-            // TODO: Loss should **always** go down, but it does not.
-            // Ignoring because fuzz tests are passing; but need to investigate.
             loss = if current_base_amount < target_base_amount {
                 // It's possible that a nudge from failure cases in the previous
                 // iteration put us within the tolerance.
