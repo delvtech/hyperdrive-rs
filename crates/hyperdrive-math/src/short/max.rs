@@ -433,40 +433,51 @@ impl State {
         }
     }
 
-    /// Calculates the max short that can be opened on the YieldSpace curve
-    /// without considering solvency constraints.
+    /// Calculates the max short that can be opened on the YieldSpace curve.
+    /// 
+    /// The share reserve level after the maximum short is:
+    /// 
+    /// ```math
+    /// z_{1} = z_{\text{min}} + \text{max}(\zeta, 0)
+    /// ```
+    /// 
+    /// We use the YieldSpace equation to determine a conservative $\Delta y$.
+    /// 
+    /// ```math
+    /// \begin{aligned}
+    /// k &= \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_1-\zeta) \right)^{1 - t_s} + y_1^{1 - t_s} \\
+    /// \therefore \\
+    /// y_1 &= \left( k - \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_1-\zeta) \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}} \\
+    /// \Delta y_{\text{ys,max}} = y_1 - y_0 & =
+    /// \left( k - \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_{\text{min}} + \text{max}(\zeta, 0) - \zeta) \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
+    /// - y_0
+    /// \end{aligned}
+    /// ``` 
     fn calculate_yieldspace_absolute_max_short(&self) -> Result<FixedPoint<U256>> {
         // We have the twin constraints that $z \geq z_{min}$ and
         // $z - \zeta \geq z_{min}$. Combining these together, we calculate
         // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
-        let optimal_share_reserves = self.minimum_share_reserves()
+        let min_share_reserves = self.minimum_share_reserves()
             + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?;
-
-        // We calculate the optimal bond reserves by solving for the bond
-        // reserves that is implied by the optimal share reserves. We can do
-        // this as follows:
-        //
-        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
-        //                              =>
-        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
-        let optimal_effective_share_reserves =
-            calculate_effective_share_reserves(optimal_share_reserves, self.share_adjustment())?;
-        let optimal_bond_reserves = self.k_down()?
+        let min_effective_share_reserves =
+            calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
+        // Use the minimum share reserves to calculate the final bond reserves.
+        let bond_reserves_inner = self.k_down()?
             - self.vault_share_price().mul_div_up(
                 self.initial_vault_share_price()
-                    .mul_up(optimal_effective_share_reserves)
+                    .mul_up(min_effective_share_reserves)
                     .pow(fixed!(1e18) - self.time_stretch())?,
                 self.initial_vault_share_price(),
             );
-        let optimal_bond_reserves = if optimal_bond_reserves >= fixed!(1e18) {
+        let final_bond_reserves = if bond_reserves_inner >= fixed!(1e18) {
             // Rounding the exponent down results in a smaller outcome.
-            optimal_bond_reserves.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
+            bond_reserves_inner.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
         } else {
             // Rounding the exponent up results in a smaller outcome.
-            optimal_bond_reserves.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
+            bond_reserves_inner.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
         };
-
-        Ok(optimal_bond_reserves - self.bond_reserves())
+        // Return a delta.
+        Ok(final_bond_reserves - self.bond_reserves())
     }
 
     /// Calculates an initial guess for the absolute max short. This is a
@@ -501,21 +512,6 @@ impl State {
         let checkpoint_exposure_shares =
             FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
                 .div_down(self.vault_share_price());
-
-        // z1 = z0 - H(\Delta y) + f(\Delta y)*(1-phi_g)
-        // z1 = max(ze, z) - z_min
-        // (max(ze, z) - z_min) + H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)
-        // H(\Delta y) = z0 - f(\Delta y)*(1-phi_g)  - (max(ze, z) - z_min)
-        // 
-        // k = (c / mu) * (mu * (z' - zeta)) ** (1 - t_s) + y' ** (1 - t_s)
-        // k = (c / mu) * mu**(1-t_s) * (z' - zeta)**(1-t_s) + y' ** (1 - t_s)
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s)) = (z' - zeta)**(1-t_s))
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) = z' - zeta
-        // (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta = z'
-        // \Delta z = H(\Delta y) = z0 - (k - y'**(1 - t_s)) / ((c/mu) * mu**(1-t_s))**(1/(1-t_s)) + zeta
-        //
-        // y' = (k - (c / mu) * (mu * (z' - zeta)) ** (1 - t_s)) ** (1 / (1 - t_s))
-
         // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
         let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
         let guess = self.vault_share_price().mul_down(solvency);
@@ -539,22 +535,9 @@ impl State {
         println!("tolerance={:#?}", tolerance);
 
         // We start by calculating the maximum short that can be opened on the
-        // YieldSpace curve. The Hyperdrive max is less than this.
+        // YieldSpace curve. The Hyperdrive max is greater than this.
         let yieldspace_max_delta_bonds = self.calculate_yieldspace_absolute_max_short()?;
         println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
-        // TODO: Write test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
-        if self
-            .solvency_after_short(yieldspace_max_delta_bonds, checkpoint_exposure)
-            .is_ok()
-        {
-            return Ok(yieldspace_max_delta_bonds);
-        }
-        println!("Not solvent with absolute_max_trade={:#?}", yieldspace_max_delta_bonds);
-        if yieldspace_max_delta_bonds < self.minimum_transaction_amount() {
-            return Err(eyre!(
-                "The YieldSpace max is less than the minimum transaction amount."
-            ));
-        }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
         // solvency $S(\Delta y)$ w.r.t. the amount of bonds shorted $\Delta y$
@@ -640,8 +623,8 @@ impl State {
     ///
     /// ```math
     /// z(\Delta y) = z_0 - \left(
-    ///     P(\Delta y) - \left( \tfrac{c(\Delta y)}{c}
-    ///     - \tfrac{g(\Delta y)}{c} \right)
+    ///     P(\Delta y) - \left( \tfrac{\Phi_c(\Delta y)}{c}
+    ///     - \tfrac{\Phi_g(\Delta y)}{c} \right)
     /// \right)
     /// ```
     ///
@@ -850,61 +833,23 @@ mod tests {
         Ok(())
     }
 
-    /// Temp test to find out how far short of the actual max short we are after returning yieldspace_max_delta_bonds
-    /// FIXME: rewrite later to be a more meaningful test
+    /// Test to ensure that the yieldspace max short is always solvent.
     #[tokio::test]
-    async fn fuzz_calculate_max_short_upper_bound() -> Result<()> {
-        // Set up a random number generator. We use ChaCha8Rng with a randomly
-        // generated seed, which makes it easy to reproduce test failures given
-        // the seed.
-        let mut rng = {
-            let mut rng = thread_rng();
-            let seed = rng.gen();
-            ChaCha8Rng::seed_from_u64(seed)
-        };
-
-        // Spawn a test chain and create the agents.
-        let chain = TestChain::new().await?;
-        let mut alice = chain.alice().await?;
-        let mut bob = chain.bob().await?;
-        let mut celine = chain.celine().await?;
-
-        // Run the fuzz tests
-        let mut biggest_bonds_after_max_short = fixed_u256!(0);
-        for fuzz_iter in 0..*FUZZ_RUNS {
-            println!("fuzz_iter {:#?}", fuzz_iter);
-            // Snapshot the chain.
-            let id = chain.snapshot().await?;
-
-            // Initialize the pool.
-            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
-            println!("pool initialized...");
-
-            let state = alice.get_state().await?;
-
-            // Get the max.
-            let yieldspace_max_delta_bonds: FixedPoint<U256> = state.calculate_yieldspace_absolute_max_short()?;
-
-            // Open the short.
-            celine.fund(yieldspace_max_delta_bonds).await?;
-            celine.open_short(yieldspace_max_delta_bonds, None, None).await?;
-
-            // Get the max again
-            let yieldspace_max_delta_bonds = state.calculate_yieldspace_absolute_max_short()?;
-            println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
-            if yieldspace_max_delta_bonds > biggest_bonds_after_max_short {
-                biggest_bonds_after_max_short = yieldspace_max_delta_bonds;
-            }
-
-            // Revert to the snapshot and reset the agent's wallets.
-            chain.revert(id).await?;
-            alice.reset(Default::default()).await?;
-            bob.reset(Default::default()).await?;
-            celine.reset(Default::default()).await?;
-
+    async fn fuzz_calculate_yieldspace_absolute_max_short() -> Result<()> {
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            }.min(I256::try_from(state.long_exposure())?);
+            let max_short_guess = state.absolute_max_short_guess(state.calculate_spot_price()?, checkpoint_exposure)?;
+            _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
         }
-        println!("biggest_bonds_after_max_short={:#?}", biggest_bonds_after_max_short);
-        assert!(false);
         Ok(())
     }
     /// This test ensures that a pool is fully drained after opening a short for
