@@ -299,7 +299,8 @@ impl State {
     ///     - \frac{\Phi_{g,os}(\Delta y)}{c} \right)
     /// ```
     ///
-    /// Using the definitions of `$P_{\text{lp}}(\Delta y)`$, `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
+    /// Using the definitions of `$P_{\text{lp}}(\Delta y)`$,
+    /// `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
     ///
     /// ```math
     /// \Delta z = z
