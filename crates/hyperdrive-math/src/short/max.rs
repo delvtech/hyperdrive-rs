@@ -453,14 +453,7 @@ impl State {
     /// - y_0
     /// \end{aligned}
     /// ``` 
-    fn calculate_yieldspace_absolute_max_short(&self) -> Result<FixedPoint<U256>> {
-        // We have the twin constraints that $z \geq z_{min}$ and
-        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
-        // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
-        let min_share_reserves = self.minimum_share_reserves()
-            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?;
-        let min_effective_share_reserves =
-            calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
+    fn calculate_yieldspace_absolute_max_short(&self, min_effective_share_reserves: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         // Use the minimum share reserves to calculate the final bond reserves.
         let bond_reserves_inner = self.k_down()?
             - self.vault_share_price().mul_div_up(
@@ -480,44 +473,65 @@ impl State {
         Ok(final_bond_reserves - self.bond_reserves())
     }
 
-    /// Calculates an initial guess for the absolute max short. This is a
-    /// conservative guess that will be less than the true absolute max short,
-    /// which is what we need to start Newton's method.
-    ///
-    /// To calculate our guess, we assume an unrealistically good realized
-    /// price `$p_r$` for opening the short. This allows us to approximate
-    /// `$P(\Delta y) \approx \tfrac{1}{c} \cdot p_r \cdot \Delta y$`. Plugging
-    /// this into our solvency function `$S(\Delta y)$`, we get an approximation
-    /// of our solvency as:
-    ///
-    /// ```math
-    /// S(\Delta y) \approx (z_0 - \tfrac{1}{c} \cdot (
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c}
-    ///     \cdot (1 - p))) - \tfrac{e_0 - max(e_{c}, 0)}{c}
-    ///     - z_{min}
-    /// ```
-    ///
-    /// Setting this equal to zero, we can solve for our initial guess:
-    ///
-    /// ```math
-    /// \Delta y = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
-    ///  }
-    /// ```
     fn absolute_max_short_guess(
         &self,
         spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
-        let checkpoint_exposure_shares =
-            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
-                .div_down(self.vault_share_price());
-        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
-        let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
-        let guess = self.vault_share_price().mul_down(solvency);
-        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
-        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
-        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
+        // We have the twin constraints that $z \geq z_{min}$ and
+        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
+        // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
+        let exposure_shares = {
+            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
+            if self.long_exposure() < checkpoint_exposure {
+                return Err(eyre!(
+                    "expected long_exposure={:#?} >= checkpoint_exposure={:#?}.",
+                    self.long_exposure(),
+                    checkpoint_exposure
+                ));
+            } else {
+                (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+            }
+        };
+        let min_share_reserves = self.minimum_share_reserves()
+            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?
+            + exposure_shares;
+        let min_effective_share_reserves =
+            calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
+        // Compute the adjusted bond amount by breaking it up into parts.
+        // First part is the numerator yieldspace adjustment term (approximately shares given initial bonds).
+        // Round everything down since this is the numerator.
+        let ys_adjustment_numerator_inner = (fixed!(1e18) / self.initial_vault_share_price())
+            * ((self.initial_vault_share_price() / self.vault_share_price())
+            * (self.k_down()? - self.bond_reserves().pow(fixed!(1e18) - self.time_stretch())?));
+        let ys_adjustment_numerator = if ys_adjustment_numerator_inner >= fixed!(1e18) {
+            // Rounding the exponent down results in a smaller outcome.
+            ys_adjustment_numerator_inner.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
+        } else {
+            // Rounding the exponent up results in a smaller outcome.
+            ys_adjustment_numerator_inner.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
+        };
+        // The full numerator term is the yieldspace adjustment minus the desired effective share reserves.
+        let conservative_bond_numerator = ys_adjustment_numerator - min_effective_share_reserves;
+        // The denominator has a similar yieldspace term with a different exponent.
+        // We will adjust rounding behavior since we want terms in the final denominator to be bigger.
+        let ys_adjustment_denominator_inner = fixed!(1e18).div_up(self.initial_vault_share_price())
+            .mul_up(self.initial_vault_share_price().div_up(self.vault_share_price())
+            .mul_up(self.k_up()? - self.bond_reserves().pow(fixed!(1e18) - self.time_stretch())?));
+        let ys_adjustment_denominator = if ys_adjustment_denominator_inner <= fixed!(1e18) {
+            // Rounding the exponent down results in a larger outcome.
+            ys_adjustment_denominator_inner.pow(self.time_stretch().div_down(fixed!(1e18) - self.time_stretch()))?
+        } else {
+            // Rounding the exponent up results in a larger outcome.
+            ys_adjustment_denominator_inner.pow(self.time_stretch().div_up(fixed!(1e18) - self.time_stretch()))?
+        };
+        // The other denominator term is the fee adjustment.
+        // Round the fee adjustment down since it is subtraced from the yieldspace term.
+        let fee_adjustment = self.curve_fee() * (fixed!(1e18) - spot_price) * (fixed!(1e18) - self.governance_lp_fee()) / self.vault_share_price();
+        let conservative_bond_denominator = ys_adjustment_denominator.div_up(self.bond_reserves().pow(self.time_stretch())?) - fee_adjustment;
+        // Round the final calculation down to be as conservative as possible.
+        let conservative_bond_amount = conservative_bond_numerator / conservative_bond_denominator;
+        Ok(conservative_bond_amount)
     }
 
 
@@ -535,8 +549,9 @@ impl State {
         println!("tolerance={:#?}", tolerance);
 
         // We start by calculating the maximum short that can be opened on the
-        // YieldSpace curve. The Hyperdrive max is greater than this.
-        let yieldspace_max_delta_bonds = self.calculate_yieldspace_absolute_max_short()?;
+        // YieldSpace curve.
+        // FIXME: want to use absolute max short guess and never do this.
+        let yieldspace_max_delta_bonds = self.calculate_yieldspace_absolute_max_short(fixed!(0))?;
         println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
 
         // Use Newton's method to iteratively approach a solution. We use pool's
@@ -835,7 +850,7 @@ mod tests {
 
     /// Test to ensure that the yieldspace max short is always solvent.
     #[tokio::test]
-    async fn fuzz_calculate_yieldspace_absolute_max_short() -> Result<()> {
+    async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
@@ -848,10 +863,12 @@ mod tests {
                 }
             }.min(I256::try_from(state.long_exposure())?);
             let max_short_guess = state.absolute_max_short_guess(state.calculate_spot_price()?, checkpoint_exposure)?;
+            println!("max_short_guess={:#?}", max_short_guess);
             _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
         }
         Ok(())
     }
+
     /// This test ensures that a pool is fully drained after opening a short for
     /// the absolute maximum amount. It also verifies that the absolute maximum
     /// trade returned is always valid.
