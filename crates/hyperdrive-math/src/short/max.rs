@@ -433,54 +433,14 @@ impl State {
         }
     }
 
-    /// Calculates the max short that can be opened on the YieldSpace curve.
-    /// 
-    /// The share reserve level after the maximum short is:
-    /// 
-    /// ```math
-    /// z_{1} = z_{\text{min}} + \text{max}(\zeta, 0)
-    /// ```
-    /// 
-    /// We use the YieldSpace equation to determine a conservative $\Delta y$.
-    /// 
-    /// ```math
-    /// \begin{aligned}
-    /// k &= \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_1-\zeta) \right)^{1 - t_s} + y_1^{1 - t_s} \\
-    /// \therefore \\
-    /// y_1 &= \left( k - \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_1-\zeta) \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}} \\
-    /// \Delta y_{\text{ys,max}} = y_1 - y_0 & =
-    /// \left( k - \tfrac{c}{\mu} \cdot \left( \mu \cdot (z_{\text{min}} + \text{max}(\zeta, 0) - \zeta) \right)^{1 - t_s} \right)^{\tfrac{1}{1 - t_s}}
-    /// - y_0
-    /// \end{aligned}
-    /// ``` 
-    fn calculate_yieldspace_absolute_max_short(&self, min_effective_share_reserves: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
-        // Use the minimum share reserves to calculate the final bond reserves.
-        let bond_reserves_inner = self.k_down()?
-            - self.vault_share_price().mul_div_up(
-                self.initial_vault_share_price()
-                    .mul_up(min_effective_share_reserves)
-                    .pow(fixed!(1e18) - self.time_stretch())?,
-                self.initial_vault_share_price(),
-            );
-        let final_bond_reserves = if bond_reserves_inner >= fixed!(1e18) {
-            // Rounding the exponent down results in a smaller outcome.
-            bond_reserves_inner.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
-        } else {
-            // Rounding the exponent up results in a smaller outcome.
-            bond_reserves_inner.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
-        };
-        // Return a delta.
-        Ok(final_bond_reserves - self.bond_reserves())
-    }
-
     fn absolute_max_short_guess(
         &self,
-        spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
-        // We have the twin constraints that $z \geq z_{min}$ and
-        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
-        // the optimal share reserves as $z_{optimal} = z_{min} + max(0, \zeta)$.
+        // We have the twin constraints that $z \geq z_{min} + exposure$ and
+        // $z - \zeta \geq z_{min} + exposure$. Combining these together, we
+        // calculate the effective share reserves after a max short as
+        // $z_{optimal} = z_{min} + max(0, \zeta) + exposure - \zeta$.
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
@@ -498,39 +458,26 @@ impl State {
             + exposure_shares;
         let min_effective_share_reserves =
             calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
-        // Compute the adjusted bond amount by breaking it up into parts.
-        // First part is the numerator yieldspace adjustment term (approximately shares given initial bonds).
-        // Round everything down since this is the numerator.
-        let ys_adjustment_numerator_inner = (fixed!(1e18) / self.initial_vault_share_price())
-            * ((self.initial_vault_share_price() / self.vault_share_price())
-            * (self.k_down()? - self.bond_reserves().pow(fixed!(1e18) - self.time_stretch())?));
-        let ys_adjustment_numerator = if ys_adjustment_numerator_inner >= fixed!(1e18) {
-            // Rounding the exponent down results in a smaller outcome.
-            ys_adjustment_numerator_inner.pow(fixed!(1e18).div_down(fixed!(1e18) - self.time_stretch()))?
+        // We cannot directly solve for a valid delta y that produces the
+        // minimum effective share reserves, so instead we will solve for each
+        // component individually and combine them conservatively.
+        // Fee adjustment.
+        let fee_component = self.curve_fee().mul_up(fixed!(1e18) - self.calculate_spot_price()?).mul_up(fixed!(1e18) - self.governance_lp_fee());
+        let fee_max_delta_bonds = (min_effective_share_reserves * self.vault_share_price()) / fee_component;
+        // YieldSpace absolute max.
+        let ys_max_delta_bonds = self.calculate_max_sell_bonds_in(min_effective_share_reserves)?;
+        // Combine them conservatively.
+        let conservative_bond_amount = if ys_max_delta_bonds > fee_max_delta_bonds {
+            println!("ys_max_delta={:#?} > fee_max_delta={:#?}", ys_max_delta_bonds, fee_max_delta_bonds);
+            // We need to be sure to account for fees, so we can't return the
+            // ys_max. And we need the short principal resulting from this short
+            // to be large enough.
+            ys_max_delta_bonds * fee_max_delta_bonds / ys_max_delta_bonds
         } else {
-            // Rounding the exponent up results in a smaller outcome.
-            ys_adjustment_numerator_inner.pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?
-        };
-        // The full numerator term is the yieldspace adjustment minus the desired effective share reserves.
-        let conservative_bond_numerator = ys_adjustment_numerator - min_effective_share_reserves;
-        // The denominator has a similar yieldspace term with a different exponent.
-        // We will adjust rounding behavior since we want terms in the final denominator to be bigger.
-        let ys_adjustment_denominator_inner = fixed!(1e18).div_up(self.initial_vault_share_price())
-            .mul_up(self.initial_vault_share_price().div_up(self.vault_share_price())
-            .mul_up(self.k_up()? - self.bond_reserves().pow(fixed!(1e18) - self.time_stretch())?));
-        let ys_adjustment_denominator = if ys_adjustment_denominator_inner <= fixed!(1e18) {
-            // Rounding the exponent down results in a larger outcome.
-            ys_adjustment_denominator_inner.pow(self.time_stretch().div_down(fixed!(1e18) - self.time_stretch()))?
-        } else {
-            // Rounding the exponent up results in a larger outcome.
-            ys_adjustment_denominator_inner.pow(self.time_stretch().div_up(fixed!(1e18) - self.time_stretch()))?
-        };
-        // The other denominator term is the fee adjustment.
-        // Round the fee adjustment down since it is subtraced from the yieldspace term.
-        let fee_adjustment = self.curve_fee() * (fixed!(1e18) - spot_price) * (fixed!(1e18) - self.governance_lp_fee()) / self.vault_share_price();
-        let conservative_bond_denominator = ys_adjustment_denominator.div_up(self.bond_reserves().pow(self.time_stretch())?) - fee_adjustment;
-        // Round the final calculation down to be as conservative as possible.
-        let conservative_bond_amount = conservative_bond_numerator / conservative_bond_denominator;
+            println!("ys_max_delta={:#?} <= fee_max_delta={:#?}", ys_max_delta_bonds, fee_max_delta_bonds);
+            ys_max_delta_bonds
+        }.max(self.minimum_transaction_amount());
+        // let conservative_bond_amount = ys_max_delta.min(fee_max_delta).max(self.minimum_transaction_amount());
         Ok(conservative_bond_amount)
     }
 
@@ -551,7 +498,7 @@ impl State {
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
         // FIXME: want to use absolute max short guess and never do this.
-        let yieldspace_max_delta_bonds = self.calculate_yieldspace_absolute_max_short(fixed!(0))?;
+        let yieldspace_max_delta_bonds = self.calculate_max_sell_bonds_in(fixed!(0))?;
         println!("yieldspace_max_delta_bonds={:#?}", yieldspace_max_delta_bonds);
 
         // Use Newton's method to iteratively approach a solution. We use pool's
@@ -575,7 +522,7 @@ impl State {
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
         let mut last_good_bond_amount =
-            self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+            self.absolute_max_short_guess(checkpoint_exposure)?;
         println!("max_short_guess={:#?}", last_good_bond_amount);
         let mut current_bond_amount: FixedPoint<U256>;
         // If the initial guess is insolvent, we need to throw an error.
@@ -862,7 +809,7 @@ mod tests {
                     I256::try_from(value)?
                 }
             }.min(I256::try_from(state.long_exposure())?);
-            let max_short_guess = state.absolute_max_short_guess(state.calculate_spot_price()?, checkpoint_exposure)?;
+            let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
             println!("max_short_guess={:#?}", max_short_guess);
             _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
         }
