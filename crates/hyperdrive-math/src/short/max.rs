@@ -1,4 +1,4 @@
-use ethers::types::{I256, U256};
+use ethers::{types::{I256, U256}, utils::hex::check};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -433,7 +433,7 @@ impl State {
         }
     }
 
-    fn absolute_max_short_guess(
+    fn calculate_min_effective_share_reserves(
         &self,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
@@ -459,26 +459,27 @@ impl State {
             + exposure_shares;
         let min_effective_share_reserves =
             calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
+        Ok(min_effective_share_reserves)
+    }
+
+    fn absolute_max_short_guess(
+        &self,
+        checkpoint_exposure: I256,
+    ) -> Result<FixedPoint<U256>> {
+        // We cannot directly solve for a valid delta y that produces the
+        // minimum effective share reserves, so instead we use a linear
+        // approximation of the YieldSpace component.
+        let min_effective_share_reserves =
+            self.calculate_min_effective_share_reserves(checkpoint_exposure)?;
         println!("min_effective_share_reserves={:#?}", min_effective_share_reserves);
-
-        // // We cannot directly solve for a valid delta y that produces the
-        // // minimum effective share reserves, so instead we use a linear
-        // // approximation of the YieldSpace component.
-        // let ys_max_delta_bonds = self.calculate_yieldspace_absolute_max_short(min_effective_share_reserves)?;
-        // let neg_delta_z = self.effective_share_reserves()? - min_effective_share_reserves;
-        // let neg_ys_slope = neg_delta_z.div_up(ys_max_delta_bonds);
-        // let fee_adjustment = self.curve_fee()
-        //     * (fixed!(1e18) - self.calculate_spot_price()?)
-        //     * (fixed!(1e18) - self.governance_lp_fee())
-        //     / self.vault_share_price();
-        // let conservative_delta_bonds = neg_delta_z / (neg_ys_slope - fee_adjustment);
-        // Ok(conservative_delta_bonds)
-
-        // Round the final calculation down to be as conservative as possible.
         let spot_price_down = self.calculate_spot_price_down()?;
         let spot_price_up = self.calculate_spot_price_up()?;
-        let conservative_bond_amount = (self.vault_share_price() * (self.share_reserves() - min_effective_share_reserves)) / (spot_price_up + self.curve_fee().mul_up(fixed!(1e18) - spot_price_down).mul_up(fixed!(1e18) - self.governance_lp_fee()));
-        Ok(conservative_bond_amount)
+        let fee_component = self.curve_fee().mul_up(fixed!(1e18) - spot_price_down).mul_up(fixed!(1e18) - self.governance_lp_fee());
+        if self.effective_share_reserves()? < min_effective_share_reserves {
+            return Err(eyre!("Current pool share reserves are below the minimum."));
+        }
+        let conservative_bond_delta = (self.vault_share_price() * (self.effective_share_reserves()? - min_effective_share_reserves)) / (spot_price_up + fee_component);
+        Ok(conservative_bond_delta)
     }
 
     /// Calculates the max short that can be opened on the YieldSpace curve.
@@ -839,18 +840,9 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
+        for fuzz_iter in 0..*FAST_FUZZ_RUNS {
+            // Compute a random state and checkpoint exposure.
             let state = rng.gen::<State>();
-            println!("------------");
-            println!("k={:#?}", state.k_down()?);
-            println!("t_s={:#?}", state.time_stretch());
-            println!("u={:#?}", state.initial_vault_share_price());
-            println!("c={:#?}", state.vault_share_price());
-            println!("phi_c={:#?}", state.curve_fee());
-            println!("phi_g={:#?}", state.governance_lp_fee());
-            println!("spot_price={:#?}", state.calculate_spot_price_down()?);
-            println!("y_0={:#?}", state.bond_reserves());
-            println!("z_0={:#?}", state.effective_share_reserves()?);
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
                 if rng.gen() {
@@ -859,8 +851,30 @@ mod tests {
                     I256::try_from(value)?
                 }
             }.min(I256::try_from(state.long_exposure())?);
+            // Make sure a short is possible.
+            if state.effective_share_reserves()? < state.calculate_min_effective_share_reserves(checkpoint_exposure)? {
+                continue
+            }
+            let true_max_short = match get_max_short(state.clone(), checkpoint_exposure, None) {
+                Ok(bond_amount) => bond_amount,
+                Err(_) => continue,
+            };
+            // Compute the guess, check that it is solvent.
             let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
+            println!("------------");
+            println!("fuzz_iter {:#?}", fuzz_iter);
+            println!("k={:#?}", state.k_down()?);
+            println!("t_s={:#?}", state.time_stretch());
+            println!("u={:#?}", state.initial_vault_share_price());
+            println!("c={:#?}", state.vault_share_price());
+            println!("phi_c={:#?}", state.curve_fee());
+            println!("phi_g={:#?}", state.governance_lp_fee());
+            println!("spot_price={:#?}", state.calculate_spot_price_down()?);
+            println!("checkpoint_exposure={:#?}", checkpoint_exposure);
+            println!("y_0={:#?}", state.bond_reserves());
+            println!("z_0={:#?}", state.effective_share_reserves()?);
             println!("max_short_guess={:#?}", max_short_guess);
+            println!("true_max_short ={:#?}", true_max_short);
             _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
         }
         Ok(())
