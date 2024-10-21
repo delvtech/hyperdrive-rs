@@ -299,7 +299,7 @@ impl State {
         // g'(x) = \phi_g \phi_c (1 - p_0)
         let gov_fee_derivative = self.governance_lp_fee()
             * self.curve_fee()
-            * (fixed!(1e18) - self.calculate_spot_price()?);
+            * (fixed!(1e18) - self.calculate_spot_price_down()?);
 
         // a(x) = mu * (z_{e,0} + 1/c (x - g(x))
         let inner_numerator = self.mu()
@@ -401,7 +401,7 @@ impl State {
         }
         let share_delta = ending_share_reserves - self.share_reserves();
         let fees = fixed!(1e18)
-            - (fixed!(1e18) - self.calculate_spot_price()?)
+            - (fixed!(1e18) - self.calculate_spot_price_down()?)
                 * self.curve_fee()
                 * self.governance_lp_fee();
         let base_delta = self.vault_share_price().mul_div_down(share_delta, fees);
@@ -620,7 +620,7 @@ mod tests {
 
             // Check that our resulting price is under the max
             let current_state = alice.get_state().await?;
-            let spot_price_after_long = current_state.calculate_spot_price()?;
+            let spot_price_after_long = current_state.calculate_spot_price_down()?;
             assert!(
                 max_spot_price_before_long > spot_price_after_long,
                 "Resulting price is greater than the max."

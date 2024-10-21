@@ -104,7 +104,7 @@ impl State {
             let base_amount_derivative = self.calculate_open_short_derivative(
                 last_good_bond_amount,
                 open_vault_share_price,
-                Some(self.calculate_spot_price()?),
+                Some(self.calculate_spot_price_down()?),
             )?;
             let dy = loss.div_up(base_amount_derivative); // div up to discourage dy == 0
 
@@ -240,7 +240,7 @@ impl State {
         // Assuming the budget is infinite, find the largest possible short that
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         // The initial guess should be guaranteed correct, and we should only
         // get better from there.
         let absolute_max_bond_amount = self.calculate_absolute_max_short(
@@ -461,18 +461,23 @@ impl State {
             calculate_effective_share_reserves(min_share_reserves, self.share_adjustment())?;
         println!("min_effective_share_reserves={:#?}", min_effective_share_reserves);
 
-        // We cannot directly solve for a valid delta y that produces the
-        // minimum effective share reserves, so instead we use a linear
-        // approximation of the YieldSpace component.
-        let ys_max_delta_bonds = self.calculate_yieldspace_absolute_max_short(min_effective_share_reserves)?;
-        let neg_delta_z = self.effective_share_reserves()? - min_effective_share_reserves;
-        let neg_ys_slope = neg_delta_z.div_up(ys_max_delta_bonds);
-        let fee_adjustment = self.curve_fee()
-            * (fixed!(1e18) - self.calculate_spot_price()?)
-            * (fixed!(1e18) - self.governance_lp_fee())
-            / self.vault_share_price();
-        let conservative_delta_bonds = neg_delta_z / (neg_ys_slope - fee_adjustment);
-        Ok(conservative_delta_bonds)
+        // // We cannot directly solve for a valid delta y that produces the
+        // // minimum effective share reserves, so instead we use a linear
+        // // approximation of the YieldSpace component.
+        // let ys_max_delta_bonds = self.calculate_yieldspace_absolute_max_short(min_effective_share_reserves)?;
+        // let neg_delta_z = self.effective_share_reserves()? - min_effective_share_reserves;
+        // let neg_ys_slope = neg_delta_z.div_up(ys_max_delta_bonds);
+        // let fee_adjustment = self.curve_fee()
+        //     * (fixed!(1e18) - self.calculate_spot_price()?)
+        //     * (fixed!(1e18) - self.governance_lp_fee())
+        //     / self.vault_share_price();
+        // let conservative_delta_bonds = neg_delta_z / (neg_ys_slope - fee_adjustment);
+        // Ok(conservative_delta_bonds)
+
+        // Round the final calculation down to be as conservative as possible.
+        let spot_price = self.calculate_spot_price_down()?;
+        let conservative_bond_amount = (self.vault_share_price() * min_effective_share_reserves) / (spot_price + self.curve_fee().mul_up(fixed!(1e18) - spot_price).mul_up(fixed!(1e18) - self.governance_lp_fee()));
+        Ok(conservative_bond_amount)
     }
 
     /// Calculates the max short that can be opened on the YieldSpace curve.
@@ -757,7 +762,7 @@ mod tests {
             // Likely: fix absolute max short such that the output is guaranteed to be solvent.
             match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(test_tolerance),
                     Some(max_iterations),
@@ -835,13 +840,14 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
+            println!("------------");
             println!("k={:#?}", state.k_down()?);
             println!("t_s={:#?}", state.time_stretch());
             println!("u={:#?}", state.initial_vault_share_price());
             println!("c={:#?}", state.vault_share_price());
             println!("phi_c={:#?}", state.curve_fee());
             println!("phi_g={:#?}", state.governance_lp_fee());
-            println!("spot_price={:#?}", state.calculate_spot_price()?);
+            println!("spot_price={:#?}", state.calculate_spot_price_down()?);
             println!("y_0={:#?}", state.bond_reserves());
             println!("z_0={:#?}", state.effective_share_reserves()?);
             let checkpoint_exposure = {
@@ -899,7 +905,7 @@ mod tests {
                 .await?;
             println!("checkpoint_exposure={:#?}", checkpoint_exposure);
             let absolute_max_short = state.calculate_absolute_max_short(
-                state.calculate_spot_price()?,
+                state.calculate_spot_price_down()?,
                 checkpoint_exposure,
                 Some(tolerance),
                 Some(max_iterations),
@@ -1000,7 +1006,7 @@ mod tests {
             // We need to catch panics because of overflows.
             let rust_max_bond_amount = panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     None,
                     Some(max_iterations),
@@ -1118,7 +1124,7 @@ mod tests {
                 .await?;
 
             let global_max_short_bonds = state.calculate_absolute_max_short(
-                state.calculate_spot_price()?,
+                state.calculate_spot_price_down()?,
                 checkpoint_exposure,
                 None,
                 None,
@@ -1230,7 +1236,7 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price()?,
+                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
                             None,
                             Some(max_iterations),
@@ -1349,7 +1355,7 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price()?,
+                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
                             None,
                             Some(max_iterations),

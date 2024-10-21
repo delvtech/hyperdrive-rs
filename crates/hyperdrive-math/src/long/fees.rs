@@ -18,7 +18,7 @@ impl State {
         // NOTE: Round up to overestimate the curve fee.
         Ok(self
             .curve_fee()
-            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18))
+            .mul_up(fixed!(1e18).div_up(self.calculate_spot_price_down()?) - fixed!(1e18))
             .mul_up(base_amount))
     }
 
@@ -43,7 +43,7 @@ impl State {
         // NOTE: Round down to underestimate the governance curve fee.
         Ok(curve_fee
             .mul_down(self.governance_lp_fee())
-            .mul_down(self.calculate_spot_price()?))
+            .mul_down(self.calculate_spot_price_down()?))
     }
 
     /// Calculates the curve fee paid when closing longs for a given bond
@@ -69,7 +69,7 @@ impl State {
         // NOTE: Round up to overestimate the curve fee.
         Ok(self
             .curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price()?)
+            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?)
             .mul_up(bond_amount)
             .mul_div_up(normalized_time_remaining, self.vault_share_price()))
     }
