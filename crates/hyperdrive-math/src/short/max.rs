@@ -475,8 +475,9 @@ impl State {
         // Ok(conservative_delta_bonds)
 
         // Round the final calculation down to be as conservative as possible.
-        let spot_price = self.calculate_spot_price_down()?;
-        let conservative_bond_amount = (self.vault_share_price() * min_effective_share_reserves) / (spot_price + self.curve_fee().mul_up(fixed!(1e18) - spot_price).mul_up(fixed!(1e18) - self.governance_lp_fee()));
+        let spot_price_down = self.calculate_spot_price_down()?;
+        let spot_price_up = self.calculate_spot_price_up()?;
+        let conservative_bond_amount = (self.vault_share_price() * (self.share_reserves() - min_effective_share_reserves)) / (spot_price_up + self.curve_fee().mul_up(fixed!(1e18) - spot_price_down).mul_up(fixed!(1e18) - self.governance_lp_fee()));
         Ok(conservative_bond_amount)
     }
 
