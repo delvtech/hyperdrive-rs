@@ -128,7 +128,7 @@ impl State {
 
     /// Calculates the pool's spot price.
     pub fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
-        YieldSpace::calculate_spot_price(self)
+        YieldSpace::calculate_spot_price_down(self)
     }
 
     /// Calculate the pool's current spot (aka "fixed") rate.
