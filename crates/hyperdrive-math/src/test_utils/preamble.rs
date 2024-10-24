@@ -163,10 +163,17 @@ pub fn get_max_short(
     }) {
         Ok(max_short_no_panic) => match max_short_no_panic {
             Ok(max_short) => max_short,
-            Err(_) => state.share_reserves() / state.vault_share_price() * fixed!(10e18),
+            Err(error) => {
+                println!("ERR calculating max={:#?}", error);
+                state.share_reserves() / state.vault_share_price() * fixed!(100e18)
+            }
         },
-        Err(_) => state.share_reserves() / state.vault_share_price() * fixed!(10e18),
+        Err(error) => {
+            println!("ERR calculating max={:#?}", error);
+            state.share_reserves() / state.vault_share_price() * fixed!(100e18)
+        }
     };
+    println!("initial_max_short={:#?}", max_short);
     let mut num_tries = 0;
     let mut success = false;
     while !success {
@@ -197,6 +204,7 @@ pub fn get_max_short(
             ));
         }
     }
+    println!("final_max_short  ={:#?}", max_short);
     Ok(max_short)
 }
 

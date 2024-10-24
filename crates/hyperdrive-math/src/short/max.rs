@@ -1,4 +1,4 @@
-use ethers::{types::{I256, U256}, utils::hex::check};
+use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
 use fixedpointmath::{fixed, FixedPoint};
 
@@ -472,13 +472,54 @@ impl State {
         let min_effective_share_reserves =
             self.calculate_min_effective_share_reserves(checkpoint_exposure)?;
         println!("min_effective_share_reserves={:#?}", min_effective_share_reserves);
-        let spot_price_down = self.calculate_spot_price_down()?;
-        let spot_price_up = self.calculate_spot_price_up()?;
-        let fee_component = self.curve_fee().mul_up(fixed!(1e18) - spot_price_down).mul_up(fixed!(1e18) - self.governance_lp_fee());
         if self.effective_share_reserves()? < min_effective_share_reserves {
-            return Err(eyre!("Current pool share reserves are below the minimum."));
+            return Err(eyre!("Current pool share reserves = {:#?} are below the minimum = {:#?}.", self.effective_share_reserves()?, min_effective_share_reserves));
         }
-        let conservative_bond_delta = (self.vault_share_price() * (self.effective_share_reserves()? - min_effective_share_reserves)) / (spot_price_up + fee_component);
+
+        // Use a linear estimate that lies above the YieldSpace curve to
+        // give a conservative price for fees.
+        let deltay_est = self.vault_share_price().div_up(self.calculate_spot_price_down()?)
+            .mul_up(self.effective_share_reserves()? - min_effective_share_reserves);
+        let new_k = self.k_down()? + deltay_est
+            .div_down(self.vault_share_price()).mul_down(self.curve_fee())
+            .mul_down(fixed!(1e18) - self.calculate_spot_price_up()?)
+            .mul_down(fixed!(1e18) - self.governance_lp_fee());
+        println!("k_up   ={:#?}", self.k_up()?);
+        println!("new_k  ={:#?}", new_k);
+        println!("delta_k={:#?}", new_k - self.k_up()?);
+
+        // p* = -c / (dy/dz) = (c * ( z0 - z1 )) / (y1 - y0)
+        let ys_max_delta = (new_k - self.vault_share_price().div_up(self.initial_vault_share_price()) * (self.initial_vault_share_price() * min_effective_share_reserves).pow(fixed!(1e18) - self.time_stretch())?).pow(fixed!(1e18).div_up(fixed!(1e18) - self.time_stretch()))?;
+        println!("ys_max_delta={:#?}", ys_max_delta);
+        let temp_ys = self.calculate_yieldspace_absolute_max_short(min_effective_share_reserves)?;
+        println!("temp_ys     ={:#?}", temp_ys);
+
+        let conservative_price = (self.vault_share_price().mul_up(self.effective_share_reserves()? - min_effective_share_reserves)).div_up(ys_max_delta);
+        println!("conservative_price     ={:#?}", conservative_price);
+        let temp_conservative_price = (self.vault_share_price().mul_up(self.effective_share_reserves()? - min_effective_share_reserves)).div_up(temp_ys);
+        println!("temp_conservative_price={:#?}", temp_conservative_price);
+
+        // fee_component = phi_c * (1 - p*) * (1 - phi_g)
+        let fee_component = self.curve_fee().mul_up(fixed!(1e18) - conservative_price).mul_up(fixed!(1e18) - self.governance_lp_fee());
+        println!("fee_component     ={:#?}", fee_component);
+        let temp_fee_component = self.curve_fee().mul_up(fixed!(1e18) - temp_conservative_price).mul_up(fixed!(1e18) - self.governance_lp_fee());
+        println!("temp_fee_component={:#?}", temp_fee_component);
+        
+        // Use a linear estimate that lies below the YieldSpace curve
+        // to give a conservative estiamte for the YS component.
+        // A Taylor Expansion of the YS curve at (z0,y0) uses the spot price.
+        // dy = (c * ( z0 - z1 )) / (p + fee_component)
+        let conservative_bond_delta = (self.vault_share_price() * (self.effective_share_reserves()? - min_effective_share_reserves)) / (self.calculate_spot_price_up()? + fee_component);
+        println!("conservative_bond_delta     ={:#?}", conservative_bond_delta);
+        let temp_conservative_bond_delta = (self.vault_share_price() * (self.effective_share_reserves()? - min_effective_share_reserves)) / (self.calculate_spot_price_up()? + temp_fee_component);
+        println!("temp_conservative_bond_delta={:#?}", temp_conservative_bond_delta);
+
+        // Check that the delta is not too small for the fees
+        // let ys_delta_shares = self.calculate_short_principal(conservative_bond_delta)?;
+        // let fee_delta_shares = self.calculate_open_short_total_fee_shares(conservative_bond_delta)?;
+        // if self.effective_share_reserves()? < ys_delta_shares + fee_delta_shares {
+        //     return Err(eyre!("Conservative estimate would result in an increase in shares"));
+        // }
         Ok(conservative_bond_delta)
     }
 
@@ -562,9 +603,19 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut last_good_bond_amount =
-            self.absolute_max_short_guess(checkpoint_exposure)?;
-        println!("max_short_guess={:#?}", last_good_bond_amount);
+
+        // FIXME: use new absolute_max_short_guess fn when it is working.
+        let mut last_good_bond_amount = {
+            let checkpoint_exposure_shares =
+            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
+                .div_down(self.vault_share_price());
+            let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
+            let guess = self.vault_share_price().mul_down(solvency);
+            let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
+            let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
+            guess.div_down(spot_price - curve_fee + gov_curve_fee)
+        };
+        println!("last_good_bond_amount={:#?}", last_good_bond_amount);
         let mut current_bond_amount: FixedPoint<U256>;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = FixedPoint::from(U256::MAX);
@@ -724,7 +775,13 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::types::{U128, U256};
+    use crate::PoolConfig;
+    use crate::PoolInfo;
+    use crate::Fees;
+
+    use fixedpointmath::FixedPoint;
+
+    use ethers::types::{Address, U128, U256, I256};
     use fixedpointmath::{fixed, fixed_u256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
@@ -836,11 +893,79 @@ mod tests {
         Ok(())
     }
 
+
+    #[tokio::test]
+    async fn test_calculate_absolute_max_short_guess_edge_case() -> Result<()> {
+        let state = State {
+            info: PoolInfo {
+                share_reserves: U256::from_dec_str("28526080453335706732977755").unwrap(),
+                share_adjustment: I256::from_dec_str("24428980248840370337693857").unwrap(),
+                zombie_base_proceeds: U256::from(0),
+                zombie_share_reserves: U256::from(0),
+                bond_reserves: U256::from_dec_str("426323613141230523847860962").unwrap(),
+                lp_total_supply: U256::from_dec_str("73985371676634982134915414").unwrap(),
+                vault_share_price: U256::from_dec_str("1962354955600979899").unwrap(),
+                longs_outstanding: U256::from_dec_str("22027235178241770272700").unwrap(),
+                long_average_maturity_time: U256::from_dec_str("9666445").unwrap(),
+                shorts_outstanding: U256::from_dec_str("30146242239917472372711").unwrap(),
+                short_average_maturity_time: U256::from_dec_str("1026293").unwrap(),
+                withdrawal_shares_ready_to_withdraw: U256::from_dec_str("63877720613928519883012785").unwrap(),
+                withdrawal_shares_proceeds: U256::from_dec_str("12177800345824131275150").unwrap(),
+                lp_share_price: U256::from_dec_str("1989961584924993312").unwrap(),
+                long_exposure: U256::from_dec_str("18565564552663924390409").unwrap(),
+            },
+            config: PoolConfig {
+                base_token: Address::zero(),
+                vault_shares_token: Address::zero(),
+                linker_factory: Address::zero(),
+                linker_code_hash: [0; 32],
+                initial_vault_share_price: U256::from_dec_str("1408689193397433182").unwrap(),
+                minimum_share_reserves: U256::from_dec_str("867577363202959467").unwrap(),
+                minimum_transaction_amount: U256::from_dec_str("482175743606745159").unwrap(),
+                circuit_breaker_delta: U256::from_dec_str("5605302353257376710").unwrap(),
+                position_duration: U256::from_dec_str("17579452").unwrap(),
+                checkpoint_duration: U256::from_dec_str("54052").unwrap(),
+                time_stretch: U256::from_dec_str("426123972085376913").unwrap(),
+                governance: Address::zero(),
+                fee_collector: Address::zero(),
+                sweep_collector: Address::zero(),
+                checkpoint_rewarder: Address::zero(),
+                fees: Fees {
+                    curve: U256::from_dec_str("188487681258604752").unwrap(),
+                    flat: U256::from_dec_str("175140355315183295").unwrap(),
+                    governance_lp: U256::from_dec_str("40231142812188038").unwrap(),
+                    governance_zombie: U256::from_dec_str("93175147804041760").unwrap(),
+                },
+            },
+        };
+
+        let checkpoint_exposure = I256::from_dec_str("18565564552663924390409").unwrap();
+        let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
+
+        println!("k={:#?}", state.k_down()?);
+        println!("t_s={:#?}", state.time_stretch());
+        println!("u={:#?}", state.initial_vault_share_price());
+        println!("c={:#?}", state.vault_share_price());
+        println!("phi_c={:#?}", state.curve_fee());
+        println!("phi_g={:#?}", state.governance_lp_fee());
+        println!("p={:#?}", state.calculate_spot_price_down()?);
+        println!("checkpoint_exposure={:#?}", checkpoint_exposure);
+        println!("y_0={:#?}", state.bond_reserves());
+        println!("z_0={:#?}", state.effective_share_reserves()?);
+        println!("max_short_guess={:#?}", max_short_guess);
+
+        _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
+
+        Ok(())
+    }
+
     /// Test to ensure that the yieldspace max short is always solvent.
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let mut rng = thread_rng();
         for fuzz_iter in 0..*FAST_FUZZ_RUNS {
+            println!("------------");
+            println!("fuzz_iter {:#?}", fuzz_iter);
             // Compute a random state and checkpoint exposure.
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
@@ -861,20 +986,22 @@ mod tests {
             };
             // Compute the guess, check that it is solvent.
             let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
-            println!("------------");
-            println!("fuzz_iter {:#?}", fuzz_iter);
+            // println!("state.pool_info={:#?}", state.info);
+            // println!("state.pool_config={:#?}", state.config);
             println!("k={:#?}", state.k_down()?);
             println!("t_s={:#?}", state.time_stretch());
             println!("u={:#?}", state.initial_vault_share_price());
             println!("c={:#?}", state.vault_share_price());
             println!("phi_c={:#?}", state.curve_fee());
             println!("phi_g={:#?}", state.governance_lp_fee());
-            println!("spot_price={:#?}", state.calculate_spot_price_down()?);
+            println!("p={:#?}", state.calculate_spot_price_down()?);
             println!("checkpoint_exposure={:#?}", checkpoint_exposure);
             println!("y_0={:#?}", state.bond_reserves());
             println!("z_0={:#?}", state.effective_share_reserves()?);
             println!("max_short_guess={:#?}", max_short_guess);
             println!("true_max_short ={:#?}", true_max_short);
+            let solvency_after_true_max = state.solvency_after_short(true_max_short, checkpoint_exposure)?;
+            println!("solvency_after_true_max={:#?}", solvency_after_true_max);
             _ = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
         }
         Ok(())
