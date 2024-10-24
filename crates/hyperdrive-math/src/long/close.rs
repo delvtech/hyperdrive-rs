@@ -82,7 +82,7 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         let bond_amount = bond_amount.into();
 
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         if spot_price > fixed!(1e18) {
             return Err(eyre!("Negative fixed interest!"));
         }
@@ -231,7 +231,7 @@ mod tests {
             // Ensure curve_fee is smaller than spot_price to avoid overflows
             // on the hyperdrive valuation, as that'd mean having to pay a larger
             // amount of fees than the current value of the long.
-            let spot_price = state.calculate_spot_price()?;
+            let spot_price = state.calculate_spot_price_down()?;
             if state.curve_fee() * (fixed!(1e18) - spot_price) > spot_price {
                 continue;
             }

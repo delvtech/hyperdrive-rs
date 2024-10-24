@@ -28,12 +28,20 @@ pub trait YieldSpace {
     /// The YieldSpace time parameter.
     fn t(&self) -> FixedPoint<U256>;
 
-    // The current spot price ignoring slippage.
-    fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
+    // The current spot price ignoring slippage, rounded down.
+    fn calculate_spot_price_down(&self) -> Result<FixedPoint<U256>> {
         if self.y() <= fixed!(0) {
             return Err(eyre!("expected y={} > 0", self.y()));
         }
         ((self.mu() * self.ze()?) / self.y()).pow(self.t())
+    }
+
+    // The current spot price ignoring slippage, rounded up.
+    fn calculate_spot_price_up(&self) -> Result<FixedPoint<U256>> {
+        if self.y() <= fixed!(0) {
+            return Err(eyre!("expected y={} > 0", self.y()));
+        }
+        ((self.mu().mul_up(self.ze()?)).div_up(self.y())).pow(self.t())
     }
 
     /// Calculates the amount of bonds a user will receive from the pool by

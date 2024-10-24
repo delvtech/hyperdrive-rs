@@ -194,7 +194,7 @@ impl State {
         Ok(fixed!(1e18)
             - self
                 .curve_fee()
-                .mul_up(fixed!(1e18) - self.calculate_spot_price()?))
+                .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?))
     }
 
     /// Calculates the amount of shares the trader will receive after fees for closing a short
@@ -224,7 +224,7 @@ impl State {
             let mut state: State = self.clone();
             state.info.bond_reserves -= bond_reserves_delta.into();
             state.info.share_reserves += share_curve_delta.into();
-            state.calculate_spot_price()?
+            state.calculate_spot_price_down()?
         };
         let max_spot_price = self.calculate_close_short_max_spot_price()?;
         if short_curve_spot_price > max_spot_price {
@@ -244,7 +244,7 @@ impl State {
             let mut state: State = self.clone();
             state.info.bond_reserves -= bond_reserves_delta.into();
             state.info.share_reserves += share_curve_delta_with_fees.into();
-            state.calculate_spot_price()?
+            state.calculate_spot_price_down()?
         };
         if share_curve_delta_with_fees_spot_price > fixed!(1e18) {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
@@ -293,7 +293,7 @@ impl State {
         let open_vault_share_price = open_vault_share_price.into();
         let close_vault_share_price = close_vault_share_price.into();
 
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         if spot_price > fixed!(1e18) {
             return Err(eyre!("Negative fixed interest!"));
         }
@@ -513,7 +513,7 @@ mod tests {
         let state = rng.gen::<State>();
         let result = state.calculate_close_short(
             (state.config.minimum_transaction_amount - 10).into(),
-            state.calculate_spot_price()?,
+            state.calculate_spot_price_down()?,
             state.vault_share_price(),
             0.into(),
             0.into(),
