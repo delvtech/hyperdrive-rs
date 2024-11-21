@@ -607,7 +607,7 @@ impl State {
     /// ```math
     /// e(x) = e_0 - max(e_{c}, 0)
     /// ```
-    fn solvency_after_short(
+    pub fn solvency_after_short(
         &self,
         bond_amount: FixedPoint<U256>,
         checkpoint_exposure: I256,
