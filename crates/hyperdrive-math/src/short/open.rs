@@ -289,7 +289,27 @@ impl State {
         Ok(state)
     }
 
-    /// Calculate the share delta to be applied to the pool after opening a short.
+    /// Calculates the share delta to be applied to the pool after opening a short.
+    ///
+    /// The share delta is given by:
+    ///
+    /// ```math
+    /// \Delta z =
+    ///     P_{\text{lp}}(\Delta y)
+    ///     - \left( \frac{\Phi_{c,os}(\Delta y)}{c}
+    ///     - \frac{\Phi_{g,os}(\Delta y)}{c} \right)
+    /// ```
+    ///
+    /// Using the definitions of `$P_{\text{lp}}(\Delta y)`$,
+    /// `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
+    ///
+    /// ```math
+    /// \Delta z = z
+    ///     - \frac{1}{\mu} \cdot \left(
+    ///     \frac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    ///     \right)^{\frac{1}{1 - t_s}}
+    ///     - \frac{\phi_c \cdot (1 - p) \cdot \Delta y \cdot (1 - \phi_g)}{c}
+    /// ```
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
