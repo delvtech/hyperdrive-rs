@@ -12,7 +12,7 @@ impl State {
     /// share reserves are equal to the minimum share reserves.
     ///
     /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the
-    /// share reserves being equal to `$z_{\text{min}}$` using the current $k$
+    /// share reserves being equal to `$z_{\text{min}}$` using the current `$k$`
     /// value:
     ///
     /// ```math
@@ -271,6 +271,7 @@ impl State {
         let absolute_max_bond_amount = self.calculate_absolute_max_short(
             spot_price,
             checkpoint_exposure,
+            None,
             maybe_max_iterations,
         )?;
         // The max bond amount might be below the pool's minimum. If so, no
@@ -499,17 +500,11 @@ impl State {
         &self,
         spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
+        maybe_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
-        // We start by calculating the maximum short that can be opened on the
-        // YieldSpace curve.
-        let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
-        if self
-            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
-            .is_ok()
-        {
-            return Ok(absolute_max_bond_amount);
-        }
+        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
+        let max_iterations = maybe_max_iterations.unwrap_or(7);
 
         // Use Newton's method to iteratively approach a solution. We use pool's
         // solvency $S(x)$ w.r.t. the amount of bonds shorted $x$ as our
@@ -531,40 +526,49 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(checkpoint_exposure)?;
+        let mut last_good_bond_amount = self.absolute_max_short_guess(checkpoint_exposure)?;
+        let mut current_bond_amount: FixedPoint<U256>;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
-        for _ in 0..maybe_max_iterations.unwrap_or(7) {
-            // TODO: It may be better to gracefully handle crossing over the
-            // root by extending the fixed point math library to handle negative
-            // numbers or even just using an if-statement to handle the negative
-            // numbers.
-            //
-            // Calculate the next iteration of Newton's method. If the candidate
-            // is larger than the absolute max, we've gone too far and something
-            // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative_negation(max_bond_guess) {
-                Ok(derivative) => derivative,
-                Err(_) => break,
-            };
-            let possible_max_bond_amount = max_bond_guess + solvency / derivative;
-            if possible_max_bond_amount > absolute_max_bond_amount {
-                break;
-            }
-
+        for _ in 0..max_iterations {
+            // Calculate the current solvency.
+            let solvency = self.solvency_after_short(last_good_bond_amount, checkpoint_exposure)?;
+            // Calculate the derivative to determine the next iteration of
+            // Newton's method.
+            let solvency_derivative = self.solvency_after_short_derivative(max_bond_guess, spot_price)?;
+            // Round up to discourage dy==0.
+            let dy = solvency.div_up(solvency_derivative);
+            // Update our guess.
+            current_bond_amount = last_good_bond_amount + dy;
             // If the candidate is insolvent, we've gone too far and can stop
             // iterating. Otherwise, we update our guess and continue.
-            solvency =
-                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure) {
+            last_good_bond_amount =
+                match self.solvency_after_short(current_bond_amount, checkpoint_exposure) {
                     Ok(solvency) => {
-                        max_bond_guess = possible_max_bond_amount;
-                        solvency
+                        // If solvency is close enough to zero, return.
+                        if solvency <= tolerance {
+                            return Ok(current_bond_amount);
+                        }
+                        // Otherwise, iterate.
+                        current_bond_amount
                     }
-                    Err(_) => break,
+                    // The new bond amount is not solvent because we overshot.
+                    // Start again from slightly below the last good amount.
+                    Err(_) => {
+                        last_good_bond_amount / fixed!(2e18)
+                    },
                 };
         }
-
-        Ok(max_bond_guess)
+        // We did not find a solution within tolerance in the provided number of
+        // iterations.
+        return Err(eyre!(
+            "Could not converge to a bond amount given max iterations = {:#?}.
+            solvency={:#?}
+            tolerance={:#?}",
+            max_iterations,
+            solvency,
+            tolerance
+        ));
     }
 
     /// Calculates an initial guess for the absolute max short. This is a
@@ -657,8 +661,8 @@ impl State {
     ///
     /// ```math
     /// z(\Delta y) = z_0 - \left(
-    ///     P(\Delta y) - \left( \tfrac{c(\Delta y)}{c}
-    ///     - \tfrac{g(\Delta y)}{c} \right)
+    ///     P(\Delta y) - \left( \tfrac{\Phi_c(\Delta y)}{c}
+    ///     - \tfrac{\Phi_g(\Delta y)}{c} \right)
     /// \right)
     /// ```
     ///
@@ -696,15 +700,14 @@ impl State {
                 pool_share_delta
             ));
         }
-        // Check z - zeta >= z_min.
+        // Need to check that z - zeta >= z_min
         let new_share_reserves = self.share_reserves() - pool_share_delta;
-        let new_effective_share_reserves =
-            calculate_effective_share_reserves(new_share_reserves, self.share_adjustment())?;
+        let new_effective_share_reserves = calculate_effective_share_reserves(new_share_reserves, self.share_adjustment())?;
         if new_effective_share_reserves < self.minimum_share_reserves() {
             return Err(eyre!("Insufficient liquidity. Expected effective_share_reserves={:#?} >= min_share_reserves={:#?}",
             new_effective_share_reserves, self.minimum_share_reserves()));
         }
-        // Check global exposure, which also checks z >= z_min.
+        // Check global exposure. This also ensures z >= z_min.
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
@@ -714,7 +717,6 @@ impl State {
                     checkpoint_exposure
                 ));
             } else {
-                // Div up to make the check more conservative.
                 (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
             }
         };
@@ -766,8 +768,10 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::types::{U128, U256};
-    use fixedpointmath::{fixed, uint256};
+    use fixedpointmath::FixedPoint;
+
+    use ethers::types::{U128, U256, I256};
+    use fixedpointmath::{fixed, fixed_u256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -883,6 +887,7 @@ mod tests {
                 state.calculate_absolute_max_short(
                     state.calculate_spot_price_down()?,
                     checkpoint_exposure,
+                    Some(test_tolerance),
                     Some(max_iterations),
                 )
             }) {
@@ -952,7 +957,7 @@ mod tests {
         Ok(())
     }
 
-    /// Test to ensure that the absolute max short guess is always solvent.
+    /// Test to ensure that the YieldSpace max short is always solvent.
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let solvency_tolerance = fixed!(100_000_000e18);
@@ -968,22 +973,13 @@ mod tests {
                 } else {
                     I256::try_from(value)?
                 }
-            }
-            .min(I256::try_from(state.long_exposure())?);
-
-            let min_share_reserves = state.calculate_min_share_reserves(checkpoint_exposure)?;
+            }.min(I256::try_from(state.long_exposure())?);
 
             // Make sure a short is possible.
-            if state
-                .effective_share_reserves()?
-                .min(state.share_reserves())
-                < min_share_reserves
-            {
-                continue;
+            if state.effective_share_reserves()?.min(state.share_reserves()) < state.calculate_min_share_reserves(checkpoint_exposure)? {
+                continue
             }
-            match state
-                .solvency_after_short(state.minimum_transaction_amount(), checkpoint_exposure)
-            {
+            match state.solvency_after_short(state.minimum_transaction_amount(), checkpoint_exposure) {
                 Ok(_) => (),
                 Err(_) => continue,
             }
@@ -992,7 +988,8 @@ mod tests {
             let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
             let solvency = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
 
-            // Check that the remaining available shares in the pool are below a tolerance.
+            // Check that the remaining available shares in the pool are below a
+            // tolerance.
             assert!(
                 solvency <= solvency_tolerance,
                 "solvency={:#?} > solvency_tolerance={:#?}",
@@ -1001,6 +998,172 @@ mod tests {
             );
         }
 
+        Ok(())
+    }
+
+    /// This test ensures that a pool is fully drained after opening a short for
+    /// the absolute maximum amount. It also verifies that the absolute maximum
+    /// trade returned is always valid.
+    #[tokio::test]
+    async fn fuzz_calculate_absolute_max_short() -> Result<()> {
+        let solvency_tolerance = fixed_u256!(1e9);
+        let max_iterations = 100;
+        // Run the fuzz tests
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            }.min(I256::try_from(state.long_exposure())?);
+
+            // Make sure a short is possible.
+            if state.effective_share_reserves()?.min(state.share_reserves()) < state.calculate_min_share_reserves(checkpoint_exposure)? {
+                continue
+            }
+            match state.solvency_after_short(state.minimum_transaction_amount(), checkpoint_exposure) {
+                Ok(_) => (),
+                Err(_) => continue,
+            }
+
+            // Get the max short.
+            let absolute_max_short = state.calculate_absolute_max_short(
+                state.calculate_spot_price_down()?,
+                checkpoint_exposure,
+                Some(solvency_tolerance),
+                Some(max_iterations),
+            )?;
+
+            // The short should be valid.
+            assert!(absolute_max_short >= state.minimum_transaction_amount());
+
+            // Check that the remaining available shares in the pool are below a tolerance.
+            let solvency = state.solvency_after_short(absolute_max_short, checkpoint_exposure)?;
+            assert!(solvency <= solvency_tolerance, "solvency={:#?} > solvency_tolerance={:#?}", solvency, solvency_tolerance);
+
+            // Get the new state after the trade.
+            let new_state = state.calculate_pool_state_after_open_short(absolute_max_short, None)?;
+            let new_zeta = FixedPoint::from(new_state.share_adjustment());
+
+            // Absolute max short should have drained the pool's share reserves.
+            // If zeta is positive, then the effective share reserves should equal the minimum.
+            if new_zeta > fixed!(0) {
+                assert!(
+                    new_state.effective_share_reserves()? - 
+                    new_state.minimum_share_reserves() <= solvency_tolerance,
+                    "Opening a short for bonds={:#?} should have drained the pool's effective_share_reserves={:#?} to the minimum={:#?}.",
+                    absolute_max_short,
+                    new_state.effective_share_reserves()?,
+                    new_state.minimum_share_reserves(),
+                );
+            }
+            // If zeta is negative, then the share reserves should equal the minimum
+            else {
+                assert!(
+                    new_state.share_reserves()- 
+                    new_state.minimum_share_reserves() <= solvency_tolerance,
+                    "Opening a short for bonds={:#?} should have drained the pool's share_reserves={:#?} to the minimum={:#?}.",
+                    absolute_max_short,
+                    new_state.share_reserves(),
+                    new_state.minimum_share_reserves(),
+                );
+            }
+        }
+        Ok(())
+    }
+
+    /// This test differentially fuzzes the `calculate_max_short` function
+    /// against the Solidity analogue `calculateMaxShort`. `calculateMaxShort`
+    /// doesn't take a trader's budget into account, so it only provides a
+    /// subset of `calculate_max_short`'s functionality. With this in mind, we
+    /// provide `calculate_max_short` with a budget of `U256::MAX` to ensure
+    /// that the two functions are equivalent.
+    #[tokio::test]
+    async fn fuzz_sol_calculate_absolute_max_short() -> Result<()> {
+        // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
+        let sol_correctness_tolerance = fixed!(1e17);
+
+        // Fuzz the rust and solidity implementations against each other.
+        let chain = TestChain::new().await?;
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            let max_iterations = 7;
+            // We need to catch panics because of overflows.
+            let rust_max_bond_amount = panic::catch_unwind(|| {
+                state.calculate_absolute_max_short(
+                    state.calculate_spot_price_down()?,
+                    checkpoint_exposure,
+                    None,
+                    Some(max_iterations),
+                )
+            });
+            // Run the solidity function & compare outputs.
+            match chain
+                .mock_hyperdrive_math()
+                .calculate_max_short(
+                    MaxTradeParams {
+                        share_reserves: state.info.share_reserves,
+                        bond_reserves: state.info.bond_reserves,
+                        longs_outstanding: state.info.longs_outstanding,
+                        long_exposure: state.info.long_exposure,
+                        share_adjustment: state.info.share_adjustment,
+                        time_stretch: state.config.time_stretch,
+                        vault_share_price: state.info.vault_share_price,
+                        initial_vault_share_price: state.config.initial_vault_share_price,
+                        minimum_share_reserves: state.config.minimum_share_reserves,
+                        curve_fee: state.config.fees.curve,
+                        flat_fee: state.config.fees.flat,
+                        governance_lp_fee: state.config.fees.governance_lp,
+                    },
+                    checkpoint_exposure,
+                    max_iterations.into(),
+                )
+                .call()
+                .await
+            {
+                Ok(sol_max_bond_amount) => {
+                    // Make sure the solidity & rust runctions gave the same value.
+                    let rust_max_bonds_unwrapped = rust_max_bond_amount.unwrap().unwrap();
+                    let sol_max_bonds_fp = FixedPoint::from(sol_max_bond_amount);
+                    let error = if sol_max_bonds_fp > rust_max_bonds_unwrapped {
+                        sol_max_bonds_fp - rust_max_bonds_unwrapped
+                    } else {
+                        rust_max_bonds_unwrapped - sol_max_bonds_fp
+                    };
+                    assert!(
+                        error < sol_correctness_tolerance,
+                        "expected abs(solidity_amount={} - rust_amount={})={} < tolerance={}",
+                        sol_max_bonds_fp,
+                        rust_max_bonds_unwrapped,
+                        error,
+                        sol_correctness_tolerance,
+                    );
+                }
+                // Hyperdrive Solidity calculate_max_short threw an error
+                Err(sol_err) => {
+                    assert!(
+                        rust_max_bond_amount.is_err()
+                            || rust_max_bond_amount.as_ref().unwrap().is_err(),
+                        "expected rust_max_short={:#?} to have an error.\nsolidity error={:#?}",
+                        rust_max_bond_amount,
+                        sol_err
+                    );
+                }
+            };
+        }
         Ok(())
     }
 
@@ -1061,6 +1224,7 @@ mod tests {
             let global_max_short_bonds = state.calculate_absolute_max_short(
                 state.calculate_spot_price_down()?,
                 checkpoint_exposure,
+                None,
                 None,
             )?;
 
@@ -1172,6 +1336,7 @@ mod tests {
                         state.calculate_absolute_max_short(
                             state.calculate_spot_price_down()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
@@ -1290,6 +1455,7 @@ mod tests {
                         state.calculate_absolute_max_short(
                             state.calculate_spot_price_down()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
