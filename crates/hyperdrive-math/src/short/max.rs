@@ -12,7 +12,7 @@ impl State {
     /// share reserves are equal to the minimum share reserves.
     ///
     /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the
-    /// share reserves being equal to `$z_{\text{min}}$` using the current k
+    /// share reserves being equal to `$z_{\text{min}}$` using the current $k$
     /// value:
     ///
     /// ```math
@@ -42,10 +42,10 @@ impl State {
     /// Calculate the minimum share reserves allowed by the pool given the
     /// current exposure and share adjustment.
     fn calculate_min_share_reserves(&self, checkpoint_exposure: I256) -> Result<FixedPoint<U256>> {
-        // We have the twin constraints that $z \geq z_{min} + exposure$ and
-        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
+        // We have the twin constraints that `$z \geq z_{min} + exposure$` and
+        // `$z - \zeta \geq z_{min}$`. Combining these together, we calculate
         // the share reserves after a max short as
-        // $z_{optimal} = z_{min} + max(0, \zeta) + exposure$.
+        // `$z_{optimal} = z_{min} + max(0, \zeta) + exposure$`.
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
@@ -531,7 +531,7 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+        let mut max_bond_guess = self.absolute_max_short_guess(checkpoint_exposure)?;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
@@ -572,40 +572,76 @@ impl State {
     /// conservative guess that will be less than the true absolute max short,
     /// which is what we need to start Newton's method.
     ///
-    /// To calculate our guess, we assume an unrealistically good realized
-    /// price `$p_r$` for opening the short. This allows us to approximate
-    /// `$P(\Delta y) \approx \tfrac{1}{c} \cdot p_r \cdot \Delta y$`. Plugging
-    /// this into our solvency function `$S(\Delta y)$`, we get an approximation
-    /// of our solvency as:
+    /// To calculate our guess, we start from the equation for computing the
+    /// final share reserves given an open short for some delta bonds:
     ///
     /// ```math
-    /// S(\Delta y) \approx (z_0 - \tfrac{1}{c} \cdot (
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c}
-    ///     \cdot (1 - p))) - \tfrac{e_0 - max(e_{c}, 0)}{c}
-    ///     - z_{min}
+    ///z_1 = \frac{1}{\mu} \cdot \left( \frac{\mu}{c} \cdot \left( k
+    /// - (y_0 + \Delta y)^{1 - t_s} \right) \right)^{\frac{1}{1 - t_s}}
+    /// + \phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \frac{\Delta y}{c}
     /// ```
     ///
-    /// Setting this equal to zero, we can solve for our initial guess:
+    /// After the open short, this must be greater than or equal to the minimum
+    /// share reserves, `$z_{\text{min}} + \text{max}_(\zeta, 0) + e$`, where
+    /// `$e$` is the pool's current total exposure.
+    ///
+    /// We can solve for a conservative open short bond amount by using a
+    /// conservative linear approximation of the nonlinear YieldSpace term. The
+    /// Taylor Expansion provides such an approximation:
     ///
     /// ```math
-    /// \Delta y = \frac{c \cdot (s_0 + \tfrac{max(e_{c}, 0)}{c})}{
-    ///     p_r - \phi_{c} \cdot (1 - p) + \phi_{g} \cdot \phi_{c} \cdot (1 - p)
-    ///  }
+    /// z_{1,ys} \ge z_0 - \zeta - \frac{p}{c} \cdot \Delta y_{\text{max}}
     /// ```
-    fn absolute_max_short_guess(
-        &self,
-        spot_price: FixedPoint<U256>,
-        checkpoint_exposure: I256,
-    ) -> Result<FixedPoint<U256>> {
-        let checkpoint_exposure_shares =
-            FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?
-                .div_down(self.vault_share_price());
-        // solvency = share_reserves - long_exposure / vault_share_price - min_share_reserves
-        let solvency = self.calculate_solvency()? + checkpoint_exposure_shares;
-        let guess = self.vault_share_price().mul_down(solvency);
-        let curve_fee = self.curve_fee().mul_down(fixed!(1e18) - spot_price);
-        let gov_curve_fee = self.governance_lp_fee().mul_down(curve_fee);
-        Ok(guess.div_down(spot_price - curve_fee + gov_curve_fee))
+    ///
+    /// Using this, we can produce a conservative delta bond estimate:
+    ///
+    /// ```math
+    /// \Delta y_{\text{max}} \ge \Tilde{\Delta y} = \frac{c \cdot \left( z_0
+    ///  \zeta - \left( z_{\text{min}} + \text{max}(\zeta, 0)
+    /// + e \right) \right)}{p + \phi_c \cdot (1 - p) \cdot (1 - \phi_g)}
+    /// ```
+    ///
+    /// While this should always provide a conservative estimate, we include
+    /// an iterative loop that checks solvency and refines the result as a
+    /// precautionary measure.
+    fn absolute_max_short_guess(&self, checkpoint_exposure: I256) -> Result<FixedPoint<U256>> {
+        // We cannot directly solve for a valid delta y that produces the
+        // minimum effective share reserves, so instead we use a linear
+        // approximation of the YieldSpace component.
+        let min_share_reserves = self.calculate_min_share_reserves(checkpoint_exposure)?;
+        if self.effective_share_reserves()? < min_share_reserves {
+            return Err(eyre!(
+                "Current effective pool share reserves = {:#?} are below the minimum = {:#?}.",
+                self.effective_share_reserves(),
+                min_share_reserves
+            ));
+        }
+        // Use a linear estimate that lies below the YieldSpace curve.
+        // -∆z - zeta = z0 - z1 - zeta = z0 - zeta - z1
+        let neg_delta_z_minus_zeta = self.effective_share_reserves()? - min_share_reserves;
+        // ø_c * (1 - ø_g) * (1 - p)
+        let fee_component = self
+            .curve_fee()
+            .mul_up(fixed!(1e18) - self.governance_lp_fee())
+            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?);
+        // (c * (z0 - z1 - zeta)) / (p + ø_c * (1 - ø_g) * (1 - p))
+        let mut conservative_bond_delta = self.vault_share_price().mul_div_up(
+            neg_delta_z_minus_zeta,
+            self.calculate_spot_price_up()? + fee_component,
+        );
+        // Iteratively adjust to ensure solvency.
+        loop {
+            match self.solvency_after_short(conservative_bond_delta, checkpoint_exposure) {
+                Ok(_) => break,
+                Err(_) => {
+                    conservative_bond_delta /= fixed!(2e18);
+                    if conservative_bond_delta < self.minimum_transaction_amount() {
+                        return Ok(self.minimum_transaction_amount());
+                    }
+                }
+            }
+        }
+        Ok(conservative_bond_delta)
     }
 
     /// Calculates the pool's solvency after opening a short.
@@ -880,10 +916,7 @@ mod tests {
             }
 
             // Compute the guess, check that it is solvent.
-            let max_short_guess = state.absolute_max_short_guess(
-                state.calculate_spot_price_down()?,
-                checkpoint_exposure,
-            )?;
+            let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
             let solvency = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
 
             // Check that the remaining available shares in the pool are below a tolerance.
