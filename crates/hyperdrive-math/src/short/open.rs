@@ -274,6 +274,14 @@ impl State {
     /// the reserves are updated such that
     /// `state.bond_reserves += bond_amount` and
     /// `state.share_reserves -= share_amount`.
+    ///
+    /// The pool shares delta is the initial amount minus the short principal
+    /// minus the curve fee, or:
+    ///     ∆z = z0 - z_sp - ø_c,
+    /// from calculate_pool_share_delta_after_open_short:
+    ///     z1 = z0 - ∆z
+    /// therefore,
+    ///     z1 = z0 - (z0 - z_sp - ø_c) = z_sp + ø_c
     pub fn calculate_pool_state_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
@@ -289,7 +297,8 @@ impl State {
         Ok(state)
     }
 
-    /// Calculates the share delta to be applied to the pool after opening a short.
+    /// Calculates the share delta to be applied to the pool after opening a
+    /// short.
     ///
     /// The share delta is given by:
     ///
