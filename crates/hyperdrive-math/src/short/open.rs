@@ -314,23 +314,19 @@ impl State {
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
-        let gov_curve_fee_shares = self
-            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-            .div_up(self.vault_share_price());
+        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
         let short_principal = self.calculate_short_principal(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
-        if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
+        if short_principal < total_fee_shares {
             return Err(eyre!(
                 "short_principal={:#?} is too low to account for fees={:#?}",
                 short_principal,
-                curve_fee_shares - gov_curve_fee_shares
+                total_fee_shares
             ));
         }
-        Ok(short_principal - (curve_fee_shares - gov_curve_fee_shares))
+        Ok(short_principal - total_fee_shares)
     }
 
     /// Calculates the spot price after opening a short.
