@@ -87,7 +87,7 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
     // So we will first attempt to use `calculate_max_long` and then we will double check and reduce
     // the max if necessary.
     let mut max_long = match panic::catch_unwind(|| {
-        state.calculate_max_long(U256::from(U128::MAX), checkpoint_exposure, Some(3))
+        state.calculate_max_long(U256::from(U128::MAX), checkpoint_exposure, Some(5))
     }) {
         Ok(max_long_no_panic) => match max_long_no_panic {
             Ok(max_long_no_err) => max_long_no_err,
@@ -158,7 +158,7 @@ pub fn get_max_short(
             state.vault_share_price(),
             checkpoint_exposure,
             Some(conservative_price),
-            Some(3),
+            Some(5),
         )
     }) {
         Ok(max_short_no_panic) => match max_short_no_panic {
