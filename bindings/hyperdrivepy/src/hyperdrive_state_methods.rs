@@ -38,7 +38,7 @@ impl HyperdriveState {
     }
 
     pub fn calculate_spot_price(&self) -> PyResult<String> {
-        let result_fp = self.state.calculate_spot_price().map_err(|err| {
+        let result_fp = self.state.calculate_spot_price_down().map_err(|err| {
             PyErr::new::<PyValueError, _>(format!("calculate_spot_price: {}", err))
         })?;
         let result = U256::from(result_fp).to_string();

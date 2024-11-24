@@ -104,7 +104,7 @@ impl State {
             let base_amount_derivative = self.calculate_open_short_derivative(
                 last_good_bond_amount,
                 open_vault_share_price,
-                Some(self.calculate_spot_price()?),
+                Some(self.calculate_spot_price_down()?),
             )?;
             let dy = loss.div_up(base_amount_derivative); // div up to discourage dy == 0
 
@@ -240,7 +240,7 @@ impl State {
         // Assuming the budget is infinite, find the largest possible short that
         // can be opened. If the short satisfies the budget, this is the max
         // short amount.
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         // The initial guess should be guaranteed correct, and we should only
         // get better from there.
         let absolute_max_bond_amount = self.calculate_absolute_max_short(
@@ -735,7 +735,7 @@ mod tests {
             // Likely: fix absolute max short such that the output is guaranteed to be solvent.
             match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(max_iterations),
                 )
@@ -854,8 +854,10 @@ mod tests {
             }
 
             // Compute the guess, check that it is solvent.
-            let max_short_guess = state
-                .absolute_max_short_guess(state.calculate_spot_price()?, checkpoint_exposure)?;
+            let max_short_guess = state.absolute_max_short_guess(
+                state.calculate_spot_price_down()?,
+                checkpoint_exposure,
+            )?;
             let solvency = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
 
             // Check that the remaining available shares in the pool are below a tolerance.
@@ -898,7 +900,7 @@ mod tests {
             // We need to catch panics because of overflows.
             let rust_max_bond_amount = panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(max_iterations),
                 )
@@ -1015,7 +1017,7 @@ mod tests {
                 .await?;
 
             let global_max_short_bonds = state.calculate_absolute_max_short(
-                state.calculate_spot_price()?,
+                state.calculate_spot_price_down()?,
                 checkpoint_exposure,
                 None,
             )?;
@@ -1126,7 +1128,7 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price()?,
+                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
                             Some(max_iterations),
                         )
@@ -1244,7 +1246,7 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price()?,
+                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
                             Some(max_iterations),
                         )

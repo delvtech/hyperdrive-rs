@@ -20,7 +20,7 @@ impl State {
             / (fixed!(1e18)
                 + self
                     .curve_fee()
-                    .mul_up(fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18)))
+                    .mul_up(fixed!(1e18).div_up(self.calculate_spot_price_down()?) - fixed!(1e18)))
             .mul_up(fixed!(1e18) - self.flat_fee()))
     }
 
@@ -208,7 +208,7 @@ impl State {
                         + self
                             .curve_fee()
                             .mul_up(
-                                fixed!(1e18).div_up(self.calculate_spot_price()?) - fixed!(1e18),
+                                fixed!(1e18).div_up(self.calculate_spot_price_down()?) - fixed!(1e18),
                             )
                             .mul_up(fixed!(1e18) - self.flat_fee()))
                     .div_up(fixed!(1e18) - self.flat_fee()))
@@ -226,7 +226,7 @@ impl State {
         //
         // y_t = inner * ((1 + curveFee * (1 / p_0 - 1) * (1 - flatFee)) / (1 - flatFee)) ** (1 / t_s)
         let fee_adjustment = self.curve_fee()
-            * (fixed!(1e18) / self.calculate_spot_price()? - fixed!(1e18))
+            * (fixed!(1e18) / self.calculate_spot_price_down()? - fixed!(1e18))
             * (fixed!(1e18) - self.flat_fee());
         let target_bond_reserves = ((fixed!(1e18) + fee_adjustment)
             / (fixed!(1e18) - self.flat_fee()))
@@ -265,7 +265,7 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         // Calculate an initial estimate of the max long by using the spot price as
         // our conservative price.
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         let guess = self.max_long_estimate(spot_price, spot_price, checkpoint_exposure)?;
 
         // We know that the spot price is 1 when the absolute max base amount is
@@ -426,7 +426,7 @@ impl State {
         base_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let derivative = self.calculate_open_long_derivative(base_amount)?;
-        let spot_price = self.calculate_spot_price()?;
+        let spot_price = self.calculate_spot_price_down()?;
         Ok(
             (derivative
                 + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
@@ -485,7 +485,7 @@ mod tests {
                         state.info.share_adjustment,
                     )?
                     .into(),
-                    state.calculate_spot_price()?.into(),
+                    state.calculate_spot_price_down()?.into(),
                 )
                 .call()
                 .await
