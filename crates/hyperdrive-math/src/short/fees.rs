@@ -17,7 +17,7 @@ impl State {
         // NOTE: Round up to overestimate the curve fee.
         Ok(self
             .curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price()?)
+            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?)
             .mul_up(bond_amount))
     }
 
@@ -65,7 +65,7 @@ impl State {
         // NOTE: Round up to overestimate the curve fee.
         Ok(self
             .curve_fee()
-            .mul_up(fixed!(1e18) - self.calculate_spot_price()?)
+            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?)
             .mul_up(bond_amount)
             .mul_div_up(normalized_time_remaining, self.vault_share_price()))
     }

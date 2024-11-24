@@ -91,9 +91,9 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
     }) {
         Ok(max_long_no_panic) => match max_long_no_panic {
             Ok(max_long_no_err) => max_long_no_err,
-            Err(_) => state.bond_reserves() * state.calculate_spot_price()? * fixed!(10e18),
+            Err(_) => state.bond_reserves() * state.calculate_spot_price_down()? * fixed!(10e18),
         },
-        Err(_) => state.bond_reserves() * state.calculate_spot_price()? * fixed!(10e18),
+        Err(_) => state.bond_reserves() * state.calculate_spot_price_down()? * fixed!(10e18),
     };
 
     let mut num_tries = 0;
@@ -143,7 +143,7 @@ pub fn get_max_short(
         // weighted average of the spot price and the minimum possible
         // spot price the pool can quote. We choose the weights so that this
         // is an underestimate of the worst case realized price.
-        let spot_price = state.calculate_spot_price()?;
+        let spot_price = state.calculate_spot_price_down()?;
         let min_price = state.calculate_min_spot_price()?;
 
         // Calculate the linear interpolation.

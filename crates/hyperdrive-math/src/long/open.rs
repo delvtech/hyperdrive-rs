@@ -104,7 +104,7 @@ impl State {
 
         // Finish computing the derivative.
         derivative -=
-            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price()?) - fixed!(1e18));
+            self.curve_fee() * ((fixed!(1e18) / self.calculate_spot_price_down()?) - fixed!(1e18));
 
         Ok(derivative)
     }
@@ -155,7 +155,7 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         let state =
             self.calculate_pool_state_after_open_long(base_amount, maybe_bond_pool_delta)?;
-        state.calculate_spot_price()
+        state.calculate_spot_price_down()
     }
 
     /// Calculate the spot rate after a long has been opened.
@@ -336,7 +336,7 @@ mod tests {
             // Verify that the predicted spot price is equal to the ending spot
             // price. These won't be exactly equal because the vault share price
             // increases between the prediction and opening the long.
-            let actual_spot_price = bob.get_state().await?.calculate_spot_price()?;
+            let actual_spot_price = bob.get_state().await?.calculate_spot_price_down()?;
             let delta = if actual_spot_price > expected_spot_price {
                 actual_spot_price - expected_spot_price
             } else {

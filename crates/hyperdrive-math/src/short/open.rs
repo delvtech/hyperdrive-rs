@@ -195,7 +195,7 @@ impl State {
 
         let spot_price = match maybe_initial_spot_price {
             Some(spot_price) => spot_price,
-            None => self.calculate_spot_price()?,
+            None => self.calculate_spot_price_down()?,
         };
 
         // All of these are in base.
@@ -346,7 +346,7 @@ impl State {
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
-        updated_state.calculate_spot_price()
+        updated_state.calculate_spot_price_down()
     }
 
     /// Calculate the spot rate after a short has been opened.
@@ -475,7 +475,7 @@ impl State {
             self.calculate_short_principal(self.minimum_transaction_amount())?;
         let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
             + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price_down()?);
         let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
             * (shares_deposit + minimum_short_principal);
         Ok(approximate_bond_amount)
@@ -617,7 +617,7 @@ mod tests {
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     None,
                 )
@@ -809,7 +809,7 @@ mod tests {
             let short_deposit_derivative = state.calculate_open_short_derivative(
                 bond_amount,
                 state.vault_share_price(),
-                Some(state.calculate_spot_price()?),
+                Some(state.calculate_spot_price_down()?),
             )?;
 
             // Ensure that the empirical and analytical derivatives match.
@@ -880,7 +880,7 @@ mod tests {
             // Verify that the predicted spot price is equal to the ending spot
             // price.
             let expected_spot_price = state.calculate_spot_price_after_short(bond_amount, None)?;
-            let actual_spot_price = new_state.calculate_spot_price()?;
+            let actual_spot_price = new_state.calculate_spot_price_down()?;
             let abs_spot_price_diff = if actual_spot_price >= expected_spot_price {
                 actual_spot_price - expected_spot_price
             } else {
@@ -922,7 +922,7 @@ mod tests {
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(3),
                 )
@@ -1082,7 +1082,7 @@ mod tests {
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(max_iterations),
                 )

@@ -29,7 +29,7 @@ pub trait YieldSpace {
     fn t(&self) -> FixedPoint<U256>;
 
     // The current spot price ignoring slippage.
-    fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
+    fn calculate_spot_price_down(&self) -> Result<FixedPoint<U256>> {
         if self.y() <= fixed!(0) {
             return Err(eyre!("expected y={} > 0", self.y()));
         }
