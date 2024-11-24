@@ -39,6 +39,31 @@ impl State {
             .pow(self.time_stretch())
     }
 
+    /// Calculate the minimum share reserves allowed by the pool given the
+    /// current exposure and share adjustment.
+    fn calculate_min_share_reserves(&self, checkpoint_exposure: I256) -> Result<FixedPoint<U256>> {
+        // We have the twin constraints that $z \geq z_{min} + exposure$ and
+        // $z - \zeta \geq z_{min}$. Combining these together, we calculate
+        // the share reserves after a max short as
+        // $z_{optimal} = z_{min} + max(0, \zeta) + exposure$.
+        let exposure_shares = {
+            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
+            if self.long_exposure() < checkpoint_exposure {
+                return Err(eyre!(
+                    "expected long_exposure={:#?} >= checkpoint_exposure={:#?}.",
+                    self.long_exposure(),
+                    checkpoint_exposure
+                ));
+            } else {
+                (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
+            }
+        };
+        let min_share_reserves = self.minimum_share_reserves()
+            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?
+            + exposure_shares;
+        Ok(min_share_reserves)
+    }
+
     /// Use Newton's method with rate reduction to find the amount of bonds
     /// shorted for a given base deposit amount.
     pub fn calculate_short_bonds_given_deposit(
@@ -837,18 +862,7 @@ mod tests {
             }
             .min(I256::try_from(state.long_exposure())?);
 
-            // TODO: Move this to its own function.
-            let min_share_reserves = {
-                let exposure_shares = {
-                    let checkpoint_exposure =
-                        FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
-                    (state.long_exposure() - checkpoint_exposure).div_up(state.vault_share_price())
-                };
-                let min_share_reserves = state.minimum_share_reserves()
-                    + FixedPoint::try_from(state.share_adjustment().max(I256::zero()))?
-                    + exposure_shares;
-                min_share_reserves
-            };
+            let min_share_reserves = state.calculate_min_share_reserves(checkpoint_exposure)?;
 
             // Make sure a short is possible.
             if state
