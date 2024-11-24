@@ -806,6 +806,70 @@ mod tests {
         Ok(())
     }
 
+    /// Test to ensure that the absolute max short guess is always solvent.
+    #[tokio::test]
+    async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
+        let solvency_tolerance = fixed!(100_000_000e18);
+
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            // Compute a random state and checkpoint exposure.
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            }
+            .min(I256::try_from(state.long_exposure())?);
+
+            // TODO: Move this to its own function.
+            let min_share_reserves = {
+                let exposure_shares = {
+                    let checkpoint_exposure =
+                        FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
+                    (state.long_exposure() - checkpoint_exposure).div_up(state.vault_share_price())
+                };
+                let min_share_reserves = state.minimum_share_reserves()
+                    + FixedPoint::try_from(state.share_adjustment().max(I256::zero()))?
+                    + exposure_shares;
+                min_share_reserves
+            };
+
+            // Make sure a short is possible.
+            if state
+                .effective_share_reserves()?
+                .min(state.share_reserves())
+                < min_share_reserves
+            {
+                continue;
+            }
+            match state
+                .solvency_after_short(state.minimum_transaction_amount(), checkpoint_exposure)
+            {
+                Ok(_) => (),
+                Err(_) => continue,
+            }
+
+            // Compute the guess, check that it is solvent.
+            let max_short_guess = state
+                .absolute_max_short_guess(state.calculate_spot_price()?, checkpoint_exposure)?;
+            let solvency = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
+
+            // Check that the remaining available shares in the pool are below a tolerance.
+            assert!(
+                solvency <= solvency_tolerance,
+                "solvency={:#?} > solvency_tolerance={:#?}",
+                solvency,
+                solvency_tolerance
+            );
+        }
+
+        Ok(())
+    }
+
     /// This test differentially fuzzes the `calculate_max_short` function against
     /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
     /// a trader's budget into account, so it only provides a subset of
@@ -813,7 +877,7 @@ mod tests {
     /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
     /// functions are equivalent.
     #[tokio::test]
-    async fn fuzz_sol_calculate_max_short_without_budget() -> Result<()> {
+    async fn fuzz_calculate_absolute_max_short() -> Result<()> {
         // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
         let sol_correctness_tolerance = fixed!(1e17);
 
