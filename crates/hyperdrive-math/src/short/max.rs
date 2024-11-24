@@ -626,15 +626,25 @@ impl State {
         bond_amount: FixedPoint<U256>,
         checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
-        let share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
-        if self.share_reserves() < share_delta {
+        let pool_share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
+        // If the share reserves would underflow when the short is opened,
+        // then we revert with an insufficient liquidity error.
+        if self.share_reserves() < pool_share_delta {
             return Err(eyre!(
-                "expected share_reserves={:#?} >= share_delta={:#?}",
+                "Insufficient liquidity. Expected share_reserves={:#?} >= pool_share_delta={:#?}",
                 self.share_reserves(),
-                share_delta
+                pool_share_delta
             ));
         }
-        let new_share_reserves = self.share_reserves() - share_delta;
+        // Check z - zeta >= z_min.
+        let new_share_reserves = self.share_reserves() - pool_share_delta;
+        let new_effective_share_reserves =
+            calculate_effective_share_reserves(new_share_reserves, self.share_adjustment())?;
+        if new_effective_share_reserves < self.minimum_share_reserves() {
+            return Err(eyre!("Insufficient liquidity. Expected effective_share_reserves={:#?} >= min_share_reserves={:#?}",
+            new_effective_share_reserves, self.minimum_share_reserves()));
+        }
+        // Check global exposure, which also checks z >= z_min.
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
@@ -644,13 +654,15 @@ impl State {
                     checkpoint_exposure
                 ));
             } else {
-                (self.long_exposure() - checkpoint_exposure) / self.vault_share_price()
+                // Div up to make the check more conservative.
+                (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
             }
         };
         if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
             Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
-            Err(eyre!("Short would result in an insolvent pool."))
+            Err(eyre!("Insiffucient liquidity. Expected share_reserves={:#?} >- exposure_shares={:#?} + min_share_reserves={:#?}",
+            new_share_reserves, exposure_shares, self.minimum_share_reserves()))
         }
     }
 
@@ -686,7 +698,7 @@ impl State {
         if lhs >= rhs {
             Ok(lhs - rhs)
         } else {
-            Err(eyre!("Invalid derivative."))
+            Err(eyre!("Negative derivative."))
         }
     }
 }
