@@ -493,8 +493,8 @@ impl State {
         Ok(optimal_bond_reserves - self.bond_reserves())
     }
 
-    /// Calculates the absolute max short that can be opened without violating
-    /// the pool's solvency constraints.
+    /// Calculates the absolute max short that can be opened without violating the
+    /// pool's solvency constraints.
     pub fn calculate_absolute_max_short(
         &self,
         spot_price: FixedPoint<U256>,
@@ -503,35 +503,35 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         // We start by calculating the maximum short that can be opened on the
         // YieldSpace curve.
-        let yieldspace_max_delta_bonds = self.calculate_max_short_upper_bound()?;
+        let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
         if self
-            .solvency_after_short(yieldspace_max_delta_bonds, checkpoint_exposure)
+            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
             .is_ok()
         {
-            return Ok(yieldspace_max_delta_bonds);
+            return Ok(absolute_max_bond_amount);
         }
 
         // Use Newton's method to iteratively approach a solution. We use pool's
-        // solvency $S(\Delta y)$ w.r.t. the amount of bonds shorted $\Delta y$
-        // as our objective function, which will converge to the maximum short
-        // amount when $S(\Delta y) = 0$. The derivative of $S(\Delta y)$ is
-        // negative (since solvency decreases as more shorts are opened). We use
-        // the negation of the derivative to side-step handling negatives.
+        // solvency $S(x)$ w.r.t. the amount of bonds shorted $x$ as our
+        // objective function, which will converge to the maximum short amount
+        // when $S(x) = 0$. The derivative of $S(x)$ is negative (since solvency
+        // decreases as more shorts are opened). The fixed point library doesn't
+        // support negative numbers, so we use the negation of the derivative to
+        // side-step the issue.
         //
-        // Given the current guess of $\Delta y_n$, Newton's method gives us an
-        // updated guess of $\Delta y_{n+1}$:
+        // Given the current guess of $x_n$, Newton's method gives us an updated
+        // guess of $x_{n+1}$:
         //
         // ```math
         // \begin{aligned}
-        // \Delta y_{n+1}
-        // &= \Delta y_n - \tfrac{S(\Delta y_n)}{S'(\Delta y_n)} \\
-        // &= \Delta y_n + \tfrac{S(\Delta y_n)}{-S'(\Delta y_n)}
+        // x_{n+1} &= x_n - \tfrac{S(x_n)}{S'(x_n)} \\
+        // &= x_n + \tfrac{S(x_n)}{-S'(x_n)}
         // \end{aligned}
         // ```
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(checkpoint_exposure)?;
+        let mut max_bond_guess = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
@@ -549,7 +549,7 @@ impl State {
                 Err(_) => break,
             };
             let possible_max_bond_amount = max_bond_guess + solvency / derivative;
-            if possible_max_bond_amount > yieldspace_max_delta_bonds {
+            if possible_max_bond_amount > absolute_max_bond_amount {
                 break;
             }
 
