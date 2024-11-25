@@ -208,7 +208,8 @@ impl State {
                         + self
                             .curve_fee()
                             .mul_up(
-                                fixed!(1e18).div_up(self.calculate_spot_price_down()?) - fixed!(1e18),
+                                fixed!(1e18).div_up(self.calculate_spot_price_down()?)
+                                    - fixed!(1e18),
                             )
                             .mul_up(fixed!(1e18) - self.flat_fee()))
                     .div_up(fixed!(1e18) - self.flat_fee()))
