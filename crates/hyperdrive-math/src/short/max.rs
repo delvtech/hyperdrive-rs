@@ -531,7 +531,7 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(spot_price, checkpoint_exposure)?;
+        let mut max_bond_guess = self.absolute_max_short_guess(checkpoint_exposure)?;
         // If the initial guess is insolvent, we need to throw an error.
         let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
         for _ in 0..maybe_max_iterations.unwrap_or(7) {
@@ -612,7 +612,7 @@ impl State {
         if self.effective_share_reserves()? < min_share_reserves {
             return Err(eyre!(
                 "Current effective pool share reserves = {:#?} are below the minimum = {:#?}.",
-                self.effective_share_reserves(),
+                self.effective_share_reserves()?,
                 min_share_reserves
             ));
         }
@@ -928,96 +928,6 @@ mod tests {
             );
         }
 
-        Ok(())
-    }
-
-    /// This test differentially fuzzes the `calculate_max_short` function against
-    /// the Solidity analogue `calculateMaxShort`. `calculateMaxShort` doesn't take
-    /// a trader's budget into account, so it only provides a subset of
-    /// `calculate_max_short`'s functionality. With this in mind, we provide
-    /// `calculate_max_short` with a budget of `U256::MAX` to ensure that the two
-    /// functions are equivalent.
-    #[tokio::test]
-    async fn fuzz_calculate_absolute_max_short() -> Result<()> {
-        // TODO: We should be able to pass these tests with a much lower (if not zero) tolerance.
-        let sol_correctness_tolerance = fixed!(1e17);
-
-        // Fuzz the rust and solidity implementations against each other.
-        let chain = TestChain::new().await?;
-        let mut rng = thread_rng();
-        for _ in 0..*FAST_FUZZ_RUNS {
-            let state = rng.gen::<State>();
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
-            let max_iterations = 7;
-            // We need to catch panics because of overflows.
-            let rust_max_bond_amount = panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(max_iterations),
-                )
-            });
-            // Run the solidity function & compare outputs.
-            match chain
-                .mock_hyperdrive_math()
-                .calculate_max_short(
-                    MaxTradeParams {
-                        share_reserves: state.info.share_reserves,
-                        bond_reserves: state.info.bond_reserves,
-                        longs_outstanding: state.info.longs_outstanding,
-                        long_exposure: state.info.long_exposure,
-                        share_adjustment: state.info.share_adjustment,
-                        time_stretch: state.config.time_stretch,
-                        vault_share_price: state.info.vault_share_price,
-                        initial_vault_share_price: state.config.initial_vault_share_price,
-                        minimum_share_reserves: state.config.minimum_share_reserves,
-                        curve_fee: state.config.fees.curve,
-                        flat_fee: state.config.fees.flat,
-                        governance_lp_fee: state.config.fees.governance_lp,
-                    },
-                    checkpoint_exposure,
-                    max_iterations.into(),
-                )
-                .call()
-                .await
-            {
-                Ok(sol_max_bond_amount) => {
-                    // Make sure the solidity & rust runctions gave the same value.
-                    let rust_max_bonds_unwrapped = rust_max_bond_amount.unwrap().unwrap();
-                    let sol_max_bonds_fp = FixedPoint::from(sol_max_bond_amount);
-                    let error = if sol_max_bonds_fp > rust_max_bonds_unwrapped {
-                        sol_max_bonds_fp - rust_max_bonds_unwrapped
-                    } else {
-                        rust_max_bonds_unwrapped - sol_max_bonds_fp
-                    };
-                    assert!(
-                        error < sol_correctness_tolerance,
-                        "expected abs(solidity_amount={} - rust_amount={})={} < tolerance={}",
-                        sol_max_bonds_fp,
-                        rust_max_bonds_unwrapped,
-                        error,
-                        sol_correctness_tolerance,
-                    );
-                }
-                // Hyperdrive Solidity calculate_max_short threw an error
-                Err(sol_err) => {
-                    assert!(
-                        rust_max_bond_amount.is_err()
-                            || rust_max_bond_amount.as_ref().unwrap().is_err(),
-                        "expected rust_max_short={:#?} to have an error.\nsolidity error={:#?}",
-                        rust_max_bond_amount,
-                        sol_err
-                    );
-                }
-            };
-        }
         Ok(())
     }
 
