@@ -834,6 +834,30 @@ pub mod i_hyperdrive_factory {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("maxCircuitBreakerDelta"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "maxCircuitBreakerDelta",
+                            ),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("maxFees"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -934,6 +958,30 @@ pub mod i_hyperdrive_factory {
                         ::ethers::core::abi::ethabi::Function {
                             name: ::std::borrow::ToOwned::to_owned(
                                 "minCheckpointDuration",
+                            ),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("minCircuitBreakerDelta"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "minCircuitBreakerDelta",
                             ),
                             inputs: ::std::vec![],
                             outputs: ::std::vec![
@@ -1199,6 +1247,30 @@ pub mod i_hyperdrive_factory {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("updateDeployerCoordinatorManager"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "updateDeployerCoordinatorManager",
+                            ),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned(
+                                        "_deployerCoordinatorManager",
+                                    ),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("address"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("updateFeeCollector"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -1335,6 +1407,32 @@ pub mod i_hyperdrive_factory {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("updateMaxCircuitBreakerDelta"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "updateMaxCircuitBreakerDelta",
+                            ),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned(
+                                        "_maxCircuitBreakerDelta",
+                                    ),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("updateMaxFees"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -1446,6 +1544,32 @@ pub mod i_hyperdrive_factory {
                                 ::ethers::core::abi::ethabi::Param {
                                     name: ::std::borrow::ToOwned::to_owned(
                                         "_minCheckpointDuration",
+                                    ),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Uint(
+                                        256usize,
+                                    ),
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("uint256"),
+                                    ),
+                                },
+                            ],
+                            outputs: ::std::vec![],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
+                        },
+                    ],
+                ),
+                (
+                    ::std::borrow::ToOwned::to_owned("updateMinCircuitBreakerDelta"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "updateMinCircuitBreakerDelta",
+                            ),
+                            inputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::borrow::ToOwned::to_owned(
+                                        "_minCircuitBreakerDelta",
                                     ),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Uint(
                                         256usize,
@@ -2794,6 +2918,14 @@ pub mod i_hyperdrive_factory {
                 .method_hash([224, 226, 218, 170], ())
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `maxCircuitBreakerDelta` (0x4554f9a9) function
+        pub fn max_circuit_breaker_delta(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([69, 84, 249, 169], ())
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `maxFees` (0xe83e34b1) function
         pub fn max_fees(&self) -> ::ethers::contract::builders::ContractCall<M, Fees> {
             self.0
@@ -2830,6 +2962,14 @@ pub mod i_hyperdrive_factory {
         ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
             self.0
                 .method_hash([87, 32, 201, 213], ())
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `minCircuitBreakerDelta` (0x1ecda0fe) function
+        pub fn min_circuit_breaker_delta(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<M, ::ethers::core::types::U256> {
+            self.0
+                .method_hash([30, 205, 160, 254], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `minFees` (0xc1722563) function
@@ -2918,6 +3058,15 @@ pub mod i_hyperdrive_factory {
                 .method_hash([154, 242, 82, 98], default_pausers)
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `updateDeployerCoordinatorManager` (0xa98a46db) function
+        pub fn update_deployer_coordinator_manager(
+            &self,
+            deployer_coordinator_manager: ::ethers::core::types::Address,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([169, 138, 70, 219], deployer_coordinator_manager)
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `updateFeeCollector` (0xd2c35ce8) function
         pub fn update_fee_collector(
             &self,
@@ -2972,6 +3121,15 @@ pub mod i_hyperdrive_factory {
                 .method_hash([111, 109, 92, 74], max_checkpoint_duration)
                 .expect("method not found (this should never happen)")
         }
+        ///Calls the contract's `updateMaxCircuitBreakerDelta` (0x84c19aab) function
+        pub fn update_max_circuit_breaker_delta(
+            &self,
+            max_circuit_breaker_delta: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([132, 193, 154, 171], max_circuit_breaker_delta)
+                .expect("method not found (this should never happen)")
+        }
         ///Calls the contract's `updateMaxFees` (0x2885e3ac) function
         pub fn update_max_fees(
             &self,
@@ -3015,6 +3173,15 @@ pub mod i_hyperdrive_factory {
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
                 .method_hash([142, 18, 124, 245], min_checkpoint_duration)
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `updateMinCircuitBreakerDelta` (0x2907d3dd) function
+        pub fn update_min_circuit_breaker_delta(
+            &self,
+            min_circuit_breaker_delta: ::ethers::core::types::U256,
+        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
+            self.0
+                .method_hash([41, 7, 211, 221], min_circuit_breaker_delta)
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `updateMinFees` (0x10d1dc3e) function
@@ -5702,6 +5869,21 @@ pub mod i_hyperdrive_factory {
     )]
     #[ethcall(name = "maxCheckpointDuration", abi = "maxCheckpointDuration()")]
     pub struct MaxCheckpointDurationCall;
+    ///Container type for all input parameters for the `maxCircuitBreakerDelta` function with signature `maxCircuitBreakerDelta()` and selector `0x4554f9a9`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "maxCircuitBreakerDelta", abi = "maxCircuitBreakerDelta()")]
+    pub struct MaxCircuitBreakerDeltaCall;
     ///Container type for all input parameters for the `maxFees` function with signature `maxFees()` and selector `0xe83e34b1`
     #[derive(
         Clone,
@@ -5777,6 +5959,21 @@ pub mod i_hyperdrive_factory {
     )]
     #[ethcall(name = "minCheckpointDuration", abi = "minCheckpointDuration()")]
     pub struct MinCheckpointDurationCall;
+    ///Container type for all input parameters for the `minCircuitBreakerDelta` function with signature `minCircuitBreakerDelta()` and selector `0x1ecda0fe`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "minCircuitBreakerDelta", abi = "minCircuitBreakerDelta()")]
+    pub struct MinCircuitBreakerDeltaCall;
     ///Container type for all input parameters for the `minFees` function with signature `minFees()` and selector `0xc1722563`
     #[derive(
         Clone,
@@ -5945,6 +6142,26 @@ pub mod i_hyperdrive_factory {
     pub struct UpdateDefaultPausersCall {
         pub default_pausers: ::std::vec::Vec<::ethers::core::types::Address>,
     }
+    ///Container type for all input parameters for the `updateDeployerCoordinatorManager` function with signature `updateDeployerCoordinatorManager(address)` and selector `0xa98a46db`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(
+        name = "updateDeployerCoordinatorManager",
+        abi = "updateDeployerCoordinatorManager(address)"
+    )]
+    pub struct UpdateDeployerCoordinatorManagerCall {
+        pub deployer_coordinator_manager: ::ethers::core::types::Address,
+    }
     ///Container type for all input parameters for the `updateFeeCollector` function with signature `updateFeeCollector(address)` and selector `0xd2c35ce8`
     #[derive(
         Clone,
@@ -6053,6 +6270,26 @@ pub mod i_hyperdrive_factory {
     pub struct UpdateMaxCheckpointDurationCall {
         pub max_checkpoint_duration: ::ethers::core::types::U256,
     }
+    ///Container type for all input parameters for the `updateMaxCircuitBreakerDelta` function with signature `updateMaxCircuitBreakerDelta(uint256)` and selector `0x84c19aab`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(
+        name = "updateMaxCircuitBreakerDelta",
+        abi = "updateMaxCircuitBreakerDelta(uint256)"
+    )]
+    pub struct UpdateMaxCircuitBreakerDeltaCall {
+        pub max_circuit_breaker_delta: ::ethers::core::types::U256,
+    }
     ///Container type for all input parameters for the `updateMaxFees` function with signature `updateMaxFees((uint256,uint256,uint256,uint256))` and selector `0x2885e3ac`
     #[derive(
         Clone,
@@ -6149,6 +6386,26 @@ pub mod i_hyperdrive_factory {
     )]
     pub struct UpdateMinCheckpointDurationCall {
         pub min_checkpoint_duration: ::ethers::core::types::U256,
+    }
+    ///Container type for all input parameters for the `updateMinCircuitBreakerDelta` function with signature `updateMinCircuitBreakerDelta(uint256)` and selector `0x2907d3dd`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(
+        name = "updateMinCircuitBreakerDelta",
+        abi = "updateMinCircuitBreakerDelta(uint256)"
+    )]
+    pub struct UpdateMinCircuitBreakerDeltaCall {
+        pub min_circuit_breaker_delta: ::ethers::core::types::U256,
     }
     ///Container type for all input parameters for the `updateMinFees` function with signature `updateMinFees((uint256,uint256,uint256,uint256))` and selector `0x10d1dc3e`
     #[derive(
@@ -6290,11 +6547,13 @@ pub mod i_hyperdrive_factory {
         LinkerCodeHash(LinkerCodeHashCall),
         LinkerFactory(LinkerFactoryCall),
         MaxCheckpointDuration(MaxCheckpointDurationCall),
+        MaxCircuitBreakerDelta(MaxCircuitBreakerDeltaCall),
         MaxFees(MaxFeesCall),
         MaxFixedAPR(MaxFixedAPRCall),
         MaxPositionDuration(MaxPositionDurationCall),
         MaxTimeStretchAPR(MaxTimeStretchAPRCall),
         MinCheckpointDuration(MinCheckpointDurationCall),
+        MinCircuitBreakerDelta(MinCircuitBreakerDeltaCall),
         MinFees(MinFeesCall),
         MinFixedAPR(MinFixedAPRCall),
         MinPositionDuration(MinPositionDurationCall),
@@ -6305,17 +6564,20 @@ pub mod i_hyperdrive_factory {
         UpdateCheckpointDurationResolution(UpdateCheckpointDurationResolutionCall),
         UpdateCheckpointRewarder(UpdateCheckpointRewarderCall),
         UpdateDefaultPausers(UpdateDefaultPausersCall),
+        UpdateDeployerCoordinatorManager(UpdateDeployerCoordinatorManagerCall),
         UpdateFeeCollector(UpdateFeeCollectorCall),
         UpdateGovernance(UpdateGovernanceCall),
         UpdateHyperdriveGovernance(UpdateHyperdriveGovernanceCall),
         UpdateLinkerCodeHash(UpdateLinkerCodeHashCall),
         UpdateLinkerFactory(UpdateLinkerFactoryCall),
         UpdateMaxCheckpointDuration(UpdateMaxCheckpointDurationCall),
+        UpdateMaxCircuitBreakerDelta(UpdateMaxCircuitBreakerDeltaCall),
         UpdateMaxFees(UpdateMaxFeesCall),
         UpdateMaxFixedAPR(UpdateMaxFixedAPRCall),
         UpdateMaxPositionDuration(UpdateMaxPositionDurationCall),
         UpdateMaxTimeStretchAPR(UpdateMaxTimeStretchAPRCall),
         UpdateMinCheckpointDuration(UpdateMinCheckpointDurationCall),
+        UpdateMinCircuitBreakerDelta(UpdateMinCircuitBreakerDeltaCall),
         UpdateMinFees(UpdateMinFeesCall),
         UpdateMinFixedAPR(UpdateMinFixedAPRCall),
         UpdateMinPositionDuration(UpdateMinPositionDurationCall),
@@ -6443,6 +6705,11 @@ pub mod i_hyperdrive_factory {
             ) {
                 return Ok(Self::MaxCheckpointDuration(decoded));
             }
+            if let Ok(decoded) = <MaxCircuitBreakerDeltaCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::MaxCircuitBreakerDelta(decoded));
+            }
             if let Ok(decoded) = <MaxFeesCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -6467,6 +6734,11 @@ pub mod i_hyperdrive_factory {
                 data,
             ) {
                 return Ok(Self::MinCheckpointDuration(decoded));
+            }
+            if let Ok(decoded) = <MinCircuitBreakerDeltaCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::MinCircuitBreakerDelta(decoded));
             }
             if let Ok(decoded) = <MinFeesCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -6518,6 +6790,11 @@ pub mod i_hyperdrive_factory {
             ) {
                 return Ok(Self::UpdateDefaultPausers(decoded));
             }
+            if let Ok(decoded) = <UpdateDeployerCoordinatorManagerCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::UpdateDeployerCoordinatorManager(decoded));
+            }
             if let Ok(decoded) = <UpdateFeeCollectorCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -6548,6 +6825,11 @@ pub mod i_hyperdrive_factory {
             ) {
                 return Ok(Self::UpdateMaxCheckpointDuration(decoded));
             }
+            if let Ok(decoded) = <UpdateMaxCircuitBreakerDeltaCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::UpdateMaxCircuitBreakerDelta(decoded));
+            }
             if let Ok(decoded) = <UpdateMaxFeesCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -6572,6 +6854,11 @@ pub mod i_hyperdrive_factory {
                 data,
             ) {
                 return Ok(Self::UpdateMinCheckpointDuration(decoded));
+            }
+            if let Ok(decoded) = <UpdateMinCircuitBreakerDeltaCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::UpdateMinCircuitBreakerDelta(decoded));
             }
             if let Ok(decoded) = <UpdateMinFeesCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -6676,6 +6963,9 @@ pub mod i_hyperdrive_factory {
                 Self::MaxCheckpointDuration(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::MaxCircuitBreakerDelta(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::MaxFees(element) => ::ethers::core::abi::AbiEncode::encode(element),
                 Self::MaxFixedAPR(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
@@ -6687,6 +6977,9 @@ pub mod i_hyperdrive_factory {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::MinCheckpointDuration(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::MinCircuitBreakerDelta(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::MinFees(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -6715,6 +7008,9 @@ pub mod i_hyperdrive_factory {
                 Self::UpdateDefaultPausers(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::UpdateDeployerCoordinatorManager(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::UpdateFeeCollector(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -6733,6 +7029,9 @@ pub mod i_hyperdrive_factory {
                 Self::UpdateMaxCheckpointDuration(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
+                Self::UpdateMaxCircuitBreakerDelta(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
                 Self::UpdateMaxFees(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
@@ -6746,6 +7045,9 @@ pub mod i_hyperdrive_factory {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::UpdateMinCheckpointDuration(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::UpdateMinCircuitBreakerDelta(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::UpdateMinFees(element) => {
@@ -6823,6 +7125,9 @@ pub mod i_hyperdrive_factory {
                 Self::MaxCheckpointDuration(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::MaxCircuitBreakerDelta(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::MaxFees(element) => ::core::fmt::Display::fmt(element, f),
                 Self::MaxFixedAPR(element) => ::core::fmt::Display::fmt(element, f),
                 Self::MaxPositionDuration(element) => {
@@ -6830,6 +7135,9 @@ pub mod i_hyperdrive_factory {
                 }
                 Self::MaxTimeStretchAPR(element) => ::core::fmt::Display::fmt(element, f),
                 Self::MinCheckpointDuration(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::MinCircuitBreakerDelta(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::MinFees(element) => ::core::fmt::Display::fmt(element, f),
@@ -6852,6 +7160,9 @@ pub mod i_hyperdrive_factory {
                 Self::UpdateDefaultPausers(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::UpdateDeployerCoordinatorManager(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::UpdateFeeCollector(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -6868,6 +7179,9 @@ pub mod i_hyperdrive_factory {
                 Self::UpdateMaxCheckpointDuration(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
+                Self::UpdateMaxCircuitBreakerDelta(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
                 Self::UpdateMaxFees(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpdateMaxFixedAPR(element) => ::core::fmt::Display::fmt(element, f),
                 Self::UpdateMaxPositionDuration(element) => {
@@ -6877,6 +7191,9 @@ pub mod i_hyperdrive_factory {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::UpdateMinCheckpointDuration(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::UpdateMinCircuitBreakerDelta(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::UpdateMinFees(element) => ::core::fmt::Display::fmt(element, f),
@@ -7015,6 +7332,11 @@ pub mod i_hyperdrive_factory {
             Self::MaxCheckpointDuration(value)
         }
     }
+    impl ::core::convert::From<MaxCircuitBreakerDeltaCall> for IHyperdriveFactoryCalls {
+        fn from(value: MaxCircuitBreakerDeltaCall) -> Self {
+            Self::MaxCircuitBreakerDelta(value)
+        }
+    }
     impl ::core::convert::From<MaxFeesCall> for IHyperdriveFactoryCalls {
         fn from(value: MaxFeesCall) -> Self {
             Self::MaxFees(value)
@@ -7038,6 +7360,11 @@ pub mod i_hyperdrive_factory {
     impl ::core::convert::From<MinCheckpointDurationCall> for IHyperdriveFactoryCalls {
         fn from(value: MinCheckpointDurationCall) -> Self {
             Self::MinCheckpointDuration(value)
+        }
+    }
+    impl ::core::convert::From<MinCircuitBreakerDeltaCall> for IHyperdriveFactoryCalls {
+        fn from(value: MinCircuitBreakerDeltaCall) -> Self {
+            Self::MinCircuitBreakerDelta(value)
         }
     }
     impl ::core::convert::From<MinFeesCall> for IHyperdriveFactoryCalls {
@@ -7093,6 +7420,12 @@ pub mod i_hyperdrive_factory {
             Self::UpdateDefaultPausers(value)
         }
     }
+    impl ::core::convert::From<UpdateDeployerCoordinatorManagerCall>
+    for IHyperdriveFactoryCalls {
+        fn from(value: UpdateDeployerCoordinatorManagerCall) -> Self {
+            Self::UpdateDeployerCoordinatorManager(value)
+        }
+    }
     impl ::core::convert::From<UpdateFeeCollectorCall> for IHyperdriveFactoryCalls {
         fn from(value: UpdateFeeCollectorCall) -> Self {
             Self::UpdateFeeCollector(value)
@@ -7125,6 +7458,12 @@ pub mod i_hyperdrive_factory {
             Self::UpdateMaxCheckpointDuration(value)
         }
     }
+    impl ::core::convert::From<UpdateMaxCircuitBreakerDeltaCall>
+    for IHyperdriveFactoryCalls {
+        fn from(value: UpdateMaxCircuitBreakerDeltaCall) -> Self {
+            Self::UpdateMaxCircuitBreakerDelta(value)
+        }
+    }
     impl ::core::convert::From<UpdateMaxFeesCall> for IHyperdriveFactoryCalls {
         fn from(value: UpdateMaxFeesCall) -> Self {
             Self::UpdateMaxFees(value)
@@ -7150,6 +7489,12 @@ pub mod i_hyperdrive_factory {
     for IHyperdriveFactoryCalls {
         fn from(value: UpdateMinCheckpointDurationCall) -> Self {
             Self::UpdateMinCheckpointDuration(value)
+        }
+    }
+    impl ::core::convert::From<UpdateMinCircuitBreakerDeltaCall>
+    for IHyperdriveFactoryCalls {
+        fn from(value: UpdateMinCircuitBreakerDeltaCall) -> Self {
+            Self::UpdateMinCircuitBreakerDelta(value)
         }
     }
     impl ::core::convert::From<UpdateMinFeesCall> for IHyperdriveFactoryCalls {
@@ -7497,6 +7842,20 @@ pub mod i_hyperdrive_factory {
         Hash
     )]
     pub struct MaxCheckpointDurationReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `maxCircuitBreakerDelta` function with signature `maxCircuitBreakerDelta()` and selector `0x4554f9a9`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct MaxCircuitBreakerDeltaReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `maxFees` function with signature `maxFees()` and selector `0xe83e34b1`
     #[derive(
         Clone,
@@ -7567,6 +7926,20 @@ pub mod i_hyperdrive_factory {
         Hash
     )]
     pub struct MinCheckpointDurationReturn(pub ::ethers::core::types::U256);
+    ///Container type for all return fields from the `minCircuitBreakerDelta` function with signature `minCircuitBreakerDelta()` and selector `0x1ecda0fe`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct MinCircuitBreakerDeltaReturn(pub ::ethers::core::types::U256);
     ///Container type for all return fields from the `minFees` function with signature `minFees()` and selector `0xc1722563`
     #[derive(
         Clone,

@@ -112,6 +112,26 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("adminController"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::Function {
+                            name: ::std::borrow::ToOwned::to_owned("adminController"),
+                            inputs: ::std::vec![],
+                            outputs: ::std::vec![
+                                ::ethers::core::abi::ethabi::Param {
+                                    name: ::std::string::String::new(),
+                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
+                                    internal_type: ::core::option::Option::Some(
+                                        ::std::borrow::ToOwned::to_owned("address"),
+                                    ),
+                                },
+                            ],
+                            constant: ::core::option::Option::None,
+                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::View,
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("balanceOf"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -1557,50 +1577,6 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("setCheckpointRewarder"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "setCheckpointRewarder",
-                            ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned(
-                                        "_checkpointRewarder",
-                                    ),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("setFeeCollector"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("setFeeCollector"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_who"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("setGovernance"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Function {
@@ -1627,37 +1603,17 @@ pub mod i_hyperdrive {
                             name: ::std::borrow::ToOwned::to_owned("setPauser"),
                             inputs: ::std::vec![
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("who"),
+                                    name: ::std::string::String::new(),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Address,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("address"),
                                     ),
                                 },
                                 ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("status"),
+                                    name: ::std::string::String::new(),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Bool,
                                     internal_type: ::core::option::Option::Some(
                                         ::std::borrow::ToOwned::to_owned("bool"),
-                                    ),
-                                },
-                            ],
-                            outputs: ::std::vec![],
-                            constant: ::core::option::Option::None,
-                            state_mutability: ::ethers::core::abi::ethabi::StateMutability::NonPayable,
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("setSweepCollector"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Function {
-                            name: ::std::borrow::ToOwned::to_owned("setSweepCollector"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::Param {
-                                    name: ::std::borrow::ToOwned::to_owned("_who"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    internal_type: ::core::option::Option::Some(
-                                        ::std::borrow::ToOwned::to_owned("address"),
                                     ),
                                 },
                             ],
@@ -2119,26 +2075,6 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("CheckpointRewarderUpdated"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "CheckpointRewarderUpdated",
-                            ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned(
-                                        "newCheckpointRewarder",
-                                    ),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    indexed: true,
-                                },
-                            ],
-                            anonymous: false,
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("CloseLong"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Event {
@@ -2370,40 +2306,6 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("FeeCollectorUpdated"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "FeeCollectorUpdated",
-                            ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("newFeeCollector"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    indexed: true,
-                                },
-                            ],
-                            anonymous: false,
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("GovernanceUpdated"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned("GovernanceUpdated"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("newGovernance"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    indexed: true,
-                                },
-                            ],
-                            anonymous: false,
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("Initialize"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Event {
@@ -2603,27 +2505,6 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
-                    ::std::borrow::ToOwned::to_owned("PauserUpdated"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned("PauserUpdated"),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("newPauser"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    indexed: true,
-                                },
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("status"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Bool,
-                                    indexed: false,
-                                },
-                            ],
-                            anonymous: false,
-                        },
-                    ],
-                ),
-                (
                     ::std::borrow::ToOwned::to_owned("RedeemWithdrawalShares"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::Event {
@@ -2760,24 +2641,6 @@ pub mod i_hyperdrive {
                                 },
                                 ::ethers::core::abi::ethabi::EventParam {
                                     name: ::std::borrow::ToOwned::to_owned("target"),
-                                    kind: ::ethers::core::abi::ethabi::ParamType::Address,
-                                    indexed: true,
-                                },
-                            ],
-                            anonymous: false,
-                        },
-                    ],
-                ),
-                (
-                    ::std::borrow::ToOwned::to_owned("SweepCollectorUpdated"),
-                    ::std::vec![
-                        ::ethers::core::abi::ethabi::Event {
-                            name: ::std::borrow::ToOwned::to_owned(
-                                "SweepCollectorUpdated",
-                            ),
-                            inputs: ::std::vec![
-                                ::ethers::core::abi::ethabi::EventParam {
-                                    name: ::std::borrow::ToOwned::to_owned("newSweepCollector"),
                                     kind: ::ethers::core::abi::ethabi::ParamType::Address,
                                     indexed: true,
                                 },
@@ -3199,6 +3062,17 @@ pub mod i_hyperdrive {
                     ],
                 ),
                 (
+                    ::std::borrow::ToOwned::to_owned("UnsafeCastToUint256"),
+                    ::std::vec![
+                        ::ethers::core::abi::ethabi::AbiError {
+                            name: ::std::borrow::ToOwned::to_owned(
+                                "UnsafeCastToUint256",
+                            ),
+                            inputs: ::std::vec![],
+                        },
+                    ],
+                ),
+                (
                     ::std::borrow::ToOwned::to_owned("UnsupportedToken"),
                     ::std::vec![
                         ::ethers::core::abi::ethabi::AbiError {
@@ -3288,6 +3162,17 @@ pub mod i_hyperdrive {
                     [76, 42, 193, 217],
                     (contribution, min_lp_share_price, min_apr, max_apr, options),
                 )
+                .expect("method not found (this should never happen)")
+        }
+        ///Calls the contract's `adminController` (0x950c5d03) function
+        pub fn admin_controller(
+            &self,
+        ) -> ::ethers::contract::builders::ContractCall<
+            M,
+            ::ethers::core::types::Address,
+        > {
+            self.0
+                .method_hash([149, 12, 93, 3], ())
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `balanceOf` (0x3656eec2) function
@@ -3676,24 +3561,6 @@ pub mod i_hyperdrive {
                 .method_hash([162, 44, 180, 101], (operator, approved))
                 .expect("method not found (this should never happen)")
         }
-        ///Calls the contract's `setCheckpointRewarder` (0xa5107626) function
-        pub fn set_checkpoint_rewarder(
-            &self,
-            checkpoint_rewarder: ::ethers::core::types::Address,
-        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([165, 16, 118, 38], checkpoint_rewarder)
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `setFeeCollector` (0xa42dce80) function
-        pub fn set_fee_collector(
-            &self,
-            who: ::ethers::core::types::Address,
-        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([164, 45, 206, 128], who)
-                .expect("method not found (this should never happen)")
-        }
         ///Calls the contract's `setGovernance` (0xab033ea9) function
         pub fn set_governance(
             &self,
@@ -3706,20 +3573,11 @@ pub mod i_hyperdrive {
         ///Calls the contract's `setPauser` (0x7180c8ca) function
         pub fn set_pauser(
             &self,
-            who: ::ethers::core::types::Address,
-            status: bool,
+            p0: ::ethers::core::types::Address,
+            p1: bool,
         ) -> ::ethers::contract::builders::ContractCall<M, ()> {
             self.0
-                .method_hash([113, 128, 200, 202], (who, status))
-                .expect("method not found (this should never happen)")
-        }
-        ///Calls the contract's `setSweepCollector` (0xe4af29d1) function
-        pub fn set_sweep_collector(
-            &self,
-            who: ::ethers::core::types::Address,
-        ) -> ::ethers::contract::builders::ContractCall<M, ()> {
-            self.0
-                .method_hash([228, 175, 41, 209], who)
+                .method_hash([113, 128, 200, 202], (p0, p1))
                 .expect("method not found (this should never happen)")
         }
         ///Calls the contract's `sweep` (0x01681a62) function
@@ -3886,16 +3744,6 @@ pub mod i_hyperdrive {
         > {
             self.0.event()
         }
-        ///Gets the contract's `CheckpointRewarderUpdated` event
-        pub fn checkpoint_rewarder_updated_filter(
-            &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            CheckpointRewarderUpdatedFilter,
-        > {
-            self.0.event()
-        }
         ///Gets the contract's `CloseLong` event
         pub fn close_long_filter(
             &self,
@@ -3933,26 +3781,6 @@ pub mod i_hyperdrive {
             ::std::sync::Arc<M>,
             M,
             CreateCheckpointFilter,
-        > {
-            self.0.event()
-        }
-        ///Gets the contract's `FeeCollectorUpdated` event
-        pub fn fee_collector_updated_filter(
-            &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            FeeCollectorUpdatedFilter,
-        > {
-            self.0.event()
-        }
-        ///Gets the contract's `GovernanceUpdated` event
-        pub fn governance_updated_filter(
-            &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            GovernanceUpdatedFilter,
         > {
             self.0.event()
         }
@@ -3996,16 +3824,6 @@ pub mod i_hyperdrive {
         > {
             self.0.event()
         }
-        ///Gets the contract's `PauserUpdated` event
-        pub fn pauser_updated_filter(
-            &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            PauserUpdatedFilter,
-        > {
-            self.0.event()
-        }
         ///Gets the contract's `RedeemWithdrawalShares` event
         pub fn redeem_withdrawal_shares_filter(
             &self,
@@ -4030,16 +3848,6 @@ pub mod i_hyperdrive {
         pub fn sweep_filter(
             &self,
         ) -> ::ethers::contract::builders::Event<::std::sync::Arc<M>, M, SweepFilter> {
-            self.0.event()
-        }
-        ///Gets the contract's `SweepCollectorUpdated` event
-        pub fn sweep_collector_updated_filter(
-            &self,
-        ) -> ::ethers::contract::builders::Event<
-            ::std::sync::Arc<M>,
-            M,
-            SweepCollectorUpdatedFilter,
-        > {
             self.0.event()
         }
         ///Gets the contract's `TransferSingle` event
@@ -4623,6 +4431,21 @@ pub mod i_hyperdrive {
     )]
     #[etherror(name = "UnsafeCastToUint128", abi = "UnsafeCastToUint128()")]
     pub struct UnsafeCastToUint128;
+    ///Custom Error type `UnsafeCastToUint256` with signature `UnsafeCastToUint256()` and selector `0xe3a26e20`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthError,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[etherror(name = "UnsafeCastToUint256", abi = "UnsafeCastToUint256()")]
+    pub struct UnsafeCastToUint256;
     ///Custom Error type `UnsupportedToken` with signature `UnsupportedToken()` and selector `0x6a172882`
     #[derive(
         Clone,
@@ -4703,6 +4526,7 @@ pub mod i_hyperdrive {
         UnsafeCastToInt256(UnsafeCastToInt256),
         UnsafeCastToUint112(UnsafeCastToUint112),
         UnsafeCastToUint128(UnsafeCastToUint128),
+        UnsafeCastToUint256(UnsafeCastToUint256),
         UnsupportedToken(UnsupportedToken),
         UpdateLiquidityFailed(UpdateLiquidityFailed),
         /// The standard solidity revert string, with selector
@@ -4899,6 +4723,11 @@ pub mod i_hyperdrive {
             ) {
                 return Ok(Self::UnsafeCastToUint128(decoded));
             }
+            if let Ok(decoded) = <UnsafeCastToUint256 as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::UnsafeCastToUint256(decoded));
+            }
             if let Ok(decoded) = <UnsupportedToken as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -5021,6 +4850,9 @@ pub mod i_hyperdrive {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::UnsafeCastToUint128(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::UnsafeCastToUint256(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::UnsupportedToken(element) => {
@@ -5168,6 +5000,10 @@ pub mod i_hyperdrive {
                     true
                 }
                 _ if selector
+                    == <UnsafeCastToUint256 as ::ethers::contract::EthError>::selector() => {
+                    true
+                }
+                _ if selector
                     == <UnsupportedToken as ::ethers::contract::EthError>::selector() => {
                     true
                 }
@@ -5260,6 +5096,9 @@ pub mod i_hyperdrive {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::UnsafeCastToUint128(element) => {
+                    ::core::fmt::Display::fmt(element, f)
+                }
+                Self::UnsafeCastToUint256(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::UnsupportedToken(element) => ::core::fmt::Display::fmt(element, f),
@@ -5456,6 +5295,11 @@ pub mod i_hyperdrive {
             Self::UnsafeCastToUint128(value)
         }
     }
+    impl ::core::convert::From<UnsafeCastToUint256> for IHyperdriveErrors {
+        fn from(value: UnsafeCastToUint256) -> Self {
+            Self::UnsafeCastToUint256(value)
+        }
+    }
     impl ::core::convert::From<UnsupportedToken> for IHyperdriveErrors {
         fn from(value: UnsupportedToken) -> Self {
             Self::UnsupportedToken(value)
@@ -5531,26 +5375,6 @@ pub mod i_hyperdrive {
         #[ethevent(indexed)]
         pub operator: ::ethers::core::types::Address,
         pub approved: bool,
-    }
-    #[derive(
-        Clone,
-        ::ethers::contract::EthEvent,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[ethevent(
-        name = "CheckpointRewarderUpdated",
-        abi = "CheckpointRewarderUpdated(address)"
-    )]
-    pub struct CheckpointRewarderUpdatedFilter {
-        #[ethevent(indexed)]
-        pub new_checkpoint_rewarder: ::ethers::core::types::Address,
     }
     #[derive(
         Clone,
@@ -5673,40 +5497,6 @@ pub mod i_hyperdrive {
         Eq,
         Hash
     )]
-    #[ethevent(name = "FeeCollectorUpdated", abi = "FeeCollectorUpdated(address)")]
-    pub struct FeeCollectorUpdatedFilter {
-        #[ethevent(indexed)]
-        pub new_fee_collector: ::ethers::core::types::Address,
-    }
-    #[derive(
-        Clone,
-        ::ethers::contract::EthEvent,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[ethevent(name = "GovernanceUpdated", abi = "GovernanceUpdated(address)")]
-    pub struct GovernanceUpdatedFilter {
-        #[ethevent(indexed)]
-        pub new_governance: ::ethers::core::types::Address,
-    }
-    #[derive(
-        Clone,
-        ::ethers::contract::EthEvent,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
     #[ethevent(
         name = "Initialize",
         abi = "Initialize(address,uint256,uint256,uint256,bool,uint256,bytes)"
@@ -5806,24 +5596,6 @@ pub mod i_hyperdrive {
         Eq,
         Hash
     )]
-    #[ethevent(name = "PauserUpdated", abi = "PauserUpdated(address,bool)")]
-    pub struct PauserUpdatedFilter {
-        #[ethevent(indexed)]
-        pub new_pauser: ::ethers::core::types::Address,
-        pub status: bool,
-    }
-    #[derive(
-        Clone,
-        ::ethers::contract::EthEvent,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
     #[ethevent(
         name = "RedeemWithdrawalShares",
         abi = "RedeemWithdrawalShares(address,address,uint256,uint256,uint256,bool,bytes)"
@@ -5899,23 +5671,6 @@ pub mod i_hyperdrive {
         Eq,
         Hash
     )]
-    #[ethevent(name = "SweepCollectorUpdated", abi = "SweepCollectorUpdated(address)")]
-    pub struct SweepCollectorUpdatedFilter {
-        #[ethevent(indexed)]
-        pub new_sweep_collector: ::ethers::core::types::Address,
-    }
-    #[derive(
-        Clone,
-        ::ethers::contract::EthEvent,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
     #[ethevent(
         name = "TransferSingle",
         abi = "TransferSingle(address,address,address,uint256,uint256)"
@@ -5945,22 +5700,17 @@ pub mod i_hyperdrive {
         AddLiquidityFilter(AddLiquidityFilter),
         ApprovalFilter(ApprovalFilter),
         ApprovalForAllFilter(ApprovalForAllFilter),
-        CheckpointRewarderUpdatedFilter(CheckpointRewarderUpdatedFilter),
         CloseLongFilter(CloseLongFilter),
         CloseShortFilter(CloseShortFilter),
         CollectGovernanceFeeFilter(CollectGovernanceFeeFilter),
         CreateCheckpointFilter(CreateCheckpointFilter),
-        FeeCollectorUpdatedFilter(FeeCollectorUpdatedFilter),
-        GovernanceUpdatedFilter(GovernanceUpdatedFilter),
         InitializeFilter(InitializeFilter),
         OpenLongFilter(OpenLongFilter),
         OpenShortFilter(OpenShortFilter),
         PauseStatusUpdatedFilter(PauseStatusUpdatedFilter),
-        PauserUpdatedFilter(PauserUpdatedFilter),
         RedeemWithdrawalSharesFilter(RedeemWithdrawalSharesFilter),
         RemoveLiquidityFilter(RemoveLiquidityFilter),
         SweepFilter(SweepFilter),
-        SweepCollectorUpdatedFilter(SweepCollectorUpdatedFilter),
         TransferSingleFilter(TransferSingleFilter),
     }
     impl ::ethers::contract::EthLogDecode for IHyperdriveEvents {
@@ -5976,9 +5726,6 @@ pub mod i_hyperdrive {
             if let Ok(decoded) = ApprovalForAllFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::ApprovalForAllFilter(decoded));
             }
-            if let Ok(decoded) = CheckpointRewarderUpdatedFilter::decode_log(log) {
-                return Ok(IHyperdriveEvents::CheckpointRewarderUpdatedFilter(decoded));
-            }
             if let Ok(decoded) = CloseLongFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::CloseLongFilter(decoded));
             }
@@ -5990,12 +5737,6 @@ pub mod i_hyperdrive {
             }
             if let Ok(decoded) = CreateCheckpointFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::CreateCheckpointFilter(decoded));
-            }
-            if let Ok(decoded) = FeeCollectorUpdatedFilter::decode_log(log) {
-                return Ok(IHyperdriveEvents::FeeCollectorUpdatedFilter(decoded));
-            }
-            if let Ok(decoded) = GovernanceUpdatedFilter::decode_log(log) {
-                return Ok(IHyperdriveEvents::GovernanceUpdatedFilter(decoded));
             }
             if let Ok(decoded) = InitializeFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::InitializeFilter(decoded));
@@ -6009,9 +5750,6 @@ pub mod i_hyperdrive {
             if let Ok(decoded) = PauseStatusUpdatedFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::PauseStatusUpdatedFilter(decoded));
             }
-            if let Ok(decoded) = PauserUpdatedFilter::decode_log(log) {
-                return Ok(IHyperdriveEvents::PauserUpdatedFilter(decoded));
-            }
             if let Ok(decoded) = RedeemWithdrawalSharesFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::RedeemWithdrawalSharesFilter(decoded));
             }
@@ -6020,9 +5758,6 @@ pub mod i_hyperdrive {
             }
             if let Ok(decoded) = SweepFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::SweepFilter(decoded));
-            }
-            if let Ok(decoded) = SweepCollectorUpdatedFilter::decode_log(log) {
-                return Ok(IHyperdriveEvents::SweepCollectorUpdatedFilter(decoded));
             }
             if let Ok(decoded) = TransferSingleFilter::decode_log(log) {
                 return Ok(IHyperdriveEvents::TransferSingleFilter(decoded));
@@ -6040,9 +5775,6 @@ pub mod i_hyperdrive {
                 Self::ApprovalForAllFilter(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::CheckpointRewarderUpdatedFilter(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
                 Self::CloseLongFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CloseShortFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::CollectGovernanceFeeFilter(element) => {
@@ -6051,19 +5783,10 @@ pub mod i_hyperdrive {
                 Self::CreateCheckpointFilter(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
-                Self::FeeCollectorUpdatedFilter(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::GovernanceUpdatedFilter(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
                 Self::InitializeFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OpenLongFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::OpenShortFilter(element) => ::core::fmt::Display::fmt(element, f),
                 Self::PauseStatusUpdatedFilter(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::PauserUpdatedFilter(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::RedeemWithdrawalSharesFilter(element) => {
@@ -6073,9 +5796,6 @@ pub mod i_hyperdrive {
                     ::core::fmt::Display::fmt(element, f)
                 }
                 Self::SweepFilter(element) => ::core::fmt::Display::fmt(element, f),
-                Self::SweepCollectorUpdatedFilter(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
                 Self::TransferSingleFilter(element) => {
                     ::core::fmt::Display::fmt(element, f)
                 }
@@ -6095,11 +5815,6 @@ pub mod i_hyperdrive {
     impl ::core::convert::From<ApprovalForAllFilter> for IHyperdriveEvents {
         fn from(value: ApprovalForAllFilter) -> Self {
             Self::ApprovalForAllFilter(value)
-        }
-    }
-    impl ::core::convert::From<CheckpointRewarderUpdatedFilter> for IHyperdriveEvents {
-        fn from(value: CheckpointRewarderUpdatedFilter) -> Self {
-            Self::CheckpointRewarderUpdatedFilter(value)
         }
     }
     impl ::core::convert::From<CloseLongFilter> for IHyperdriveEvents {
@@ -6122,16 +5837,6 @@ pub mod i_hyperdrive {
             Self::CreateCheckpointFilter(value)
         }
     }
-    impl ::core::convert::From<FeeCollectorUpdatedFilter> for IHyperdriveEvents {
-        fn from(value: FeeCollectorUpdatedFilter) -> Self {
-            Self::FeeCollectorUpdatedFilter(value)
-        }
-    }
-    impl ::core::convert::From<GovernanceUpdatedFilter> for IHyperdriveEvents {
-        fn from(value: GovernanceUpdatedFilter) -> Self {
-            Self::GovernanceUpdatedFilter(value)
-        }
-    }
     impl ::core::convert::From<InitializeFilter> for IHyperdriveEvents {
         fn from(value: InitializeFilter) -> Self {
             Self::InitializeFilter(value)
@@ -6152,11 +5857,6 @@ pub mod i_hyperdrive {
             Self::PauseStatusUpdatedFilter(value)
         }
     }
-    impl ::core::convert::From<PauserUpdatedFilter> for IHyperdriveEvents {
-        fn from(value: PauserUpdatedFilter) -> Self {
-            Self::PauserUpdatedFilter(value)
-        }
-    }
     impl ::core::convert::From<RedeemWithdrawalSharesFilter> for IHyperdriveEvents {
         fn from(value: RedeemWithdrawalSharesFilter) -> Self {
             Self::RedeemWithdrawalSharesFilter(value)
@@ -6170,11 +5870,6 @@ pub mod i_hyperdrive {
     impl ::core::convert::From<SweepFilter> for IHyperdriveEvents {
         fn from(value: SweepFilter) -> Self {
             Self::SweepFilter(value)
-        }
-    }
-    impl ::core::convert::From<SweepCollectorUpdatedFilter> for IHyperdriveEvents {
-        fn from(value: SweepCollectorUpdatedFilter) -> Self {
-            Self::SweepCollectorUpdatedFilter(value)
         }
     }
     impl ::core::convert::From<TransferSingleFilter> for IHyperdriveEvents {
@@ -6221,6 +5916,21 @@ pub mod i_hyperdrive {
         pub max_apr: ::ethers::core::types::U256,
         pub options: Options,
     }
+    ///Container type for all input parameters for the `adminController` function with signature `adminController()` and selector `0x950c5d03`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthCall,
+        ::ethers::contract::EthDisplay,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    #[ethcall(name = "adminController", abi = "adminController()")]
+    pub struct AdminControllerCall;
     ///Container type for all input parameters for the `balanceOf` function with signature `balanceOf(uint256,address)` and selector `0x3656eec2`
     #[derive(
         Clone,
@@ -6890,40 +6600,6 @@ pub mod i_hyperdrive {
         pub operator: ::ethers::core::types::Address,
         pub approved: bool,
     }
-    ///Container type for all input parameters for the `setCheckpointRewarder` function with signature `setCheckpointRewarder(address)` and selector `0xa5107626`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[ethcall(name = "setCheckpointRewarder", abi = "setCheckpointRewarder(address)")]
-    pub struct SetCheckpointRewarderCall {
-        pub checkpoint_rewarder: ::ethers::core::types::Address,
-    }
-    ///Container type for all input parameters for the `setFeeCollector` function with signature `setFeeCollector(address)` and selector `0xa42dce80`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[ethcall(name = "setFeeCollector", abi = "setFeeCollector(address)")]
-    pub struct SetFeeCollectorCall {
-        pub who: ::ethers::core::types::Address,
-    }
     ///Container type for all input parameters for the `setGovernance` function with signature `setGovernance(address)` and selector `0xab033ea9`
     #[derive(
         Clone,
@@ -6955,27 +6631,7 @@ pub mod i_hyperdrive {
         Hash
     )]
     #[ethcall(name = "setPauser", abi = "setPauser(address,bool)")]
-    pub struct SetPauserCall {
-        pub who: ::ethers::core::types::Address,
-        pub status: bool,
-    }
-    ///Container type for all input parameters for the `setSweepCollector` function with signature `setSweepCollector(address)` and selector `0xe4af29d1`
-    #[derive(
-        Clone,
-        ::ethers::contract::EthCall,
-        ::ethers::contract::EthDisplay,
-        serde::Serialize,
-        serde::Deserialize,
-        Default,
-        Debug,
-        PartialEq,
-        Eq,
-        Hash
-    )]
-    #[ethcall(name = "setSweepCollector", abi = "setSweepCollector(address)")]
-    pub struct SetSweepCollectorCall {
-        pub who: ::ethers::core::types::Address,
-    }
+    pub struct SetPauserCall(pub ::ethers::core::types::Address, pub bool);
     ///Container type for all input parameters for the `sweep` function with signature `sweep(address)` and selector `0x01681a62`
     #[derive(
         Clone,
@@ -7208,6 +6864,7 @@ pub mod i_hyperdrive {
     pub enum IHyperdriveCalls {
         PermitTypehash(PermitTypehashCall),
         AddLiquidity(AddLiquidityCall),
+        AdminController(AdminControllerCall),
         BalanceOf(BalanceOfCall),
         BaseToken(BaseTokenCall),
         BatchTransferFrom(BatchTransferFromCall),
@@ -7244,11 +6901,8 @@ pub mod i_hyperdrive {
         SetApproval(SetApprovalCall),
         SetApprovalBridge(SetApprovalBridgeCall),
         SetApprovalForAll(SetApprovalForAllCall),
-        SetCheckpointRewarder(SetCheckpointRewarderCall),
-        SetFeeCollector(SetFeeCollectorCall),
         SetGovernance(SetGovernanceCall),
         SetPauser(SetPauserCall),
-        SetSweepCollector(SetSweepCollectorCall),
         Sweep(SweepCall),
         Symbol(SymbolCall),
         Target0(Target0Call),
@@ -7277,6 +6931,11 @@ pub mod i_hyperdrive {
                 data,
             ) {
                 return Ok(Self::AddLiquidity(decoded));
+            }
+            if let Ok(decoded) = <AdminControllerCall as ::ethers::core::abi::AbiDecode>::decode(
+                data,
+            ) {
+                return Ok(Self::AdminController(decoded));
             }
             if let Ok(decoded) = <BalanceOfCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -7458,16 +7117,6 @@ pub mod i_hyperdrive {
             ) {
                 return Ok(Self::SetApprovalForAll(decoded));
             }
-            if let Ok(decoded) = <SetCheckpointRewarderCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::SetCheckpointRewarder(decoded));
-            }
-            if let Ok(decoded) = <SetFeeCollectorCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::SetFeeCollector(decoded));
-            }
             if let Ok(decoded) = <SetGovernanceCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
             ) {
@@ -7477,11 +7126,6 @@ pub mod i_hyperdrive {
                 data,
             ) {
                 return Ok(Self::SetPauser(decoded));
-            }
-            if let Ok(decoded) = <SetSweepCollectorCall as ::ethers::core::abi::AbiDecode>::decode(
-                data,
-            ) {
-                return Ok(Self::SetSweepCollector(decoded));
             }
             if let Ok(decoded) = <SweepCall as ::ethers::core::abi::AbiDecode>::decode(
                 data,
@@ -7558,6 +7202,9 @@ pub mod i_hyperdrive {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::AddLiquidity(element) => {
+                    ::ethers::core::abi::AbiEncode::encode(element)
+                }
+                Self::AdminController(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::BalanceOf(element) => {
@@ -7658,19 +7305,10 @@ pub mod i_hyperdrive {
                 Self::SetApprovalForAll(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
-                Self::SetCheckpointRewarder(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::SetFeeCollector(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
                 Self::SetGovernance(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::SetPauser(element) => {
-                    ::ethers::core::abi::AbiEncode::encode(element)
-                }
-                Self::SetSweepCollector(element) => {
                     ::ethers::core::abi::AbiEncode::encode(element)
                 }
                 Self::Sweep(element) => ::ethers::core::abi::AbiEncode::encode(element),
@@ -7704,6 +7342,7 @@ pub mod i_hyperdrive {
             match self {
                 Self::PermitTypehash(element) => ::core::fmt::Display::fmt(element, f),
                 Self::AddLiquidity(element) => ::core::fmt::Display::fmt(element, f),
+                Self::AdminController(element) => ::core::fmt::Display::fmt(element, f),
                 Self::BalanceOf(element) => ::core::fmt::Display::fmt(element, f),
                 Self::BaseToken(element) => ::core::fmt::Display::fmt(element, f),
                 Self::BatchTransferFrom(element) => ::core::fmt::Display::fmt(element, f),
@@ -7748,13 +7387,8 @@ pub mod i_hyperdrive {
                 Self::SetApproval(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetApprovalBridge(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetApprovalForAll(element) => ::core::fmt::Display::fmt(element, f),
-                Self::SetCheckpointRewarder(element) => {
-                    ::core::fmt::Display::fmt(element, f)
-                }
-                Self::SetFeeCollector(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetGovernance(element) => ::core::fmt::Display::fmt(element, f),
                 Self::SetPauser(element) => ::core::fmt::Display::fmt(element, f),
-                Self::SetSweepCollector(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Sweep(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Symbol(element) => ::core::fmt::Display::fmt(element, f),
                 Self::Target0(element) => ::core::fmt::Display::fmt(element, f),
@@ -7781,6 +7415,11 @@ pub mod i_hyperdrive {
     impl ::core::convert::From<AddLiquidityCall> for IHyperdriveCalls {
         fn from(value: AddLiquidityCall) -> Self {
             Self::AddLiquidity(value)
+        }
+    }
+    impl ::core::convert::From<AdminControllerCall> for IHyperdriveCalls {
+        fn from(value: AdminControllerCall) -> Self {
+            Self::AdminController(value)
         }
     }
     impl ::core::convert::From<BalanceOfCall> for IHyperdriveCalls {
@@ -7963,16 +7602,6 @@ pub mod i_hyperdrive {
             Self::SetApprovalForAll(value)
         }
     }
-    impl ::core::convert::From<SetCheckpointRewarderCall> for IHyperdriveCalls {
-        fn from(value: SetCheckpointRewarderCall) -> Self {
-            Self::SetCheckpointRewarder(value)
-        }
-    }
-    impl ::core::convert::From<SetFeeCollectorCall> for IHyperdriveCalls {
-        fn from(value: SetFeeCollectorCall) -> Self {
-            Self::SetFeeCollector(value)
-        }
-    }
     impl ::core::convert::From<SetGovernanceCall> for IHyperdriveCalls {
         fn from(value: SetGovernanceCall) -> Self {
             Self::SetGovernance(value)
@@ -7981,11 +7610,6 @@ pub mod i_hyperdrive {
     impl ::core::convert::From<SetPauserCall> for IHyperdriveCalls {
         fn from(value: SetPauserCall) -> Self {
             Self::SetPauser(value)
-        }
-    }
-    impl ::core::convert::From<SetSweepCollectorCall> for IHyperdriveCalls {
-        fn from(value: SetSweepCollectorCall) -> Self {
-            Self::SetSweepCollector(value)
         }
     }
     impl ::core::convert::From<SweepCall> for IHyperdriveCalls {
@@ -8083,6 +7707,20 @@ pub mod i_hyperdrive {
     pub struct AddLiquidityReturn {
         pub lp_shares: ::ethers::core::types::U256,
     }
+    ///Container type for all return fields from the `adminController` function with signature `adminController()` and selector `0x950c5d03`
+    #[derive(
+        Clone,
+        ::ethers::contract::EthAbiType,
+        ::ethers::contract::EthAbiCodec,
+        serde::Serialize,
+        serde::Deserialize,
+        Default,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash
+    )]
+    pub struct AdminControllerReturn(pub ::ethers::core::types::Address);
     ///Container type for all return fields from the `balanceOf` function with signature `balanceOf(uint256,address)` and selector `0x3656eec2`
     #[derive(
         Clone,

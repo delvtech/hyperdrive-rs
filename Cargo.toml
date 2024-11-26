@@ -11,7 +11,7 @@ members = [
 
 [workspace.package]
 name = "hyperdrive-rs"
-version = "0.18.1"
+version = "0.20.0"
 authors = [
     "Alex Towle <alex@delv.tech>",
     "Dylan Paiton <dylan@delv.tech>",
@@ -29,9 +29,9 @@ repository = "https://github.com/delvtech/hyperdrive-rs"
 description = "API for simulating Hyperdrive smart contract transactions."
 
 [workspace.dependencies]
-fixedpointmath = { version = "0.18.1", path="crates/fixedpointmath" }
-hyperdrive-wrappers = { version = "0.18.1", path="crates/hyperdrive-wrappers" }
-hyperdrive-math = { version = "0.18.1", path="crates/hyperdrive-math" }
+fixedpointmath = { version = "0.20.0", path="crates/fixedpointmath" }
+hyperdrive-wrappers = { version = "0.20.0", path="crates/hyperdrive-wrappers" }
+hyperdrive-math = { version = "0.20.0", path="crates/hyperdrive-math" }
 
 [workspace.lints.clippy]
 comparison_chain = "allow"
