@@ -89,7 +89,7 @@ mod tests {
 
         let erc4626_target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
-            (pool_config,),
+            (pool_config, Address::zero()),
             ERC4626Target0Libs {
                 lp_math: Address::zero(),
             },
