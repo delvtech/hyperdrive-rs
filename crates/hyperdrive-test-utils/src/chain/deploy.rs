@@ -331,7 +331,7 @@ impl TestnetDeploy for Chain {
             initial_vault_share_price: uint256!(1e18),
             minimum_share_reserves: uint256!(10e18),
             minimum_transaction_amount: uint256!(0.001e18),
-            circuit_breaker_delta: uint256!(2e18),
+            circuit_breaker_delta: uint256!(0.2e18),
             position_duration: U256::from(60 * 60 * 24 * 365), // 1 year
             checkpoint_duration: U256::from(60 * 60 * 24),     // 1 day
             time_stretch: calculate_time_stretch(
@@ -364,28 +364,28 @@ impl TestnetDeploy for Chain {
                         fee_collector: client.address(),
                         sweep_collector: client.address(),
                         checkpoint_rewarder: client.address(),
-                        checkpoint_duration_resolution: U256::from(60 * 60 * 24), // 1 day
-                        min_checkpoint_duration: U256::from(60 * 60 * 24),        // 1 day
-                        max_checkpoint_duration: U256::from(60 * 60 * 24),        // 1 day
-                        min_position_duration: U256::from(60 * 60 * 24 * 7),      // 7 days
-                        max_position_duration: U256::from(60 * 60 * 24 * 7 * 365), // 1 year
+                        checkpoint_duration_resolution: U256::from(60 * 60), // 1 hour
+                        min_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
+                        max_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
+                        min_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
+                        max_position_duration: U256::from(60 * 60 * 24 * 7 * 730), // 2 years
+                        min_fixed_apr: uint256!(0.005e18),
+                        max_fixed_apr: uint256!(0.1e18),
+                        min_time_stretch_apr: uint256!(0.005e18),
+                        max_time_stretch_apr: uint256!(0.2e18),
                         min_circuit_breaker_delta: uint256!(0.01e18),
-                        max_circuit_breaker_delta: uint256!(10e18),
-                        min_fixed_apr: uint256!(0.001e18),
-                        max_fixed_apr: uint256!(0.999e18),
-                        min_time_stretch_apr: uint256!(0.001e18),
-                        max_time_stretch_apr: uint256!(0.999e18),
+                        max_circuit_breaker_delta: uint256!(0.2e18),
                         min_fees: hyperdrive_factory::Fees {
-                            curve: uint256!(0),
-                            flat: uint256!(0),
-                            governance_lp: uint256!(0),
-                            governance_zombie: uint256!(0),
+                            curve: uint256!(0.001e18),
+                            flat: uint256!(0.0001e18),
+                            governance_lp: uint256!(0.15e18),
+                            governance_zombie: uint256!(0.03e18),
                         },
                         max_fees: hyperdrive_factory::Fees {
-                            curve: uint256!(1e18),
-                            flat: uint256!(1e18),
-                            governance_lp: uint256!(1e18),
-                            governance_zombie: uint256!(1e18),
+                            curve: uint256!(0.05e18),
+                            flat: uint256!(0.005e18),
+                            governance_lp: uint256!(0.15e18),
+                            governance_zombie: uint256!(0.03e18),
                         },
                         linker_factory: Address::zero(),
                         linker_code_hash: [0; 32],
