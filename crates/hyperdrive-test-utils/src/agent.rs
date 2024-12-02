@@ -153,14 +153,13 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     ) -> Result<Self> {
         let seed = maybe_seed.unwrap_or(17);
         let base = ERC20Mintable::new(addresses.base_token, client.clone());
-        let vault = IHyperdrive::new(addresses.erc4626_hyperdrive, client.clone())
-            .vault_shares_token()
-            .call()
-            .await?;
-        let vault = MockERC4626::new(vault, client.clone());
+        let hyperdrive = IHyperdrive::new(addresses.erc4626_hyperdrive, client.clone());
+        let vault = {
+            let vault_address = hyperdrive.vault_shares_token().call().await?;
+            MockERC4626::new(vault_address, client.clone())
+        };
         // TODO: Eventually, the agent should be able to support several
         // different pools simultaneously.
-        let hyperdrive = IHyperdrive::new(addresses.erc4626_hyperdrive, client.clone());
         Ok(Self {
             client,
             hyperdrive: hyperdrive.clone(),
