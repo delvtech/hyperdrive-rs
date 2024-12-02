@@ -478,10 +478,16 @@ impl TestnetDeploy for Chain {
         }
 
         // Deploy the HyperdriveRegistry contract to track familiar instances.
-        let hyperdrive_registry =
-            HyperdriveRegistry::deploy(client.clone(), ("HyperdriveRegistry".to_string(),))?
+        let hyperdrive_registry = {
+            let hyperdrive_registry = HyperdriveRegistry::deploy(client.clone(), ())?
                 .send()
                 .await?;
+            hyperdrive_registry
+                .initialize("HyperdriveRegistry".to_string(), address)
+                .send()
+                .await?;
+            hyperdrive_registry
+        };
 
         // Deploy the mock Lido system. We fund Lido with 1 eth to start to
         // avoid reverts when we initialize the pool.
