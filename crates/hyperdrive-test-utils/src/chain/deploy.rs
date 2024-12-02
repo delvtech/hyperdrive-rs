@@ -323,7 +323,6 @@ impl TestnetDeploy for Chain {
         .send()
         .await?;
 
-        // Deploy the Hyperdrive instance.
         let pool_config = PoolConfig {
             base_token: base.address(),
             vault_shares_token: vault.address(),
@@ -351,10 +350,60 @@ impl TestnetDeploy for Chain {
                 governance_zombie: uint256!(0.15e18),
             },
         };
+
+        // Deploy the Hyperdrive factory.
+        let factory = {
+            HyperdriveFactory::deploy(
+                client.clone(),
+                (
+                    FactoryConfig {
+                        governance: client.address(),
+                        deployer_coordinator_manager: client.address(),
+                        hyperdrive_governance: client.address(),
+                        default_pausers: vec![client.address()],
+                        fee_collector: client.address(),
+                        sweep_collector: client.address(),
+                        checkpoint_rewarder: client.address(),
+                        checkpoint_duration_resolution: U256::from(60 * 60 * 24), // 1 day
+                        min_checkpoint_duration: U256::from(60 * 60 * 24),        // 1 day
+                        max_checkpoint_duration: U256::from(60 * 60 * 24),        // 1 day
+                        min_position_duration: U256::from(60 * 60 * 24 * 7),      // 7 days
+                        max_position_duration: U256::from(60 * 60 * 24 * 7 * 365), // 1 year
+                        min_circuit_breaker_delta: uint256!(0.01e18),
+                        max_circuit_breaker_delta: uint256!(10e18),
+                        min_fixed_apr: uint256!(0.001e18),
+                        max_fixed_apr: uint256!(0.999e18),
+                        min_time_stretch_apr: uint256!(0.001e18),
+                        max_time_stretch_apr: uint256!(0.999e18),
+                        min_fees: hyperdrive_factory::Fees {
+                            curve: uint256!(0),
+                            flat: uint256!(0),
+                            governance_lp: uint256!(0),
+                            governance_zombie: uint256!(0),
+                        },
+                        max_fees: hyperdrive_factory::Fees {
+                            curve: uint256!(1e18),
+                            flat: uint256!(1e18),
+                            governance_lp: uint256!(1e18),
+                            governance_zombie: uint256!(1e18),
+                        },
+                        linker_factory: Address::zero(),
+                        linker_code_hash: [0; 32],
+                    },
+                    "HyperdriveFactory".to_string(),
+                ),
+            )?
+            .send()
+            .await?
+        };
+
+        // Deploy the LPMath contract.
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
+
+        // Deploy the Hyperdrive instance.
         let target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
-            (pool_config.clone(), Address::zero()),
+            (pool_config.clone(), factory.address()),
             ERC4626Target0Libs {
                 lp_math: lp_math.address(),
             },
@@ -363,7 +412,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target1 = ERC4626Target1::link_and_deploy(
             client.clone(),
-            (pool_config.clone(), Address::zero()),
+            (pool_config.clone(), factory.address()),
             ERC4626Target1Libs {
                 lp_math: lp_math.address(),
             },
@@ -372,7 +421,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target2 = ERC4626Target2::link_and_deploy(
             client.clone(),
-            (pool_config.clone(), Address::zero()),
+            (pool_config.clone(), factory.address()),
             ERC4626Target2Libs {
                 lp_math: lp_math.address(),
             },
@@ -381,7 +430,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target3 = ERC4626Target3::link_and_deploy(
             client.clone(),
-            (pool_config.clone(), Address::zero()),
+            (pool_config.clone(), factory.address()),
             ERC4626Target3Libs {
                 lp_math: lp_math.address(),
             },
@@ -390,7 +439,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target4 = ERC4626Target4::link_and_deploy(
             client.clone(),
-            (pool_config.clone(), Address::zero()),
+            (pool_config.clone(), factory.address()),
             ERC4626Target4Libs {
                 lp_math: lp_math.address(),
             },
