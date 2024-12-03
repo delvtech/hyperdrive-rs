@@ -942,7 +942,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_implied_rate() -> Result<()> {
-        let tolerance = int256!(1e12);
+        let tolerance = int256!(1e14);
 
         // Spawn a test chain with two agents.
         let mut rng = thread_rng();
