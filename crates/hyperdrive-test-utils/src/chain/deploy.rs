@@ -955,6 +955,7 @@ impl TestnetDeploy for Chain {
             loop {
                 let logs = tx
                     .logs
+                    .clone()
                     .into_iter()
                     .filter_map(|log| {
                         if let Ok(HyperdriveFactoryEvents::DeployedFilter(log)) =
@@ -970,7 +971,7 @@ impl TestnetDeploy for Chain {
                     num_retries += 1;
                     if num_retries > 1000 {
                         return Err(eyre::eyre!(
-                            "Failed to retrieve initialize logs after 1000 retries."
+                            "Failed to retrieve deploy and initialize logs after 1000 retries."
                         ));
                     }
                     continue;
