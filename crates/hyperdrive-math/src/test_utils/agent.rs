@@ -358,7 +358,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                     num_retries += 1;
                     if num_retries > 1000 {
                         return Err(eyre::eyre!(
-                            "Failed to retrieve open close logs after 1000 retries."
+                            "Failed to retrieve close long logs after 1000 retries."
                         ));
                     }
                     continue;
