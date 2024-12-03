@@ -949,20 +949,35 @@ impl TestnetDeploy for Chain {
                 .await?
                 .await?
                 .unwrap();
-            let logs = tx
-                .logs
-                .into_iter()
-                .filter_map(|log| {
-                    if let Ok(HyperdriveFactoryEvents::DeployedFilter(log)) =
-                        HyperdriveFactoryEvents::decode_log(&log.into())
-                    {
-                        Some(log)
-                    } else {
-                        None
+
+            // Retry loop in case Anvil fails.
+            let mut num_retries = 0;
+            loop {
+                let logs = tx
+                    .logs
+                    .into_iter()
+                    .filter_map(|log| {
+                        if let Ok(HyperdriveFactoryEvents::DeployedFilter(log)) =
+                            HyperdriveFactoryEvents::decode_log(&log.into())
+                        {
+                            Some(log)
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                if logs.len() == 0 {
+                    num_retries += 1;
+                    if num_retries > 1000 {
+                        return Err(eyre::eyre!(
+                            "Failed to retrieve initialize logs after 1000 retries."
+                        ));
                     }
-                })
-                .collect::<Vec<_>>();
-            logs[0].clone().hyperdrive
+                    continue;
+                } else {
+                    break logs[0].clone().hyperdrive;
+                }
+            }
         };
 
         // Add the Hyperdrive factory instance to the registry contract.
