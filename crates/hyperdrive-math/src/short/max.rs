@@ -839,7 +839,8 @@ mod tests {
             }
 
             // Compute the empirical and analytical derivatives.
-            // We are actually computing the negative derivative to keep the sign positive.
+            // We are actually computing the negative derivative to keep the
+            // sign positive.
             let empirical_derivative = (f_x - f_x_plus_delta) / empirical_derivative_epsilon;
             let solvency_after_short_derivative =
                 state.solvency_after_short_derivative_negation(bond_amount)?;
