@@ -546,8 +546,7 @@ impl State {
             // Calculate the next iteration of Newton's method. If the candidate
             // is larger than the absolute max, we've gone too far and something
             // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative(max_bond_guess, spot_price)
-            {
+            let derivative = match self.solvency_after_short_derivative(max_bond_guess) {
                 Ok(derivative) => derivative,
                 Err(_) => break,
             };
@@ -753,11 +752,10 @@ impl State {
     fn solvency_after_short_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
-        spot_price: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let lhs = self.calculate_short_principal_derivative(bond_amount)?;
         let rhs = self.curve_fee()
-            * (fixed!(1e18) - spot_price)
+            * (fixed!(1e18) - self.calculate_spot_price_down()?)
             * (fixed!(1e18) - self.governance_lp_fee())
             / self.vault_share_price();
         if lhs >= rhs {
@@ -838,8 +836,8 @@ mod tests {
 
             // Compute the empirical and analytical derivatives.
             let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
-            let solvency_after_short_derivative = state
-                .solvency_after_short_derivative(bond_amount, state.calculate_spot_price_down()?)?;
+            let solvency_after_short_derivative =
+                state.solvency_after_short_derivative(bond_amount)?;
 
             // Ensure that the empirical and analytical derivatives match.
             let derivative_diff = if empirical_derivative > solvency_after_short_derivative {
