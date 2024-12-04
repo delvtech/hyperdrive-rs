@@ -792,6 +792,75 @@ mod tests {
     };
 
     #[tokio::test]
+    async fn fuzz_solvency_after_short_derivative() -> Result<()> {
+        let empirical_derivative_epsilon = fixed!(1e5);
+        let test_tolerance = fixed!(1e14);
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+
+            // Min trade amount should be at least 1,000x the derivative epsilon
+            let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
+
+            let f_x = match panic::catch_unwind(|| {
+                state.solvency_after_short(bond_amount, checkpoint_exposure)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+            let f_x_plus_delta = match panic::catch_unwind(|| {
+                state.solvency_after_short(
+                    bond_amount + empirical_derivative_epsilon,
+                    checkpoint_exposure,
+                )
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+
+            // Sanity check the sign of the difference.
+            // Greater bond amount results in less solvency.
+            assert!(f_x < f_x_plus_delta);
+
+            // Compute the empirical and analytical derivatives.
+            let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
+            let solvency_after_short_derivative = state
+                .solvency_after_short_derivative(bond_amount, state.calculate_spot_price_down()?)?;
+
+            // Ensure that the empirical and analytical derivatives match.
+            let derivative_diff = if empirical_derivative > solvency_after_short_derivative {
+                empirical_derivative - solvency_after_short_derivative
+            } else {
+                solvency_after_short_derivative - empirical_derivative
+            };
+            assert!(
+                derivative_diff < test_tolerance,
+                "expected abs(derivative_diff)={:#?} < test_tolerance={:#?};
+                calculated_derivative={:#?}, empirical_derivative={:#?}",
+                derivative_diff,
+                test_tolerance,
+                solvency_after_short_derivative,
+                empirical_derivative
+            );
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
     async fn fuzz_calculate_short_bonds_given_deposit() -> Result<()> {
         let test_tolerance = fixed!(1e9);
         let max_iterations = 500;
