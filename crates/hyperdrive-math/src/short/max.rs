@@ -546,8 +546,8 @@ impl State {
             // Calculate the next iteration of Newton's method. If the candidate
             // is larger than the absolute max, we've gone too far and something
             // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative_negation(max_bond_guess) {
-                Ok(derivative) => derivative,
+            let derivative = match self.solvency_after_short_derivative(max_bond_guess) {
+                Ok(derivative) => derivative.change_type::<U256>()?,
                 Err(_) => break,
             };
             let possible_max_bond_amount = max_bond_guess + solvency / derivative;
@@ -740,29 +740,23 @@ impl State {
     /// s'(\Delta y) &= z'(\Delta y) - 0 - 0
     ///       &= 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
     ///          - g'(\Delta y))}{c} \right)
-    ///       &= -P'(\Delta y) + \frac{
-    ///              \phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})
-    ///          }{c}
+    ///       &= \frac{\phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})}{c}
+    ///          - P'(\Delta y)
     /// \end{aligned}
     /// ```
-    ///
-    /// Since solvency decreases as the short amount increases, we negate the
-    /// derivative. This avoids issues with the fixed point library which
-    /// doesn't support negative values.
-    fn solvency_after_short_derivative_negation(
+    fn solvency_after_short_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
-    ) -> Result<FixedPoint<U256>> {
-        let lhs = self.calculate_short_principal_derivative(bond_amount)?;
-        let rhs = self.curve_fee()
+    ) -> Result<FixedPoint<I256>> {
+        let lhs = (self.curve_fee()
             * (fixed!(1e18) - self.calculate_spot_price_down()?)
             * (fixed!(1e18) - self.governance_lp_fee())
-            / self.vault_share_price();
-        if lhs >= rhs {
-            Ok(lhs - rhs)
-        } else {
-            Err(eyre!("Negative derivative."))
-        }
+            / self.vault_share_price())
+        .change_type::<I256>()?;
+        let rhs = self
+            .calculate_short_principal_derivative(bond_amount)?
+            .change_type::<I256>()?;
+        Ok(lhs - rhs)
     }
 }
 
@@ -794,8 +788,7 @@ mod tests {
         let empirical_derivative_epsilon = fixed!(1e14);
         let test_tolerance = fixed!(1e14);
         let mut rng = thread_rng();
-        for iter in 0..*FAST_FUZZ_RUNS {
-            println!("iter {:#?}", iter);
+        for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
@@ -830,20 +823,17 @@ mod tests {
                 Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
 
-            // Because the computation includes a linear fee term subtracted
-            // from a non-linear short principal, it is possible for the linear
-            // estimate here to be non-monotonic. In this case, we want to skip
-            // the test because the estimate will never match the true value.
-            if f_x <= f_x_plus_delta {
-                continue;
-            }
-
-            // Compute the empirical and analytical derivatives.
-            // We are actually computing the negative derivative to keep the
-            // sign positive.
-            let empirical_derivative = (f_x - f_x_plus_delta) / empirical_derivative_epsilon;
-            let solvency_after_short_derivative =
-                state.solvency_after_short_derivative_negation(bond_amount)?;
+            // Compute the absolute value of the empirical and analytical
+            // derivatives.
+            let empirical_derivative = if f_x < f_x_plus_delta {
+                (f_x_plus_delta - f_x) / empirical_derivative_epsilon
+            } else {
+                (f_x - f_x_plus_delta) / empirical_derivative_epsilon
+            };
+            let solvency_after_short_derivative = state
+                .solvency_after_short_derivative(bond_amount)?
+                .abs()
+                .change_type::<U256>()?;
 
             // Ensure that the empirical and analytical derivatives match.
             let derivative_diff = if empirical_derivative > solvency_after_short_derivative {
