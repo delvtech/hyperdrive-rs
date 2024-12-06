@@ -733,30 +733,23 @@ impl State {
     /// Calculates the derivative of the pool's solvency w.r.t. the short
     /// amount.
     ///
-    /// The derivative is calculated as:
-    ///
     /// ```math
-    /// \begin{aligned}
-    /// s'(\Delta y) &= z'(\Delta y) - 0 - 0
-    ///       &= 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
+    /// s'(\Delta y) = 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
     ///          - g'(\Delta y))}{c} \right)
-    ///       &= \frac{\phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})}{c}
-    ///          - P'(\Delta y)
-    /// \end{aligned}
     /// ```
     fn solvency_after_short_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<I256>> {
-        let lhs = (self.curve_fee()
+        let lhs = self
+            .calculate_short_principal_derivative(bond_amount)?
+            .change_type::<I256>()?;
+        let rhs = (self.curve_fee()
             * (fixed!(1e18) - self.calculate_spot_price_down()?)
             * (fixed!(1e18) - self.governance_lp_fee())
             / self.vault_share_price())
         .change_type::<I256>()?;
-        let rhs = self
-            .calculate_short_principal_derivative(bond_amount)?
-            .change_type::<I256>()?;
-        Ok(lhs - rhs)
+        Ok(-(lhs - rhs))
     }
 }
 
