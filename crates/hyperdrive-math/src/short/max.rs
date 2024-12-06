@@ -802,9 +802,8 @@ mod tests {
             // Min trade amount should be at least 1,000x the derivative epsilon
             let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
 
-            let input = bond_amount;
             let f_x = match panic::catch_unwind(|| {
-                state.solvency_after_short(input, checkpoint_exposure)
+                state.solvency_after_short(bond_amount, checkpoint_exposure)
             }) {
                 Ok(result) => match result {
                     Ok(result) => result,
@@ -812,9 +811,11 @@ mod tests {
                 },
                 Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
             };
-            let input = bond_amount + empirical_derivative_epsilon;
             let f_x_plus_delta = match panic::catch_unwind(|| {
-                state.solvency_after_short(input, checkpoint_exposure)
+                state.solvency_after_short(
+                    bond_amount + empirical_derivative_epsilon,
+                    checkpoint_exposure,
+                )
             }) {
                 Ok(result) => match result {
                     Ok(result) => result,
@@ -825,13 +826,16 @@ mod tests {
 
             // Compute the absolute value of the empirical and analytical
             // derivatives.
+            let solvency_after_short_derivative =
+                state.solvency_after_short_derivative(bond_amount)?;
             let empirical_derivative = if f_x < f_x_plus_delta {
+                assert!(solvency_after_short_derivative >= fixed!(0));
                 (f_x_plus_delta - f_x) / empirical_derivative_epsilon
             } else {
+                assert!(solvency_after_short_derivative <= fixed!(0));
                 (f_x - f_x_plus_delta) / empirical_derivative_epsilon
             };
-            let solvency_after_short_derivative = state
-                .solvency_after_short_derivative(bond_amount)?
+            let solvency_after_short_derivative = solvency_after_short_derivative
                 .abs()
                 .change_type::<U256>()?;
 
