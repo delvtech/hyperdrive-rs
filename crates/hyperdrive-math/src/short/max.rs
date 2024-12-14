@@ -12,7 +12,7 @@ impl State {
     /// share reserves are equal to the minimum share reserves.
     ///
     /// We can solve for the bond reserves `$y_{\text{max}}$` implied by the
-    /// share reserves being equal to `$z_{\text{min}}$` using the current $k$
+    /// share reserves being equal to `$z_{\text{min}}$` using the current `$k$`
     /// value:
     ///
     /// ```math
@@ -67,17 +67,17 @@ impl State {
         Ok(min_share_reserves)
     }
 
-    /// Use Newton's method with rate reduction to find the amount of bonds
-    /// shorted for a given base deposit amount.
+    /// Use Newton's method to find the amount of bonds shorted for a given base
+    /// deposit amount.
     pub fn calculate_short_bonds_given_deposit(
         &self,
         target_base_amount: FixedPoint<U256>,
         open_vault_share_price: FixedPoint<U256>,
         absolute_max_bond_amount: FixedPoint<U256>,
-        maybe_tolerance: Option<FixedPoint<U256>>,
+        maybe_base_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
-        let tolerance = maybe_tolerance.unwrap_or(fixed!(1e9));
+        let base_tolerance = maybe_base_tolerance.unwrap_or(fixed!(1e9));
         let max_iterations = maybe_max_iterations.unwrap_or(500);
 
         // The max bond amount might be below the pool's minimum.
@@ -99,7 +99,7 @@ impl State {
             ));
         }
         // If the absolute max is within tolerance, return it.
-        if absolute_max_base_amount - target_base_amount <= tolerance {
+        if absolute_max_base_amount - target_base_amount <= base_tolerance {
             return Ok(absolute_max_bond_amount);
         }
 
@@ -120,7 +120,7 @@ impl State {
             loss = if current_base_amount < target_base_amount {
                 // It's possible that a nudge from failure cases in the previous
                 // iteration put us within the tolerance.
-                if (target_base_amount - current_base_amount) <= tolerance {
+                if (target_base_amount - current_base_amount) <= base_tolerance {
                     return Ok(last_good_bond_amount);
                 }
                 target_base_amount - current_base_amount
@@ -170,7 +170,7 @@ impl State {
                     // amount is less than the absolute max. So we overshot, but
                     // we can safely overshoot by less.
                     if new_bond_amount >= absolute_max_bond_amount {
-                        last_good_bond_amount = absolute_max_bond_amount - tolerance;
+                        last_good_bond_amount = absolute_max_bond_amount - base_tolerance;
                     } else {
                         return Err(eyre!(
                             "current_bond_amount={:#?} is less than the expected absolute_max={:#?}, but still not solvent.",
@@ -190,7 +190,7 @@ impl State {
             max_iterations,
             target_base_amount,
             loss,
-            tolerance,
+            base_tolerance,
         ));
     }
 
@@ -653,16 +653,16 @@ impl State {
     /// bonds as:
     ///
     /// ```math
-    /// s(\Delta y) = z(\Delta y) - \tfrac{e(\Delta y)}{c} - z_{min}
+    /// s(\Delta y) = z_1 - \tfrac{e(\Delta y)}{c} - z_{min}
     /// ```
     ///
-    /// where `$z(\Delta y)$` represents the pool's share reserves after opening
+    /// where `$z_1$` represents the pool's share reserves after opening
     /// the short:
     ///
     /// ```math
-    /// z(\Delta y) = z_0 - \left(
-    ///     P(\Delta y) - \left( \tfrac{c(\Delta y)}{c}
-    ///     - \tfrac{g(\Delta y)}{c} \right)
+    /// z_1 = z_0 - \left(
+    ///     P_{\text{lp}}(\Delta y) - \left( \tfrac{\Phi_{c,os}(\Delta y)}{c}
+    ///     - \tfrac{\Phi_{g,os}(\Delta y)}{c} \right)
     /// \right)
     /// ```
     ///
@@ -822,9 +822,13 @@ mod tests {
             let solvency_after_short_derivative =
                 state.solvency_after_short_derivative(bond_amount)?;
             let empirical_derivative = if f_x < f_x_plus_delta {
+                // Adding delta bonds results in lower solvency.
+                // This implies a positive derivative.
                 assert!(solvency_after_short_derivative >= fixed!(0));
                 (f_x_plus_delta - f_x) / empirical_derivative_epsilon
             } else {
+                // Adding delta bonds results in higher solvency.
+                // This implies a negative derivative.
                 assert!(solvency_after_short_derivative <= fixed!(0));
                 (f_x - f_x_plus_delta) / empirical_derivative_epsilon
             };

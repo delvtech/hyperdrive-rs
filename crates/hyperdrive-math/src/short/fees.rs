@@ -45,6 +45,10 @@ impl State {
 
     /// Calculate the total fees to be removed from the short principal when
     /// opening a short for a given bond amount.
+    ///
+    /// ```math
+    /// \text{total_fee}(\Delta y) = \frac{1}{c} \cdot \phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \Delta y
+    /// ```
     pub fn calculate_open_short_total_fee_shares(
         &self,
         bond_amount: FixedPoint<U256>,

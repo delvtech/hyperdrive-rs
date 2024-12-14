@@ -300,7 +300,7 @@ impl State {
     /// Calculates the share delta to be applied to the pool after opening a
     /// short.
     ///
-    /// The share delta is given by:
+    /// Assuming `$z_1 = z_0 - \Delta z$`, the share delta is given by:
     ///
     /// ```math
     /// \Delta z =
@@ -313,18 +313,19 @@ impl State {
     /// `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
     ///
     /// ```math
-    /// \Delta z = z
+    /// \Delta z = z_0
     ///     - \frac{1}{\mu} \cdot \left(
     ///     \frac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     ///     \right)^{\frac{1}{1 - t_s}}
-    ///     - \frac{\phi_c \cdot (1 - p) \cdot \Delta y \cdot (1 - \phi_g)}{c}
+    ///     - \frac{\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \Delta y}{c}
     /// ```
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
+        // calculate_short_principal returns z_0 - P_lp(∆y)
         let short_principal = self.calculate_short_principal(bond_amount)?;
+        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
