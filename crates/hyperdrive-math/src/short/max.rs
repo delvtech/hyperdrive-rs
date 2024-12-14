@@ -999,6 +999,64 @@ mod tests {
         Ok(())
     }
 
+    /// This test ensures that a pool is fully drained after opening a short for
+    /// the absolute maximum amount. It also verifies that the absolute maximum
+    /// trade returned is always valid.
+    #[tokio::test]
+    async fn fuzz_calculate_absolute_max_short() -> Result<()> {
+        let bonds_tolerance = fixed_u256!(1e9);
+        let max_iterations = 500;
+        // Run the fuzz tests
+        let mut rng = thread_rng();
+        for iter in 0..*FAST_FUZZ_RUNS {
+            println!("iter {:#?}", iter);
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            }
+            .min(I256::try_from(state.long_exposure())?);
+
+            // Make sure a short is possible.
+            if state
+                .effective_share_reserves()?
+                .min(state.share_reserves())
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+            match state
+                .solvency_after_short(state.minimum_transaction_amount(), checkpoint_exposure)
+            {
+                Ok(_) => (),
+                Err(_) => continue,
+            }
+
+            // Get the max short.
+            let absolute_max_short = state.calculate_absolute_max_short(
+                checkpoint_exposure,
+                Some(bonds_tolerance),
+                Some(max_iterations),
+            )?;
+
+            // The short should be valid.
+            assert!(absolute_max_short >= state.minimum_transaction_amount());
+            assert!(state
+                .solvency_after_short(absolute_max_short, checkpoint_exposure)
+                .is_ok());
+
+            // Adding tolerance more bonds should be insolvent.
+            assert!(state
+                .solvency_after_short(absolute_max_short + bonds_tolerance, checkpoint_exposure)
+                .is_err());
+        }
+        Ok(())
+    }
+
     #[tokio::test]
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         // TODO: This should be fixed!(0.0001e18) == 0.01%
