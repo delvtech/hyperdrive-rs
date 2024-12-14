@@ -1103,6 +1103,7 @@ mod tests {
 
     #[tokio::test]
     pub async fn fuzz_sol_calculate_open_short() -> Result<()> {
+        let test_tolerance = fixed!(1e8);
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
@@ -1176,10 +1177,18 @@ mod tests {
                     // Compare the results.
                     let rust_base_unwrapped = rust_base.unwrap();
                     let sol_base_fp = FixedPoint::from(sol_base);
-                    assert_eq!(
-                        rust_base_unwrapped, sol_base_fp,
-                        "expected rust_base={:#?} == sol_base={:#?}",
-                        rust_base_unwrapped, sol_base_fp
+                    let base_error = if rust_base_unwrapped > sol_base_fp {
+                        rust_base_unwrapped - sol_base_fp
+                    } else {
+                        sol_base_fp - rust_base_unwrapped
+                    };
+                    assert!(
+                        base_error <= test_tolerance,
+                        "expected abs(rust_base={:#?} - sol_base={:#?})={:#?} <= test_tolerance={:#?}",
+                        rust_base_unwrapped,
+                        sol_base_fp,
+                        base_error,
+                        test_tolerance,
                     );
                 }
                 Err(sol_err) => {

@@ -35,3 +35,6 @@ For code owners who wish to publish a release, make sure to follow these guideli
 3. Push that tag to the remote repository with `git push --tags`.
 4. Go to the `releases` tab in Github and add the new tag as a release.
 5. Click the "Generate Release Notes" button to generate release notes.
+
+## Debugging
+To point tests to a local Anvil instance, use the environment variable `HYPERDRIVE_ETHEREUM_URL`.

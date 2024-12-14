@@ -323,8 +323,7 @@ impl TestnetDeploy for Chain {
         .send()
         .await?;
 
-        // Deploy the Hyperdrive instance.
-        let config = PoolConfig {
+        let pool_config = PoolConfig {
             base_token: base.address(),
             vault_shares_token: vault.address(),
             linker_factory: Address::from_low_u64_be(1),
@@ -332,7 +331,7 @@ impl TestnetDeploy for Chain {
             initial_vault_share_price: uint256!(1e18),
             minimum_share_reserves: uint256!(10e18),
             minimum_transaction_amount: uint256!(0.001e18),
-            circuit_breaker_delta: uint256!(2e18),
+            circuit_breaker_delta: uint256!(0.2e18),
             position_duration: U256::from(60 * 60 * 24 * 365), // 1 year
             checkpoint_duration: U256::from(60 * 60 * 24),     // 1 day
             time_stretch: calculate_time_stretch(
@@ -351,10 +350,60 @@ impl TestnetDeploy for Chain {
                 governance_zombie: uint256!(0.15e18),
             },
         };
+
+        // Deploy the Hyperdrive factory.
+        let factory = {
+            HyperdriveFactory::deploy(
+                client.clone(),
+                (
+                    FactoryConfig {
+                        governance: client.address(),
+                        deployer_coordinator_manager: client.address(),
+                        hyperdrive_governance: client.address(),
+                        default_pausers: vec![client.address()],
+                        fee_collector: client.address(),
+                        sweep_collector: client.address(),
+                        checkpoint_rewarder: client.address(),
+                        checkpoint_duration_resolution: U256::from(60 * 60), // 1 hour
+                        min_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
+                        max_checkpoint_duration: U256::from(60 * 60 * 24),   // 1 day
+                        min_position_duration: U256::from(60 * 60 * 24 * 7), // 7 days
+                        max_position_duration: U256::from(60 * 60 * 24 * 7 * 730), // 2 years
+                        min_fixed_apr: uint256!(0.005e18),
+                        max_fixed_apr: uint256!(0.1e18),
+                        min_time_stretch_apr: uint256!(0.005e18),
+                        max_time_stretch_apr: uint256!(0.2e18),
+                        min_circuit_breaker_delta: uint256!(0.01e18),
+                        max_circuit_breaker_delta: uint256!(0.2e18),
+                        min_fees: hyperdrive_factory::Fees {
+                            curve: uint256!(0.001e18),
+                            flat: uint256!(0.0001e18),
+                            governance_lp: uint256!(0.15e18),
+                            governance_zombie: uint256!(0.03e18),
+                        },
+                        max_fees: hyperdrive_factory::Fees {
+                            curve: uint256!(0.05e18),
+                            flat: uint256!(0.005e18),
+                            governance_lp: uint256!(0.15e18),
+                            governance_zombie: uint256!(0.03e18),
+                        },
+                        linker_factory: Address::zero(),
+                        linker_code_hash: [0; 32],
+                    },
+                    "HyperdriveFactory".to_string(),
+                ),
+            )?
+            .send()
+            .await?
+        };
+
+        // Deploy the LPMath contract.
         let lp_math = LPMath::deploy(client.clone(), ())?.send().await?;
+
+        // Deploy the Hyperdrive instance.
         let target0 = ERC4626Target0::link_and_deploy(
             client.clone(),
-            (config.clone(),),
+            (pool_config.clone(), factory.address()),
             ERC4626Target0Libs {
                 lp_math: lp_math.address(),
             },
@@ -363,7 +412,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target1 = ERC4626Target1::link_and_deploy(
             client.clone(),
-            (config.clone(),),
+            (pool_config.clone(), factory.address()),
             ERC4626Target1Libs {
                 lp_math: lp_math.address(),
             },
@@ -372,7 +421,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target2 = ERC4626Target2::link_and_deploy(
             client.clone(),
-            (config.clone(),),
+            (pool_config.clone(), factory.address()),
             ERC4626Target2Libs {
                 lp_math: lp_math.address(),
             },
@@ -381,7 +430,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target3 = ERC4626Target3::link_and_deploy(
             client.clone(),
-            (config.clone(),),
+            (pool_config.clone(), factory.address()),
             ERC4626Target3Libs {
                 lp_math: lp_math.address(),
             },
@@ -390,7 +439,7 @@ impl TestnetDeploy for Chain {
         .await?;
         let target4 = ERC4626Target4::link_and_deploy(
             client.clone(),
-            (config.clone(),),
+            (pool_config.clone(), factory.address()),
             ERC4626Target4Libs {
                 lp_math: lp_math.address(),
             },
@@ -401,7 +450,8 @@ impl TestnetDeploy for Chain {
             client.clone(),
             (
                 "ERC4626Hyperdrive".to_string(),
-                config,
+                pool_config,
+                client.address(),
                 target0.address(),
                 target1.address(),
                 target2.address(),
@@ -477,10 +527,16 @@ impl TestnetDeploy for Chain {
         }
 
         // Deploy the HyperdriveRegistry contract to track familiar instances.
-        let hyperdrive_registry =
-            HyperdriveRegistry::deploy(client.clone(), ("HyperdriveRegistry".to_string(),))?
+        let hyperdrive_registry = {
+            let hyperdrive_registry = HyperdriveRegistry::deploy(client.clone(), ())?
                 .send()
                 .await?;
+            hyperdrive_registry
+                .initialize("HyperdriveRegistry".to_string(), address)
+                .send()
+                .await?;
+            hyperdrive_registry
+        };
 
         // Deploy the mock Lido system. We fund Lido with 1 eth to start to
         // avoid reverts when we initialize the pool.
@@ -640,21 +696,21 @@ impl TestnetDeploy for Chain {
             )
             .send()
             .await?;
-            let pool_config = PoolDeployConfig {
-                fee_collector: factory.fee_collector().call().await?,
-                sweep_collector: factory.sweep_collector().call().await?,
-                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
-                governance: factory.hyperdrive_governance().call().await?,
-                linker_factory: factory.linker_factory().call().await?,
-                linker_code_hash: factory.linker_code_hash().call().await?,
-                time_stretch: uint256!(0),
+            let pool_deploy_config = PoolDeployConfig {
                 base_token: base.address(),
                 vault_shares_token: vault.address(),
+                linker_factory: factory.linker_factory().call().await?,
+                linker_code_hash: factory.linker_code_hash().call().await?,
                 minimum_share_reserves: config.erc4626_hyperdrive_minimum_share_reserves,
                 minimum_transaction_amount: config.erc4626_hyperdrive_minimum_transaction_amount,
                 circuit_breaker_delta: config.erc4626_hyperdrive_circuit_breaker_delta,
                 position_duration: config.erc4626_hyperdrive_position_duration,
                 checkpoint_duration: config.erc4626_hyperdrive_checkpoint_duration,
+                time_stretch: uint256!(0),
+                governance: factory.hyperdrive_governance().call().await?,
+                fee_collector: factory.fee_collector().call().await?,
+                sweep_collector: factory.sweep_collector().call().await?,
+                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
                 fees: FactoryFees {
                     curve: config.erc4626_hyperdrive_curve_fee,
                     flat: config.erc4626_hyperdrive_flat_fee,
@@ -666,7 +722,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.erc4626_hyperdrive_fixed_apr,
                     config.erc4626_hyperdrive_time_stretch_apr,
@@ -679,7 +735,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.erc4626_hyperdrive_fixed_apr,
                     config.erc4626_hyperdrive_time_stretch_apr,
@@ -692,7 +748,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.erc4626_hyperdrive_fixed_apr,
                     config.erc4626_hyperdrive_time_stretch_apr,
@@ -705,7 +761,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.erc4626_hyperdrive_fixed_apr,
                     config.erc4626_hyperdrive_time_stretch_apr,
@@ -718,7 +774,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.erc4626_hyperdrive_fixed_apr,
                     config.erc4626_hyperdrive_time_stretch_apr,
@@ -732,7 +788,7 @@ impl TestnetDeploy for Chain {
                     [0x01; 32],
                     erc4626_deployer_coordinator.address(),
                     "Hyperdrive".to_string(),
-                    pool_config,
+                    pool_deploy_config,
                     Vec::new().into(),
                     config.erc4626_hyperdrive_contribution,
                     config.erc4626_hyperdrive_fixed_apr,
@@ -840,21 +896,21 @@ impl TestnetDeploy for Chain {
         let steth_hyperdrive = {
             self.deal(address, config.steth_hyperdrive_contribution)
                 .await?;
-            let pool_config = PoolDeployConfig {
-                fee_collector: factory.fee_collector().call().await?,
-                sweep_collector: factory.sweep_collector().call().await?,
-                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
-                governance: factory.hyperdrive_governance().call().await?,
-                linker_factory: factory.linker_factory().call().await?,
-                linker_code_hash: factory.linker_code_hash().call().await?,
-                time_stretch: uint256!(0),
+            let pool_deploy_config = PoolDeployConfig {
                 base_token: *ETH,
                 vault_shares_token: lido.address(),
+                linker_factory: factory.linker_factory().call().await?,
+                linker_code_hash: factory.linker_code_hash().call().await?,
                 minimum_share_reserves: config.steth_hyperdrive_minimum_share_reserves,
                 minimum_transaction_amount: config.steth_hyperdrive_minimum_transaction_amount,
                 circuit_breaker_delta: config.steth_hyperdrive_circuit_breaker_delta,
                 position_duration: config.steth_hyperdrive_position_duration,
                 checkpoint_duration: config.steth_hyperdrive_checkpoint_duration,
+                time_stretch: uint256!(0),
+                governance: factory.hyperdrive_governance().call().await?,
+                fee_collector: factory.fee_collector().call().await?,
+                sweep_collector: factory.sweep_collector().call().await?,
+                checkpoint_rewarder: factory.checkpoint_rewarder().call().await?,
                 fees: FactoryFees {
                     curve: config.steth_hyperdrive_curve_fee,
                     flat: config.steth_hyperdrive_flat_fee,
@@ -866,7 +922,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
@@ -879,7 +935,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
@@ -892,7 +948,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
@@ -905,7 +961,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
@@ -918,7 +974,7 @@ impl TestnetDeploy for Chain {
                 .deploy_target(
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
-                    pool_config.clone(),
+                    pool_deploy_config.clone(),
                     Vec::new().into(),
                     config.steth_hyperdrive_fixed_apr,
                     config.steth_hyperdrive_time_stretch_apr,
@@ -932,7 +988,7 @@ impl TestnetDeploy for Chain {
                     [0x02; 32],
                     steth_deployer_coordinator.address(),
                     "Hyperdrive".to_string(),
-                    pool_config,
+                    pool_deploy_config,
                     Vec::new().into(),
                     config.steth_hyperdrive_contribution,
                     config.steth_hyperdrive_fixed_apr,
