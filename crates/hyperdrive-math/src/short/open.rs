@@ -633,11 +633,7 @@ mod tests {
             };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    None,
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, None)
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
                     Ok(max_bond_amount) => max_bond_amount,
@@ -954,11 +950,7 @@ mod tests {
             };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(3),
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(3))
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
                     Ok(max_bond_amount) => max_bond_amount,
@@ -1128,11 +1120,7 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(max_iterations),
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(max_iterations))
             });
             // Since we're fuzzing it's possible that the max can fail.
             // We're only going to use it in this test if it succeeded.

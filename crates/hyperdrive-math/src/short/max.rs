@@ -271,11 +271,8 @@ impl State {
         let spot_price = self.calculate_spot_price_down()?;
         // The initial guess should be guaranteed correct, and we should only
         // get better from there.
-        let absolute_max_bond_amount = self.calculate_absolute_max_short(
-            spot_price,
-            checkpoint_exposure,
-            maybe_max_iterations,
-        )?;
+        let absolute_max_bond_amount =
+            self.calculate_absolute_max_short(checkpoint_exposure, None, maybe_max_iterations)?;
         // The max bond amount might be below the pool's minimum. If so, no
         // short can be opened.
         if absolute_max_bond_amount < self.minimum_transaction_amount() {
@@ -496,78 +493,116 @@ impl State {
         Ok(optimal_bond_reserves - self.bond_reserves())
     }
 
-    /// Calculates the absolute max short that can be opened without violating the
-    /// pool's solvency constraints.
+    /// Calculates the absolute max short that can be opened without violating
+    /// the pool's solvency constraints.
+    ///
+    /// We use Newton's method to iteratively approach a solution. Our objective
+    /// function is the difference between the pool's minimum allowable share
+    /// reserves and the share reserves after opening a max short, which will
+    /// converge to zero from the negative quadrant.
+    ///
+    /// Given the current guess of `$x_n$`, Newton's method gives us an updated
+    /// guess of `$x_{n+1}$`:
+    ///
+    /// ```math
+    /// \begin{aligned}
+    /// l(x_n) &= z_t - (z_0 - \Delta z(x_n)) \\
+    /// x_{n+1} &= x_n - \tfrac{l(x_n)}{l'(x_n)}
+    /// \end{aligned}
+    /// ```
+    ///
+    /// The tolerance parameter is in bonds, and indicates how close to
+    /// insolvency the pool should be.
     pub fn calculate_absolute_max_short(
         &self,
-        spot_price: FixedPoint<U256>,
         checkpoint_exposure: I256,
+        maybe_bond_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
-        // We start by calculating the maximum short that can be opened on the
-        // YieldSpace curve.
-        let absolute_max_bond_amount = self.calculate_max_short_upper_bound()?;
-        if self
-            .solvency_after_short(absolute_max_bond_amount, checkpoint_exposure)
-            .is_ok()
-        {
-            return Ok(absolute_max_bond_amount);
-        }
-
-        // Use Newton's method to iteratively approach a solution. We use pool's
-        // solvency $S(x)$ w.r.t. the amount of bonds shorted $x$ as our
-        // objective function, which will converge to the maximum short amount
-        // when $S(x) = 0$. The derivative of $S(x)$ is negative (since solvency
-        // decreases as more shorts are opened). The fixed point library doesn't
-        // support negative numbers, so we use the negation of the derivative to
-        // side-step the issue.
-        //
-        // Given the current guess of $x_n$, Newton's method gives us an updated
-        // guess of $x_{n+1}$:
-        //
-        // ```math
-        // \begin{aligned}
-        // x_{n+1} &= x_n - \tfrac{S(x_n)}{S'(x_n)} \\
-        // &= x_n + \tfrac{S(x_n)}{-S'(x_n)}
-        // \end{aligned}
-        // ```
-        //
-        // The guess that we make is very important in determining how quickly
-        // we converge to the solution.
-        let mut max_bond_guess = self.absolute_max_short_guess(checkpoint_exposure)?;
-        // If the initial guess is insolvent, we need to throw an error.
-        let mut solvency = self.solvency_after_short(max_bond_guess, checkpoint_exposure)?;
-        for _ in 0..maybe_max_iterations.unwrap_or(7) {
-            // TODO: It may be better to gracefully handle crossing over the
-            // root by extending the fixed point math library to handle negative
-            // numbers or even just using an if-statement to handle the negative
-            // numbers.
-            //
-            // Calculate the next iteration of Newton's method. If the candidate
-            // is larger than the absolute max, we've gone too far and something
-            // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative(max_bond_guess) {
-                Ok(derivative) => derivative.change_type::<U256>()?,
-                Err(_) => break,
-            };
-            let possible_max_bond_amount = max_bond_guess + solvency / derivative;
-            if possible_max_bond_amount > absolute_max_bond_amount {
-                break;
+        let bond_tolerance = maybe_bond_tolerance.unwrap_or(fixed!(1e9));
+        let max_iterations = maybe_max_iterations.unwrap_or(500);
+        // Use a conservative guess to get us close and speed up the process.
+        let target_pool_shares = calculate_effective_share_reserves(
+            self.calculate_min_share_reserves(checkpoint_exposure)?,
+            self.share_adjustment(),
+        )?
+        .change_type::<I256>()?;
+        let mut last_good_bond_amount = self.absolute_max_short_guess(checkpoint_exposure)?;
+        for _ in 0..max_iterations {
+            // Return if we are within tolerance bonds of insolvency.
+            let solvency_within_tolerance = self
+                .solvency_after_short(last_good_bond_amount + bond_tolerance, checkpoint_exposure);
+            if solvency_within_tolerance.is_err() {
+                return Ok(last_good_bond_amount);
             }
 
-            // If the candidate is insolvent, we've gone too far and can stop
-            // iterating. Otherwise, we update our guess and continue.
-            solvency =
-                match self.solvency_after_short(possible_max_bond_amount, checkpoint_exposure) {
-                    Ok(solvency) => {
-                        max_bond_guess = possible_max_bond_amount;
-                        solvency
+            // Calculate what the pool shares would be if we opened the short.
+            let current_pool_shares = self.effective_share_reserves()?.change_type::<I256>()?
+                - self
+                    .calculate_pool_share_delta_after_open_short(last_good_bond_amount)?
+                    .change_type::<I256>()?;
+
+            // The loss function is z_t - z, and its derivative is -dz/dy.
+            let loss = target_pool_shares - current_pool_shares;
+            let loss_derivative =
+                -self.calculate_pool_delta_shares_after_short_derivative(last_good_bond_amount)?;
+            let dy = loss.div_up(loss_derivative);
+            // Bond amount must increase.
+            // Negative dy indicates that the bond amount would go up with a
+            // proper step of Newton's Method.
+            let new_bond_amount = if dy < fixed!(0) {
+                // x_{n+1} = x_n - l(x_n) / l'(x_n)
+                //         = x_n + -l(x_n) / l'(x_n)
+                last_good_bond_amount + (-dy).change_type::<U256>()?
+            }
+            // Positive dy indicates that the bond amount would go down with a
+            // proper step of Newton's Method. Instead, we will invert the sign
+            // of dy to ensure increasing bond amount. This will probably
+            // require a binary search in the next step.
+            else {
+                // x_{n+1} = x_n + l(x_n) / l'(x_n)
+                last_good_bond_amount + dy.change_type::<U256>()?
+            };
+
+            // Calculate the current solvency & iterate w/ a good bond amount.
+            last_good_bond_amount =
+                match self.solvency_after_short(new_bond_amount, checkpoint_exposure) {
+                    Ok(solvency) => new_bond_amount,
+                    // New bond amount is too large. Use a binary search to find a
+                    // new starting point.
+                    Err(_) => {
+                        // Start from halfway between the new bond amount and the
+                        // last good bond amount.
+                        let mut return_amount = new_bond_amount
+                            - ((new_bond_amount - last_good_bond_amount) / fixed!(2e18));
+                        let mut num_tries = 0;
+                        loop {
+                            if self
+                                .solvency_after_short(return_amount, checkpoint_exposure)
+                                .is_ok()
+                            {
+                                break return_amount;
+                            }
+                            // Return amount is still too large, try again.
+                            // U256 ensures return_amount > last_good_bond_amount
+                            return_amount -= (return_amount - last_good_bond_amount) / fixed!(2e18);
+                            num_tries += 1;
+                            // Avoid running forever by returning a guaranteed good
+                            // bond amount.
+                            if num_tries >= 100_000 {
+                                break last_good_bond_amount * fixed!(0.99e18);
+                            }
+                        }
                     }
-                    Err(_) => break,
                 };
         }
-
-        Ok(max_bond_guess)
+        // We did not find a solution within tolerance in the provided number of
+        // iterations.
+        return Err(eyre!(
+            "Could not converge to a bond amount given max iterations = {:#?} and tolerance = {:#?}.",
+            max_iterations,
+            bond_tolerance
+        ));
     }
 
     /// Calculates an initial guess for the absolute max short. This is a
@@ -792,7 +827,7 @@ mod tests {
     use std::panic;
 
     use ethers::types::{U128, U256};
-    use fixedpointmath::{fixed, uint256};
+    use fixedpointmath::{fixed, fixed_u256, uint256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -909,11 +944,7 @@ mod tests {
             // Unlikely: fix the state generator so that the random state always has a valid max.
             // Likely: fix absolute max short such that the output is guaranteed to be solvent.
             match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(max_iterations),
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(max_iterations))
             }) {
                 Ok(max_bond_no_panic) => {
                     match max_bond_no_panic {
@@ -1154,12 +1185,8 @@ mod tests {
                 // Don't need to reset bob because he hasn't done anything.
                 continue;
             }
-
-            let global_max_short_bonds = state.calculate_absolute_max_short(
-                state.calculate_spot_price_down()?,
-                checkpoint_exposure,
-                None,
-            )?;
+            let global_max_short_bonds =
+                state.calculate_absolute_max_short(checkpoint_exposure, None, None)?;
 
             // Bob should always be budget constrained when trying to open the short.
             let global_max_base_required = state
@@ -1280,8 +1307,8 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
@@ -1398,8 +1425,8 @@ mod tests {
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
-                            state.calculate_spot_price_down()?,
                             checkpoint_exposure,
+                            None,
                             Some(max_iterations),
                         )
                     });
