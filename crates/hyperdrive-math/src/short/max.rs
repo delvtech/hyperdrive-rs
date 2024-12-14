@@ -730,6 +730,40 @@ impl State {
         }
     }
 
+    /// Calculates the derivative of the pool's share delta w.r.t. the short
+    /// amount.
+    ///
+    /// The pool share delta after opening a short is
+    ///
+    /// ```math
+    /// \Delta z = z_0
+    ///     - \frac{1}{\mu} \cdot \left(
+    ///     \frac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    ///     \right)^{\frac{1}{1 - t_s}}
+    ///     - \frac{\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \Delta y}{c}
+    /// ```
+    /// where the second term is P_{\text{lp}}(\Delta y) and the remaining terms
+    /// are from fees. Therefore, the derivative is
+    ///
+    /// ```math
+    /// \frac{\partial \Delta z}{\partial \Delta y} = - P_{\text{lp}}'(\Delta y)
+    ///         - \left(\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \right)
+    /// ```
+    fn calculate_pool_delta_shares_after_short_derivative(
+        &self,
+        bond_amount: FixedPoint<U256>,
+    ) -> Result<FixedPoint<I256>> {
+        let lhs = self
+            .calculate_short_principal_derivative(bond_amount)?
+            .change_type::<I256>()?;
+        let rhs = (self.curve_fee()
+            * (fixed!(1e18) - self.calculate_spot_price_down()?)
+            * (fixed!(1e18) - self.governance_lp_fee())
+            / self.vault_share_price())
+        .change_type::<I256>()?;
+        Ok(-lhs - rhs)
+    }
+
     /// Calculates the derivative of the pool's solvency w.r.t. the short
     /// amount.
     ///
