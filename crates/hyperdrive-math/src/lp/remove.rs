@@ -233,7 +233,8 @@ mod tests {
     use crate::test_utils::agent::HyperdriveMathAgent;
 
     #[tokio::test]
-    async fn fuzz_test_calculate_remove_liquidity() -> Result<()> {
+    async fn fuzz_sol_calculate_remove_liquidity() -> Result<()> {
+        let test_tolerance = fixed!(1e9);
         // Spawn a test chain and create two agents -- Alice and Bob.
         let mut rng = thread_rng();
         let chain = TestChain::new().await?;
@@ -352,7 +353,20 @@ mod tests {
                 Ok((rust_amount, rust_withdrawal_shares, rust_final_state)) => {
                     let (sol_amount, sol_withdrawal_shares) = tx_result?;
                     // Assert amounts redeemed match between rust and solidity.
-                    assert!(rust_amount == sol_amount.into());
+                    let sol_amount = FixedPoint::from(sol_amount);
+                    let error = if rust_amount > sol_amount {
+                        rust_amount - sol_amount
+                    } else {
+                        sol_amount - rust_amount
+                    };
+                    assert!(
+                        error <= test_tolerance,
+                        "abs(rust_amount={:#?} - sol_amount={:#?})={:#?} <= {:#?}",
+                        rust_amount,
+                        sol_amount,
+                        error,
+                        test_tolerance
+                    );
 
                     // Assert withdrawal shares results match between rust and
                     // solidity

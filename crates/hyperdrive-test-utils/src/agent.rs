@@ -216,24 +216,38 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                 },
             ))
             .apply(self.pre_process_options(maybe_tx_options));
-            let logs =
-                tx.0.send()
-                    .await?
-                    .await?
-                    .unwrap()
-                    .logs
-                    .into_iter()
-                    .filter_map(|log| {
-                        if let Ok(IHyperdriveEvents::InitializeFilter(log)) =
-                            IHyperdriveEvents::decode_log(&log.into())
-                        {
-                            Some(log)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
-            logs[0].clone()
+            // Retry loop in case Anvil fails.
+            let mut num_retries = 0;
+            loop {
+                let logs =
+                    tx.0.send()
+                        .await?
+                        .await?
+                        .unwrap()
+                        .logs
+                        .into_iter()
+                        .filter_map(|log| {
+                            if let Ok(IHyperdriveEvents::InitializeFilter(log)) =
+                                IHyperdriveEvents::decode_log(&log.into())
+                            {
+                                Some(log)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                if logs.len() == 0 {
+                    num_retries += 1;
+                    if num_retries > 1000 {
+                        return Err(eyre::eyre!(
+                            "Failed to retrieve initialize logs after 1000 retries."
+                        ));
+                    }
+                    continue;
+                } else {
+                    break logs[0].clone();
+                }
+            }
         };
         self.wallet.lp_shares = log.lp_amount.into();
 
@@ -270,24 +284,38 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                 },
             ))
             .apply(self.pre_process_options(maybe_tx_options));
-            let logs =
-                tx.0.send()
-                    .await?
-                    .await?
-                    .unwrap()
-                    .logs
-                    .into_iter()
-                    .filter_map(|log| {
-                        if let Ok(IHyperdriveEvents::AddLiquidityFilter(log)) =
-                            IHyperdriveEvents::decode_log(&log.into())
-                        {
-                            Some(log)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
-            logs[0].clone()
+            // Retry loop in case Anvil fails.
+            let mut num_retries = 0;
+            loop {
+                let logs =
+                    tx.0.send()
+                        .await?
+                        .await?
+                        .unwrap()
+                        .logs
+                        .into_iter()
+                        .filter_map(|log| {
+                            if let Ok(IHyperdriveEvents::AddLiquidityFilter(log)) =
+                                IHyperdriveEvents::decode_log(&log.into())
+                            {
+                                Some(log)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                if logs.len() == 0 {
+                    num_retries += 1;
+                    if num_retries > 1000 {
+                        return Err(eyre::eyre!(
+                            "Failed to retrieve add liquidity logs after 1000 retries."
+                        ));
+                    }
+                    continue;
+                } else {
+                    break logs[0].clone();
+                }
+            }
         };
         self.wallet.lp_shares += log.lp_amount.into();
 
@@ -331,24 +359,38 @@ impl Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
                 options,
             ))
             .apply(self.pre_process_options(maybe_tx_options));
-            let logs =
-                tx.0.send()
-                    .await?
-                    .await?
-                    .unwrap()
-                    .logs
-                    .into_iter()
-                    .filter_map(|log| {
-                        if let Ok(IHyperdriveEvents::RemoveLiquidityFilter(log)) =
-                            IHyperdriveEvents::decode_log(&log.into())
-                        {
-                            Some(log)
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>();
-            logs[0].clone()
+            // Retry loop in case Anvil fails.
+            let mut num_retries = 0;
+            loop {
+                let logs =
+                    tx.0.send()
+                        .await?
+                        .await?
+                        .unwrap()
+                        .logs
+                        .into_iter()
+                        .filter_map(|log| {
+                            if let Ok(IHyperdriveEvents::RemoveLiquidityFilter(log)) =
+                                IHyperdriveEvents::decode_log(&log.into())
+                            {
+                                Some(log)
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>();
+                if logs.len() == 0 {
+                    num_retries += 1;
+                    if num_retries > 1000 {
+                        return Err(eyre::eyre!(
+                            "Failed to retrieve remove liquidity logs after 1000 retries."
+                        ));
+                    }
+                    continue;
+                } else {
+                    break logs[0].clone();
+                }
+            }
         };
         self.wallet.base += log.amount.into();
         self.wallet.withdrawal_shares += log.withdrawal_share_amount.into();
