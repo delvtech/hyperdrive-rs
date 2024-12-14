@@ -558,7 +558,7 @@ impl State {
             // The loss function is z_t - z, and its derivative is -dz/dy.
             let loss = target_pool_shares - current_pool_shares;
             let loss_derivative =
-                -self.calculate_pool_delta_shares_after_short_derivative(last_good_bond_amount)?;
+                -self.calculate_pool_share_delta_after_short_derivative(last_good_bond_amount)?;
             let dy = loss.div_up(loss_derivative);
             // Bond amount must increase.
             // Negative dy indicates that the bond amount would go up with a
@@ -786,7 +786,7 @@ impl State {
     /// \frac{\partial \Delta z}{\partial \Delta y} = - P_{\text{lp}}'(\Delta y)
     ///         - \left(\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \right)
     /// ```
-    fn calculate_pool_delta_shares_after_short_derivative(
+    fn calculate_pool_share_delta_after_short_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<I256>> {
@@ -798,7 +798,7 @@ impl State {
             * (fixed!(1e18) - self.governance_lp_fee())
             / self.vault_share_price())
         .change_type::<I256>()?;
-        Ok(-lhs - rhs)
+        Ok(lhs - rhs)
     }
 
     /// Calculates the derivative of the pool's solvency w.r.t. the short
@@ -846,6 +846,83 @@ mod tests {
         agent::HyperdriveMathAgent,
         preamble::{get_max_short, initialize_pool_with_random_state},
     };
+
+    #[tokio::test]
+    async fn fuzz_calculate_pool_share_delta_after_short_derivative() -> Result<()> {
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+
+            // Min trade amount should be at least 1,000x the derivative epsilon
+            let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
+
+            let f_x = match panic::catch_unwind(|| {
+                state.calculate_pool_share_delta_after_open_short(bond_amount)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+            let f_x_plus_delta = match panic::catch_unwind(|| {
+                state.calculate_pool_share_delta_after_open_short(
+                    bond_amount + empirical_derivative_epsilon,
+                )
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+
+            // Compute the absolute value of the empirical and analytical
+            // derivatives.
+            let pool_share_delta_derivative =
+                state.calculate_pool_share_delta_after_short_derivative(bond_amount)?;
+            let empirical_derivative = if f_x < f_x_plus_delta {
+                // Adding delta bonds results in smaller pool share delta.
+                // This implies a positive derivative.
+                assert!(pool_share_delta_derivative >= fixed!(0));
+                (f_x_plus_delta - f_x) / empirical_derivative_epsilon
+            } else {
+                // Adding delta bonds results in larger pool share delta.
+                // This implies a negative derivative.
+                assert!(pool_share_delta_derivative <= fixed!(0));
+                (f_x - f_x_plus_delta) / empirical_derivative_epsilon
+            };
+            let pool_share_delta_derivative =
+                pool_share_delta_derivative.abs().change_type::<U256>()?;
+
+            // Ensure that the empirical and analytical derivatives match.
+            let derivative_diff = if empirical_derivative > pool_share_delta_derivative {
+                empirical_derivative - pool_share_delta_derivative
+            } else {
+                pool_share_delta_derivative - empirical_derivative
+            };
+            assert!(
+                derivative_diff < test_tolerance,
+                "expected abs(derivative_diff)={:#?} < test_tolerance={:#?};
+                calculated_derivative={:#?}, empirical_derivative={:#?}",
+                derivative_diff,
+                test_tolerance,
+                pool_share_delta_derivative,
+                empirical_derivative
+            );
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzz_solvency_after_short_derivative() -> Result<()> {
