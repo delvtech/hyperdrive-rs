@@ -1325,4 +1325,74 @@ mod tests {
 
         Ok(())
     }
+
+    #[tokio::test]
+    async fn fuzz_solvency_monotonicity() -> Result<()> {
+        // Define a range of increments to test.
+        let mut rng = thread_rng();
+        let mut increments = Vec::new();
+        // 500 points between 1 and 1B.
+        for i in (1..=1_000_000_000).step_by(5_000_000) {
+            let i_val = FixedPoint::<U256>::from(i);
+            let inc = i_val * fixed!(1e9); // range is 1e9->1e19
+            increments.push(inc);
+        }
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+            // Vary the baseline scale factor by adjusting the initial bond amount.
+            let bond_amount = rng.gen_range(fixed!(1e10)..=fixed!(100_000_000e18));
+            // Compute f_x at the baseline bond_amount.
+            let f_x = match panic::catch_unwind(|| {
+                state.solvency_after_short(bond_amount, checkpoint_exposure)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // Start value is not solvent; skip the test.
+                },
+                Err(_) => continue, // Start value caused panic; skip the test.
+            };
+            // Compute f_x for each increment.
+            let mut f_x_values = Vec::new();
+            for &inc in &increments {
+                match panic::catch_unwind(|| {
+                    state.solvency_after_short(bond_amount + inc, checkpoint_exposure)
+                }) {
+                    Ok(result) => match result {
+                        Ok(val) => f_x_values.push((inc, val)),
+                        Err(_) => {
+                            continue; // Increment makes the pool insolvent, skip.
+                        }
+                    },
+                    Err(_) => continue, // Overflow or underflow
+                };
+            }
+            // If we didn't get enough data points, skip this iteration.
+            if f_x_values.len() < 2 {
+                continue;
+            }
+            // Check monotonicity: determine if all differences f_x - f_x_values[i] have the same sign.
+            let diffs: Vec<bool> = f_x_values
+                .iter()
+                .map(|(_inc, val)| *val < f_x) // Compare each f_x_plus_delta to f_x
+                .collect();
+            // We want either all "true" or all "false" in diffs for strict monotonicity.
+            let all_decreasing = diffs.iter().all(|&x| x == true);
+            let all_increasing = diffs.iter().all(|&x| x == false);
+            // If not strictly monotonic, assert fails.
+            assert!(
+                all_decreasing || all_increasing,
+                "Non-monotonic behavior detected. diffs={:?}",
+                diffs
+            );
+        }
+        Ok(())
+    }
 }
