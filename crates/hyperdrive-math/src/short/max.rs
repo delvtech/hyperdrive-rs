@@ -1154,8 +1154,7 @@ mod tests {
         let max_iterations = 500;
         // Run the fuzz tests
         let mut rng = thread_rng();
-        for iter in 0..*FAST_FUZZ_RUNS {
-            println!("iter {:#?}", iter);
+        for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
             let checkpoint_exposure = {
                 let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
