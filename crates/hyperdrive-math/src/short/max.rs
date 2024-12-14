@@ -49,6 +49,22 @@ impl State {
         // `$z - \zeta \geq z_{min}$`. Combining these together, we calculate
         // the share reserves after a max short as
         // `$z_{optimal} = z_{min} + max(0, \zeta) + exposure$`.
+        let exposure_shares = self.long_minus_checkpoint_exposure_shares(checkpoint_exposure)?;
+        let min_share_reserves = self.minimum_share_reserves()
+            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?
+            + exposure_shares;
+        Ok(min_share_reserves)
+    }
+
+    /// Calculate the long exposure minus the checkpoint exposure, in shares.
+    ///
+    /// This is a useful number when working with shorts because they reduce the
+    /// total exposure. However, in general this is not the same as the total
+    /// exposure.
+    fn long_minus_checkpoint_exposure_shares(
+        &self,
+        checkpoint_exposure: I256,
+    ) -> Result<FixedPoint<U256>> {
         let exposure_shares = {
             let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
             if self.long_exposure() < checkpoint_exposure {
@@ -61,10 +77,7 @@ impl State {
                 (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
             }
         };
-        let min_share_reserves = self.minimum_share_reserves()
-            + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?
-            + exposure_shares;
-        Ok(min_share_reserves)
+        Ok(exposure_shares)
     }
 
     /// Use Newton's method to find the amount of bonds shorted for a given base
@@ -605,12 +618,13 @@ impl State {
         ));
     }
 
-    /// Calculates an initial guess for the absolute max short. This is a
-    /// conservative guess that will be less than the true absolute max short,
-    /// which is what we need to start Newton's method.
+    /// Calculates an initial guess for the absolute max short that is always
+    /// solvent.
     ///
-    /// To calculate our guess, we start from the equation for computing the
-    /// final share reserves given an open short for some delta bonds:
+    /// This is a conservative guess that will be less than the true absolute
+    /// max short, which is what we need to start Newton's method. To calculate
+    /// our guess, we start from the equation for computing the final share
+    /// reserves given an open short for some delta bonds:
     ///
     /// ```math
     ///z_1 = \frac{1}{\mu} \cdot \left( \frac{\mu}{c} \cdot \left( k
@@ -735,7 +749,7 @@ impl State {
                 pool_share_delta
             ));
         }
-        // Check z - zeta >= z_min.
+        // Need to check that z - zeta >= z_min
         let new_share_reserves = self.share_reserves() - pool_share_delta;
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, self.share_adjustment())?;
@@ -743,20 +757,8 @@ impl State {
             return Err(eyre!("Insufficient liquidity. Expected effective_share_reserves={:#?} >= min_share_reserves={:#?}",
             new_effective_share_reserves, self.minimum_share_reserves()));
         }
-        // Check global exposure, which also checks z >= z_min.
-        let exposure_shares = {
-            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
-            if self.long_exposure() < checkpoint_exposure {
-                return Err(eyre!(
-                    "expected long_exposure={:#?} >= checkpoint_exposure={:#?}.",
-                    self.long_exposure(),
-                    checkpoint_exposure
-                ));
-            } else {
-                // Div up to make the check more conservative.
-                (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
-            }
-        };
+        // Check global exposure. This also ensures z >= z_min.
+        let exposure_shares = self.long_minus_checkpoint_exposure_shares(checkpoint_exposure)?;
         if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
             Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
@@ -824,10 +826,10 @@ impl State {
 
 #[cfg(test)]
 mod tests {
-    use std::panic;
+    use std::{panic, path::absolute};
 
-    use ethers::types::{U128, U256};
-    use fixedpointmath::{fixed, fixed_u256, uint256};
+    use ethers::types::{I256, U128, U256};
+    use fixedpointmath::{fixed, fixed_u256, uint256, FixedPoint};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -944,7 +946,11 @@ mod tests {
             // Unlikely: fix the state generator so that the random state always has a valid max.
             // Likely: fix absolute max short such that the output is guaranteed to be solvent.
             match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(max_iterations))
+                state.calculate_absolute_max_short(
+                    checkpoint_exposure,
+                    Some(test_tolerance),
+                    Some(max_iterations),
+                )
             }) {
                 Ok(max_bond_no_panic) => {
                     match max_bond_no_panic {
@@ -1016,7 +1022,6 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let solvency_tolerance = fixed!(100_000_000e18);
-
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             // Compute a random state and checkpoint exposure.
@@ -1031,13 +1036,11 @@ mod tests {
             }
             .min(I256::try_from(state.long_exposure())?);
 
-            let min_share_reserves = state.calculate_min_share_reserves(checkpoint_exposure)?;
-
             // Check that a short is possible.
             if state
                 .effective_share_reserves()?
                 .min(state.share_reserves())
-                < min_share_reserves
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
             {
                 continue;
             }
@@ -1052,7 +1055,8 @@ mod tests {
             let max_short_guess = state.absolute_max_short_guess(checkpoint_exposure)?;
             let solvency = state.solvency_after_short(max_short_guess, checkpoint_exposure)?;
 
-            // Check that the remaining available shares in the pool are below a tolerance.
+            // Check that the remaining available shares in the pool are below a
+            // solvency tolerance.
             assert!(
                 solvency <= solvency_tolerance,
                 "solvency={:#?} > solvency_tolerance={:#?}",
