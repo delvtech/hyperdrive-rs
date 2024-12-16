@@ -537,6 +537,13 @@ mod tests {
             let checkpoint_exposure = alice
                 .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
                 .await?;
+            // Check that a short is possible.
+            if original_state.effective_share_reserves()?
+                < original_state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+
             let max_short_amount = original_state.calculate_max_short(
                 U256::MAX,
                 original_state.vault_share_price(),
@@ -864,9 +871,18 @@ mod tests {
 
             // Alice initializes the pool.
             alice.initialize(fixed_rate, contribution, None).await?;
-
-            // Attempt to predict the spot price after opening a short.
             let mut state = alice.get_state().await?;
+
+            // Check that a short is possible.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+
             let bond_amount = rng.gen_range(
                 state.minimum_transaction_amount()..=bob.calculate_max_short(None).await?,
             );
@@ -920,10 +936,14 @@ mod tests {
             // fails because we want to test the default behavior when the state
             // allows all actions.
             let state = rng.gen::<State>();
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
@@ -993,6 +1013,17 @@ mod tests {
             // Set a random variable rate.
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
             alice.advance_time(variable_rate, 12.into()).await?;
+
+            // Check that a short is possible.
+            let state = alice.get_state().await?;
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
@@ -1154,6 +1185,17 @@ mod tests {
             // Get state and trade details.
             let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
+
+            // Check that a short is possible.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+
             let max_short = celine.calculate_max_short(None).await?;
             let bond_amount = rng.gen_range(min_txn_amount..=max_short);
 

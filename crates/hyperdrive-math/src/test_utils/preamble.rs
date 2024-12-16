@@ -282,8 +282,20 @@ mod tests {
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
 
-            // Get state and trade details, then open the max short.
+            // Get state and trade details.
             let state = alice.get_state().await?;
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+
+            // Check that a short is possible.
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+
+            // Open the max short.
             let max_short = bob.calculate_max_short(None).await?;
             assert!(max_short >= state.minimum_transaction_amount());
             bob.fund(max_short + fixed!(10e18)).await?;

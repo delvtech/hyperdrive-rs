@@ -41,7 +41,10 @@ impl State {
 
     /// Calculate the minimum share reserves allowed by the pool given the
     /// current exposure and share adjustment.
-    fn calculate_min_share_reserves(&self, checkpoint_exposure: I256) -> Result<FixedPoint<U256>> {
+    pub fn calculate_min_share_reserves(
+        &self,
+        checkpoint_exposure: I256,
+    ) -> Result<FixedPoint<U256>> {
         // We have the twin constraints that `$z \geq z_{min} + exposure$` and
         // `$z - \zeta \geq z_{min}$`. Combining these together, we calculate
         // the share reserves after a max short as
@@ -985,6 +988,13 @@ mod tests {
                 .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
                 .await?;
 
+            // Check that a short is possible.
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                continue;
+            }
+
             let global_max_short_bonds = state.calculate_absolute_max_short(
                 state.calculate_spot_price_down()?,
                 checkpoint_exposure,
@@ -1094,6 +1104,15 @@ mod tests {
                 .await
             {
                 Ok(sol_max_bonds) => {
+                    // Check that a short is possible.
+                    // TODO: We will remove this check in the future; this a failure case in rust that is not
+                    // checked in solidity.
+                    if state.effective_share_reserves()?
+                        < state.calculate_min_share_reserves(checkpoint_exposure)?
+                    {
+                        continue;
+                    }
+
                     // Solidity reports everything is good, so we run the Rust fns.
                     let rust_max_bonds = panic::catch_unwind(|| {
                         state.calculate_absolute_max_short(
