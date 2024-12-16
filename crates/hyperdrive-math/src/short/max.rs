@@ -58,8 +58,13 @@ impl State {
 
     /// Calculate the long exposure minus the checkpoint exposure, in shares.
     ///
-    /// This is a useful number when working with shorts because they reduce the
-    /// total exposure. However, in general this is not the same as the total
+    /// The long exposure will account for any executed trades. Any new short
+    /// net previous longs by subtracting from the long exposure. This increases
+    /// solvency until the checkpoint exposure goes negative. Past that point,
+    /// shorts will impact solvency by decreasing share reserves.
+    ///
+    /// This function is useful when working with shorts because it converts
+    /// a piece-wise linear calculation into a linear one by computing the net
     /// exposure.
     fn long_minus_checkpoint_exposure_shares(
         &self,
