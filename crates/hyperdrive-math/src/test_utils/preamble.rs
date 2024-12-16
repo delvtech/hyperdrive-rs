@@ -72,8 +72,16 @@ pub async fn initialize_pool_with_random_state(
 
     // Add some liquidity again to make sure future bots can make trades.
     let liquidity_amount = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
-    alice.fund(liquidity_amount).await?;
-    alice.add_liquidity(liquidity_amount, None).await?;
+    let exposure = FixedPoint::try_from(
+        alice
+            .get_checkpoint_exposure(alice.latest_checkpoint().await?)
+            .await?
+            .max(I256::zero()),
+    )? + alice.get_state().await?.long_exposure();
+    alice.fund(liquidity_amount + exposure).await?;
+    alice
+        .add_liquidity(liquidity_amount + exposure, None)
+        .await?;
 
     Ok(())
 }
@@ -87,13 +95,13 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
     // So we will first attempt to use `calculate_max_long` and then we will double check and reduce
     // the max if necessary.
     let mut max_long = match panic::catch_unwind(|| {
-        state.calculate_max_long(U256::from(U128::MAX), checkpoint_exposure, Some(3))
+        state.calculate_max_long(U256::from(U128::MAX), checkpoint_exposure, Some(5))
     }) {
         Ok(max_long_no_panic) => match max_long_no_panic {
             Ok(max_long_no_err) => max_long_no_err,
-            Err(_) => state.bond_reserves() * state.calculate_spot_price()? * fixed!(10e18),
+            Err(_) => state.bond_reserves() * state.calculate_spot_price_down()? * fixed!(10e18),
         },
-        Err(_) => state.bond_reserves() * state.calculate_spot_price()? * fixed!(10e18),
+        Err(_) => state.bond_reserves() * state.calculate_spot_price_down()? * fixed!(10e18),
     };
 
     let mut num_tries = 0;
@@ -143,7 +151,7 @@ pub fn get_max_short(
         // weighted average of the spot price and the minimum possible
         // spot price the pool can quote. We choose the weights so that this
         // is an underestimate of the worst case realized price.
-        let spot_price = state.calculate_spot_price()?;
+        let spot_price = state.calculate_spot_price_down()?;
         let min_price = state.calculate_min_spot_price()?;
 
         // Calculate the linear interpolation.
@@ -158,7 +166,7 @@ pub fn get_max_short(
             state.vault_share_price(),
             checkpoint_exposure,
             Some(conservative_price),
-            Some(3),
+            Some(5),
         )
     }) {
         Ok(max_short_no_panic) => match max_short_no_panic {
