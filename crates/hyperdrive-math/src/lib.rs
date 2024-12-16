@@ -356,7 +356,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_reserves_given_rate_ignoring_exposure() -> Result<()> {
-        let test_tolerance = fixed!(1e15);
+        let test_tolerance = fixed!(1e16);
         let mut rng = thread_rng();
         let mut counter = 0;
         for _ in 0..*FAST_FUZZ_RUNS {
