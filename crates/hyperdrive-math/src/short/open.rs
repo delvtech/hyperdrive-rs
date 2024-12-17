@@ -541,6 +541,10 @@ mod tests {
             if original_state.effective_share_reserves()?
                 < original_state.calculate_min_share_reserves(checkpoint_exposure)?
             {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
                 continue;
             }
 
@@ -880,6 +884,9 @@ mod tests {
             if state.effective_share_reserves()?
                 < state.calculate_min_share_reserves(checkpoint_exposure)?
             {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
                 continue;
             }
 
@@ -1022,6 +1029,9 @@ mod tests {
             if state.effective_share_reserves()?
                 < state.calculate_min_share_reserves(checkpoint_exposure)?
             {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
                 continue;
             }
 
@@ -1193,6 +1203,10 @@ mod tests {
             if state.effective_share_reserves()?
                 < state.calculate_min_share_reserves(checkpoint_exposure)?
             {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
                 continue;
             }
 

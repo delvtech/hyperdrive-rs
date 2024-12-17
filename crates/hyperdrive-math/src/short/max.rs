@@ -903,7 +903,7 @@ mod tests {
 
             let min_share_reserves = state.calculate_min_share_reserves(checkpoint_exposure)?;
 
-            // Make sure a short is possible.
+            // Check that a short is possible.
             if state
                 .effective_share_reserves()?
                 .min(state.share_reserves())
@@ -992,6 +992,9 @@ mod tests {
             if state.effective_share_reserves()?
                 < state.calculate_min_share_reserves(checkpoint_exposure)?
             {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                // Don't need to reset bob because he hasn't done anything.
                 continue;
             }
 
@@ -1110,6 +1113,10 @@ mod tests {
                     if state.effective_share_reserves()?
                         < state.calculate_min_share_reserves(checkpoint_exposure)?
                     {
+                        chain.revert(id).await?;
+                        alice.reset(Default::default()).await?;
+                        bob.reset(Default::default()).await?;
+                        celine.reset(Default::default()).await?;
                         continue;
                     }
 
