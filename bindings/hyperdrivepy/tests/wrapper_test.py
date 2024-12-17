@@ -329,7 +329,6 @@ def test_max_short():
     # test using the state directly
     budget = str(int(10 * 10**18))  # 10k base
     open_vault_share_price = str(int(1 * 10**18))  # 1 base
-    checkpoint_exposure = str(0)
     conservative_price = None
     max_iterations = 20
     max_short = hyperdrivepy.calculate_max_short(
@@ -337,7 +336,6 @@ def test_max_short():
         POOL_INFO,
         budget,
         open_vault_share_price,
-        checkpoint_exposure,
         conservative_price,
         max_iterations,
     )
@@ -347,7 +345,6 @@ def test_max_short():
 def test_max_short_fail_conversion():
     """Test calculate_max_short."""
     open_vault_share_price = str(int(1 * 10**18))  # 1 base
-    checkpoint_exposure = str(0)
     conservative_price = None
     max_iterations = 20
     # bad string inputs
@@ -358,7 +355,6 @@ def test_max_short_fail_conversion():
             POOL_INFO,
             budget,
             open_vault_share_price,
-            checkpoint_exposure,
             conservative_price,
             max_iterations,
         )
@@ -369,7 +365,6 @@ def test_max_short_fail_conversion():
             POOL_INFO,
             budget,
             open_vault_share_price,
-            checkpoint_exposure,
             conservative_price,
             max_iterations,
         )
@@ -381,7 +376,6 @@ def test_max_short_fail_conversion():
             POOL_INFO,
             budget,
             open_vault_share_price,
-            checkpoint_exposure,
             conservative_price,
             max_iterations,
         )

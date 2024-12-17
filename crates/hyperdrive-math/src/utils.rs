@@ -227,13 +227,7 @@ mod tests {
             // Get the max rate.
             // We need to catch panics because of overflows.
             let max_short = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    None,
-                )
+                state.calculate_max_short(U256::MAX, open_vault_share_price, None, None)
             }) {
                 Ok(max_short) => match max_short {
                     Ok(max_short) => max_short,

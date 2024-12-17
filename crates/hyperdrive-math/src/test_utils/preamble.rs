@@ -47,11 +47,8 @@ pub async fn initialize_pool_with_random_state(
         // Celine opens a short.
         state = alice.get_state().await?;
 
-        // Get the current checkpoint exposure.
-        let checkpoint_exposure = alice
-            .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-            .await?;
-        let max_short = get_max_short(state, checkpoint_exposure, None)?;
+        // Get the a bounded short amount.
+        let max_short = get_max_short(state, None)?;
         let short_amount = rng.gen_range(min_txn..=max_short);
         celine.fund(short_amount + fixed!(10e18)).await?; // Fund a little extra for slippage.
         celine.open_short(short_amount, None, None).await?;
@@ -131,11 +128,7 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
 }
 
 /// Conservative and safe estimate of the maximum short.
-pub fn get_max_short(
-    state: State,
-    checkpoint_exposure: I256,
-    maybe_max_num_tries: Option<usize>,
-) -> Result<FixedPoint<U256>> {
+pub fn get_max_short(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
 
     // We linearly interpolate between the current spot price and the minimum
@@ -159,7 +152,6 @@ pub fn get_max_short(
         state.calculate_max_short(
             U256::from(U128::MAX),
             state.vault_share_price(),
-            checkpoint_exposure,
             Some(conservative_price),
             Some(5),
         )
@@ -279,13 +271,10 @@ mod tests {
 
             // Get state and trade details.
             let state = alice.get_state().await?;
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                .await?;
 
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves(checkpoint_exposure)?
+                < state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;

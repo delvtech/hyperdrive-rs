@@ -557,7 +557,6 @@ def calculate_max_short(
     pool_info: types.PoolInfoType,
     budget: str,
     open_vault_share_price: str,
-    checkpoint_exposure: str,
     maybe_conservative_price: str | None,
     maybe_max_iterations: int | None,
 ) -> str:
@@ -575,8 +574,6 @@ def calculate_max_short(
         The account budget in base for making a short.
     open_vault_share_price: str (FixedPoint)
         The share price of underlying vault.
-    checkpoint_exposure: str (FixedPoint)
-        The net exposure for the given checkpoint.
     maybe_conservative_price: str (FixedPoint), optional
         A lower bound on the realized price that the short will pay.
     maybe_max_iterations: int, optional
@@ -590,7 +587,6 @@ def calculate_max_short(
     return _get_interface(pool_config, pool_info).calculate_max_short(
         budget,
         open_vault_share_price,
-        checkpoint_exposure,
         maybe_conservative_price,
         maybe_max_iterations,
     )
