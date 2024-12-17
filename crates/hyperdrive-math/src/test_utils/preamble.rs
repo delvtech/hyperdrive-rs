@@ -72,12 +72,7 @@ pub async fn initialize_pool_with_random_state(
 
     // Add some liquidity again to make sure future bots can make trades.
     let liquidity_amount = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
-    let exposure = FixedPoint::try_from(
-        alice
-            .get_checkpoint_exposure(alice.latest_checkpoint().await?)
-            .await?
-            .max(I256::zero()),
-    )? + alice.get_state().await?.long_exposure();
+    let exposure = alice.get_state().await?.long_exposure();
     alice.fund(liquidity_amount + exposure).await?;
     alice
         .add_liquidity(liquidity_amount + exposure, None)
