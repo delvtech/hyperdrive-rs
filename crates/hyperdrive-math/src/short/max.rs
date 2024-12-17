@@ -620,16 +620,17 @@ impl State {
             ));
         }
         // Use a linear estimate that lies below the YieldSpace curve.
-        // -∆z - zeta = z0 - z1 - zeta = z0 - zeta - z1
-        let neg_delta_z_minus_zeta = self.effective_share_reserves()? - min_share_reserves;
+        // z0 - zeta - z1
+        let effective_shares_minus_min_shares =
+            self.effective_share_reserves()? - min_share_reserves;
         // ø_c * (1 - ø_g) * (1 - p)
         let fee_component = self
             .curve_fee()
             .mul_up(fixed!(1e18) - self.governance_lp_fee())
             .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?);
-        // (c * (z0 - z1 - zeta)) / (p + ø_c * (1 - ø_g) * (1 - p))
+        // (c * (z0 - zeta - z1)) / (p + ø_c * (1 - ø_g) * (1 - p))
         let mut conservative_bond_delta = self.vault_share_price().mul_div_up(
-            neg_delta_z_minus_zeta,
+            effective_shares_minus_min_shares,
             self.calculate_spot_price_up()? + fee_component,
         );
         // Iteratively adjust to ensure solvency.
@@ -725,8 +726,8 @@ impl State {
         if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
             Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
-            Err(eyre!("Insiffucient liquidity. Expected share_reserves={:#?} >- exposure_shares={:#?} + min_share_reserves={:#?}",
-            new_share_reserves, exposure_shares, self.minimum_share_reserves()))
+            Err(eyre!("Insiffucient liquidity. Expected share_reserves={:#?} >= {:#?} = exposure_shares={:#?} + min_share_reserves={:#?}",
+            new_share_reserves, exposure_shares + self.minimum_share_reserves(), exposure_shares, self.minimum_share_reserves()))
         }
     }
 
