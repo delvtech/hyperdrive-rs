@@ -933,9 +933,7 @@ mod tests {
     async fn test_defaults_calculate_spot_price_after_short() -> Result<()> {
         let mut rng = thread_rng();
         let mut num_checks = 0;
-        // We don't need a lot of tests for this because each component is
-        // tested elsewhere.
-        for _ in 0..*SLOW_FUZZ_RUNS {
+        for _ in 0..*FUZZ_RUNS {
             // We use a random state but we will ignore any case where a call
             // fails because we want to test the default behavior when the state
             // allows all actions.
@@ -950,17 +948,19 @@ mod tests {
             };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(3))
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(10))
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
-                    Ok(max_bond_amount) => max_bond_amount,
+                    Ok(max_bond_amount) => {
+                        if max_bond_amount == fixed!(0) {
+                            continue;
+                        }
+                        max_bond_amount
+                    }
                     Err(_) => continue, // Err; max short insolvent
                 },
                 Err(_) => continue, // panic; likely in FixedPoint<U256>
             };
-            if max_bond_amount == fixed!(0) {
-                continue;
-            }
             // Using the default behavior
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
