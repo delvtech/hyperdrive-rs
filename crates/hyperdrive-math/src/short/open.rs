@@ -300,7 +300,7 @@ impl State {
     /// Calculates the share delta to be applied to the pool after opening a
     /// short.
     ///
-    /// The share delta is given by:
+    /// Assuming `$z_1 = z_0 - \Delta z$`, the share delta is given by:
     ///
     /// ```math
     /// \Delta z =
@@ -313,18 +313,19 @@ impl State {
     /// `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
     ///
     /// ```math
-    /// \Delta z = z
+    /// \Delta z = z_0
     ///     - \frac{1}{\mu} \cdot \left(
     ///     \frac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
     ///     \right)^{\frac{1}{1 - t_s}}
-    ///     - \frac{\phi_c \cdot (1 - p) \cdot \Delta y \cdot (1 - \phi_g)}{c}
+    ///     - \frac{\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \Delta y}{c}
     /// ```
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
+        // calculate_short_principal returns z_0 - P_lp(∆y)
         let short_principal = self.calculate_short_principal(bond_amount)?;
+        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
@@ -632,11 +633,7 @@ mod tests {
             };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    None,
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, None)
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
                     Ok(max_bond_amount) => max_bond_amount,
@@ -936,9 +933,7 @@ mod tests {
     async fn test_defaults_calculate_spot_price_after_short() -> Result<()> {
         let mut rng = thread_rng();
         let mut num_checks = 0;
-        // We don't need a lot of tests for this because each component is
-        // tested elsewhere.
-        for _ in 0..*SLOW_FUZZ_RUNS {
+        for _ in 0..*FAST_FUZZ_RUNS {
             // We use a random state but we will ignore any case where a call
             // fails because we want to test the default behavior when the state
             // allows all actions.
@@ -953,21 +948,19 @@ mod tests {
             };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(3),
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(10))
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
-                    Ok(max_bond_amount) => max_bond_amount,
+                    Ok(max_bond_amount) => {
+                        if max_bond_amount <= state.minimum_transaction_amount() {
+                            continue;
+                        }
+                        max_bond_amount
+                    }
                     Err(_) => continue, // Err; max short insolvent
                 },
                 Err(_) => continue, // panic; likely in FixedPoint<U256>
             };
-            if max_bond_amount == fixed!(0) {
-                continue;
-            }
             // Using the default behavior
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
@@ -1127,11 +1120,7 @@ mod tests {
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(
-                    state.calculate_spot_price_down()?,
-                    checkpoint_exposure,
-                    Some(max_iterations),
-                )
+                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(max_iterations))
             });
             // Since we're fuzzing it's possible that the max can fail.
             // We're only going to use it in this test if it succeeded.
