@@ -952,7 +952,7 @@ mod tests {
             }) {
                 Ok(max_bond_amount) => match max_bond_amount {
                     Ok(max_bond_amount) => {
-                        if max_bond_amount == fixed!(0) {
+                        if max_bond_amount <= state.minimum_transaction_amount() {
                             continue;
                         }
                         max_bond_amount
