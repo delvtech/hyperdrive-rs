@@ -126,17 +126,7 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
-        let checkpoint_exposure = self
-            .hyperdrive()
-            .get_checkpoint_exposure(state.to_checkpoint(self.now().await?))
-            .await?;
-        Ok(
-            state.calculate_max_long(
-                self.wallet.base,
-                checkpoint_exposure,
-                maybe_max_iterations,
-            )?,
-        )
+        Ok(state.calculate_max_long(self.wallet.base, maybe_max_iterations)?)
     }
 
     /// Gets the long that moves the fixed rate to a target value.
@@ -147,15 +137,10 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         maybe_allowable_error: Option<FixedPoint<U256>>,
     ) -> Result<FixedPoint<U256>> {
         let state = self.get_state().await?;
-        let checkpoint_exposure = self
-            .hyperdrive()
-            .get_checkpoint_exposure(state.to_checkpoint(self.now().await?))
-            .await?;
         Ok(state
             .calculate_targeted_long_with_budget(
                 self.wallet.base,
                 target_rate,
-                checkpoint_exposure,
                 maybe_max_iterations,
                 maybe_allowable_error,
             )
@@ -179,7 +164,6 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             vault_share_price: open_vault_share_price,
             ..
         } = self.get_checkpoint(latest_checkpoint).await?;
-        let checkpoint_exposure = self.get_checkpoint_exposure(latest_checkpoint).await?;
         let state = self.get_state().await?;
 
         // We linearly interpolate between the current spot price and the minimum
@@ -204,7 +188,6 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         state.calculate_max_short(
             budget,
             open_vault_share_price,
-            checkpoint_exposure,
             Some(conservative_price),
             None,
         )

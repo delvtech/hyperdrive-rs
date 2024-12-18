@@ -10,7 +10,6 @@ impl HyperdriveState {
         &self,
         budget: &str,
         target_rate: &str,
-        checkpoint_exposure: &str,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<&str>,
     ) -> PyResult<String> {
@@ -26,12 +25,6 @@ impl HyperdriveState {
                 target_rate, err
             ))
         })?);
-        let checkpoint_exposure_i = I256::from_dec_str(checkpoint_exposure).map_err(|err| {
-            PyErr::new::<PyValueError, _>(format!(
-                "Failed to convert checkpoint_exposure string {} to I256: {}",
-                checkpoint_exposure, err
-            ))
-        })?;
         let maybe_allowable_error_fp = if let Some(allowable_error) = maybe_allowable_error {
             Some(FixedPoint::from(
                 U256::from_dec_str(allowable_error).map_err(|err| {
@@ -49,7 +42,6 @@ impl HyperdriveState {
             .calculate_targeted_long_with_budget(
                 budget_fp,
                 target_rate_fp,
-                checkpoint_exposure_i,
                 maybe_max_iterations,
                 maybe_allowable_error_fp,
             )
