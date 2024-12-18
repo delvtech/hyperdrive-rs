@@ -478,7 +478,6 @@ def calculate_targeted_long(
     pool_info: types.PoolInfoType,
     budget: str,
     target_rate: str,
-    checkpoint_exposure: str,
     maybe_max_iterations: int | None,
     maybe_allowable_error: str | None,
 ) -> str:
@@ -496,8 +495,6 @@ def calculate_targeted_long(
         The account budget in base for making a long.
     target: str (FixedPoint)
         The target fixed rate.
-    checkpoint_exposure: str (I256)
-        The net exposure for the given checkpoint.
     maybe_max_iterations: int, optional
         The number of iterations to use for the Newtonian method.
         Defaults to 7.
@@ -514,7 +511,6 @@ def calculate_targeted_long(
     return _get_interface(pool_config, pool_info).calculate_targeted_long_with_budget(
         budget,
         target_rate,
-        checkpoint_exposure,
         maybe_max_iterations,
         maybe_allowable_error,
     )
@@ -524,7 +520,6 @@ def calculate_max_long(
     pool_config: types.PoolConfigType,
     pool_info: types.PoolInfoType,
     budget: str,
-    checkpoint_exposure: str,
     maybe_max_iterations: int | None,
 ) -> str:
     """Get the max amount of bonds that can be purchased for the given budget.
@@ -539,8 +534,6 @@ def calculate_max_long(
         Includes attributes like reserve levels and share prices.
     budget: str (FixedPont)
         The account budget in base for making a long.
-    checkpoint_exposure: str (I256)
-        The net exposure for the given checkpoint.
     maybe_max_iterations: int, optional
         The number of iterations to use for the Newtonian method.
 
@@ -549,7 +542,7 @@ def calculate_max_long(
     str (FixedPoint)
         The maximum long the pool and user's wallet can support.
     """
-    return _get_interface(pool_config, pool_info).calculate_max_long(budget, checkpoint_exposure, maybe_max_iterations)
+    return _get_interface(pool_config, pool_info).calculate_max_long(budget, maybe_max_iterations)
 
 
 def calculate_max_short(

@@ -48,11 +48,7 @@ impl State {
         // If the pool is solvent after opening this long, then we're done.
         let (absolute_max_base_amount, absolute_max_bond_amount) = self.absolute_max_long()?;
         if self
-            .solvency_after_long(
-                absolute_max_base_amount,
-                absolute_max_bond_amount,
-                checkpoint_exposure,
-            )
+            .solvency_after_long(absolute_max_base_amount, absolute_max_bond_amount)
             .is_ok()
             && absolute_max_base_amount >= self.minimum_transaction_amount()
         {
@@ -76,19 +72,16 @@ impl State {
         //
         // The guess that we make is very important in determining how quickly
         // we converge to the solution.
-        let mut max_base_amount =
-            self.max_long_guess(absolute_max_base_amount, checkpoint_exposure)?;
+        let mut max_base_amount = self.max_long_guess(absolute_max_base_amount)?;
 
         // possible_max_base_amount might be less than minimum transaction amount.
         // we clamp here if so
         if max_base_amount < self.minimum_transaction_amount() {
             max_base_amount = self.minimum_transaction_amount();
         }
-        let mut solvency = match self.solvency_after_long(
-            max_base_amount,
-            self.calculate_open_long(max_base_amount)?,
-            checkpoint_exposure,
-        ) {
+        let mut solvency = match self
+            .solvency_after_long(max_base_amount, self.calculate_open_long(max_base_amount)?)
+        {
             Ok(solvency) => solvency,
             Err(err) => {
                 return Err(eyre!(
@@ -139,7 +132,6 @@ impl State {
             solvency = match self.solvency_after_long(
                 possible_max_base_amount,
                 self.calculate_open_long(possible_max_base_amount)?,
-                checkpoint_exposure,
             ) {
                 Ok(solvency) => solvency,
                 Err(_) => break,
@@ -264,7 +256,7 @@ impl State {
         // Calculate an initial estimate of the max long by using the spot price as
         // our conservative price.
         let spot_price = self.calculate_spot_price_down()?;
-        let guess = self.max_long_estimate(spot_price, spot_price, checkpoint_exposure)?;
+        let guess = self.max_long_estimate(spot_price, spot_price)?;
 
         // We know that the spot price is 1 when the absolute max base amount is
         // used to open a long. We also know that our spot price isn't a great
@@ -279,7 +271,7 @@ impl State {
 
         // Recalculate our intial guess using the bootstrapped conservative
         // estimate of the realized price.
-        self.max_long_estimate(estimate_price, spot_price, checkpoint_exposure)
+        self.max_long_estimate(estimate_price, spot_price)
     }
 
     /// Estimates the max long based on the pool's current solvency and a
@@ -389,7 +381,7 @@ impl State {
             >= exposure / self.vault_share_price() + self.minimum_share_reserves()
         {
             Ok(share_reserves / self.vault_share_price()
-                    - exposure / self.vault_share_price()
+                - exposure / self.vault_share_price()
                 - self.minimum_share_reserves())
         } else {
             Err(eyre!("Long would result in an insolvent pool."))
@@ -515,19 +507,15 @@ mod tests {
             // Gen a random state.
             let state = rng.gen::<State>();
 
-            // Generate a random checkpoint exposure.
-            let checkpoint_exposure = rng.gen_range(0..=i128::MAX).flip_sign_if(rng.gen()).into();
-
             // Check Solidity against Rust.
             let max_iterations = 8usize;
             // We need to catch panics because of overflows.
             let actual = panic::catch_unwind(|| {
-                state.calculate_max_long(
-                    U256::MAX,
-                    checkpoint_exposure,
-                    Some(max_iterations.into()),
-                )
+                state.calculate_max_long(U256::MAX, Some(max_iterations.into()))
             });
+            // Generate a random checkpoint exposure.
+            let checkpoint_exposure = rng.gen_range(0..=i128::MAX).flip_sign_if(rng.gen()).into();
+            // Test against Hyperdrive.
             match chain
                 .mock_hyperdrive_math()
                 .calculate_max_long(

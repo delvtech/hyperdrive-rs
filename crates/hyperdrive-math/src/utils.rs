@@ -210,15 +210,11 @@ mod tests {
         for _ in 0..*FUZZ_RUNS {
             // Gen the random state.
             let state = rng.gen::<State>();
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
 
             // Get the min rate.
             // We need to catch panics because of overflows.
-            let max_long = match state.calculate_max_long(U256::MAX, checkpoint_exposure, None) {
+            let max_long = match state.calculate_max_long(U256::MAX, None) {
                 Ok(max_long) => max_long,
                 Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
             };

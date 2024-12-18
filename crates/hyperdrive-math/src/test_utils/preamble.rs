@@ -81,13 +81,12 @@ pub async fn initialize_pool_with_random_state(
 /// Conservative and safe estimate of the maximum long.
 fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-    let checkpoint_exposure = I256::from(0);
 
     // We need a guaranteed method of picking a good upper-bound, even if underlying functions aren't working.
     // So we will first attempt to use `calculate_max_long` and then we will double check and reduce
     // the max if necessary.
     let mut max_long = match panic::catch_unwind(|| {
-        state.calculate_max_long(U256::from(U128::MAX), checkpoint_exposure, Some(5))
+        state.calculate_max_long(U256::from(U128::MAX), Some(5))
     }) {
         Ok(max_long_no_panic) => match max_long_no_panic {
             Ok(max_long_no_err) => max_long_no_err,

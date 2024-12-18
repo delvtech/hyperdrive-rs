@@ -17,42 +17,30 @@ impl State {
         F1: Into<FixedPoint<U256>>,
         F2: Into<FixedPoint<U256>>,
         F3: Into<FixedPoint<U256>>,
-        I: Into<I256>,
     >(
         &self,
         budget: F1,
         target_rate: F2,
-        checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F3>,
     ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
-        match self.calculate_targeted_long(
-            target_rate,
-            checkpoint_exposure,
-            maybe_max_iterations,
-            maybe_allowable_error,
-        ) {
+        match self.calculate_targeted_long(target_rate, maybe_max_iterations, maybe_allowable_error)
+        {
             Ok(long_amount) => Ok(long_amount.min(budget)),
             Err(error) => Err(error),
         }
     }
 
     /// Gets a target long that can be opened to achieve a desired fixed rate.
-    fn calculate_targeted_long<
-        F1: Into<FixedPoint<U256>>,
-        F2: Into<FixedPoint<U256>>,
-        I: Into<I256>,
-    >(
+    fn calculate_targeted_long<F1: Into<FixedPoint<U256>>, F2: Into<FixedPoint<U256>>>(
         &self,
         target_rate: F1,
-        checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
         maybe_allowable_error: Option<F2>,
     ) -> Result<FixedPoint<U256>> {
         // Check input args.
         let target_rate = target_rate.into();
-        let checkpoint_exposure = checkpoint_exposure.into();
         let allowable_error = match maybe_allowable_error {
             Some(allowable_error) => allowable_error.into(),
             None => fixed!(1e15),
@@ -87,11 +75,7 @@ impl State {
 
             // If we were still close enough and solvent, return.
             if self
-                .solvency_after_long(
-                    target_user_base_delta,
-                    target_user_bond_delta,
-                    checkpoint_exposure,
-                )
+                .solvency_after_long(target_user_base_delta, target_user_bond_delta)
                 .is_ok()
                 && rate_error < allowable_error
             {
@@ -107,11 +91,7 @@ impl State {
             // If solvent & within the allowable error, stop here.
             let rate_error = resulting_rate - target_rate;
             if self
-                .solvency_after_long(
-                    target_user_base_delta,
-                    target_user_bond_delta,
-                    checkpoint_exposure,
-                )
+                .solvency_after_long(target_user_base_delta, target_user_bond_delta)
                 .is_ok()
                 && rate_error < allowable_error
             {
@@ -146,11 +126,7 @@ impl State {
 
             // If solvent & within error, then return the value.
             if self
-                .solvency_after_long(
-                    possible_target_base_delta,
-                    possible_target_bond_delta,
-                    checkpoint_exposure,
-                )
+                .solvency_after_long(possible_target_base_delta, possible_target_bond_delta)
                 .is_ok()
                 && loss < allowable_error
             {
@@ -178,7 +154,6 @@ impl State {
             .solvency_after_long(
                 possible_target_base_delta,
                 self.calculate_open_long(possible_target_base_delta)?,
-                checkpoint_exposure,
             )
             .is_err()
         {
@@ -430,19 +405,14 @@ mod tests {
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
             // Get a random long trade amount.
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
-            let max_long_trade = match panic::catch_unwind(|| {
-                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
-            }) {
-                Ok(max_trade) => match max_trade {
-                    Ok(max_trade) => max_trade,
-                    Err(_) => continue, // Max threw an Err
-                },
-                Err(_) => continue, // Max threw a panic
-            };
+            let max_long_trade =
+                match panic::catch_unwind(|| state.calculate_max_long(U256::MAX, None)) {
+                    Ok(max_trade) => match max_trade {
+                        Ok(max_trade) => max_trade,
+                        Err(_) => continue, // Max threw an Err
+                    },
+                    Err(_) => continue, // Max threw a panic
+                };
             let long_base_amount =
                 rng.gen_range(state.minimum_transaction_amount()..=max_long_trade);
             // Do the long to see the bond delta (same amount for the user & pool in this case).
@@ -526,10 +496,7 @@ mod tests {
             // Half the time we will open a long & let it mature.
             if rng.gen_range(0..=1) == 0 {
                 // Open a long.
-                let max_long =
-                    bob.get_state()
-                        .await?
-                        .calculate_max_long(U256::MAX, I256::from(0), None)?;
+                let max_long = bob.get_state().await?.calculate_max_long(U256::MAX, None)?;
                 let long_amount =
                     (max_long / fixed!(100e18)).max(config.minimum_transaction_amount.into());
                 bob.fund(long_amount + budget).await?;

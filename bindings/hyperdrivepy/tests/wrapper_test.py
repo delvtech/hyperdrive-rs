@@ -281,7 +281,6 @@ def test_calculate_market_value_short():
 def test_targeted_long():
     """Test calculate_targeted_long_with_budget."""
     budget = "1000000000000000000"  # 1 base
-    checkpoint_exposure = "10000"
     max_iterations = 20
     allowable_error = "0000000010000000000"
     target = "001000000000000000"
@@ -290,7 +289,6 @@ def test_targeted_long():
         POOL_INFO,
         budget,
         target,
-        checkpoint_exposure,
         max_iterations,
         allowable_error,
     )
@@ -300,9 +298,8 @@ def test_targeted_long():
 def test_max_long():
     """Test calculate_max_long."""
     budget = "1000000000000000000"  # 1 base
-    checkpoint_exposure = "10000"
     max_iterations = 20
-    max_long = hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
+    max_long = hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, max_iterations)
     assert int(max_long) > 0  # should == "1000000000000000000", or 1 base
 
 
@@ -311,17 +308,11 @@ def test_max_long_fail_conversion():
     max_iterations = 20
     # bad string inputs
     budget = "asdf"
-    checkpoint_exposure = "100"
     with pytest.raises(ValueError):
-        hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
+        hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, max_iterations)
     budget = "1.23"
-    checkpoint_exposure = "100"
     with pytest.raises(ValueError):
-        hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
-    budget = "1000000000000000000"  # 1 base
-    checkpoint_exposure = "asdf"
-    with pytest.raises(ValueError):
-        hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, checkpoint_exposure, max_iterations)
+        hyperdrivepy.calculate_max_long(POOL_CONFIG, POOL_INFO, budget, max_iterations)
 
 
 def test_max_short():

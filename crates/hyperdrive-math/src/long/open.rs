@@ -231,11 +231,7 @@ mod tests {
             alice.advance_time(fixed!(0), fixed!(0)).await?;
             let original_state = alice.get_state().await?;
             // Get a random long amount.
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
-                .await?;
-            let max_long_amount =
-                original_state.calculate_max_long(U256::MAX, checkpoint_exposure, None)?;
+            let max_long_amount = original_state.calculate_max_long(U256::MAX, None)?;
             let base_amount =
                 rng.gen_range(original_state.minimum_transaction_amount()..=max_long_amount);
             // Mock the trade using Rust.
@@ -444,15 +440,10 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
             let max_iterations = 7;
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
-            let max_trade = panic::catch_unwind(|| {
-                state.calculate_max_long(U256::MAX, checkpoint_exposure, Some(max_iterations))
-            });
+            let max_trade =
+                panic::catch_unwind(|| state.calculate_max_long(U256::MAX, Some(max_iterations)));
             // Since we're fuzzing it's possible that the max can fail.
             // We're only going to use it in this test if it succeeded.
             match max_trade {
