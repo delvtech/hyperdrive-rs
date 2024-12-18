@@ -546,9 +546,8 @@ impl State {
             // Calculate the next iteration of Newton's method. If the candidate
             // is larger than the absolute max, we've gone too far and something
             // has gone wrong.
-            let derivative = match self.solvency_after_short_derivative(max_bond_guess, spot_price)
-            {
-                Ok(derivative) => derivative,
+            let derivative = match self.solvency_after_short_derivative(max_bond_guess) {
+                Ok(derivative) => derivative.change_type::<U256>()?,
                 Err(_) => break,
             };
             let possible_max_bond_amount = max_bond_guess + solvency / derivative;
@@ -734,37 +733,23 @@ impl State {
     /// Calculates the derivative of the pool's solvency w.r.t. the short
     /// amount.
     ///
-    /// The derivative is calculated as:
-    ///
     /// ```math
-    /// \begin{aligned}
-    /// s'(\Delta y) &= z'(\Delta y) - 0 - 0
-    ///       &= 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
+    /// s'(\Delta y) = 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
     ///          - g'(\Delta y))}{c} \right)
-    ///       &= -P'(\Delta y) + \frac{
-    ///              \phi_{c} \cdot (1 - p) \cdot (1 - \phi_{g})
-    ///          }{c}
-    /// \end{aligned}
     /// ```
-    ///
-    /// Since solvency decreases as the short amount increases, we negate the
-    /// derivative. This avoids issues with the fixed point library which
-    /// doesn't support negative values.
     fn solvency_after_short_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
-        spot_price: FixedPoint<U256>,
-    ) -> Result<FixedPoint<U256>> {
-        let lhs = self.calculate_short_principal_derivative(bond_amount)?;
-        let rhs = self.curve_fee()
-            * (fixed!(1e18) - spot_price)
+    ) -> Result<FixedPoint<I256>> {
+        let lhs = self
+            .calculate_short_principal_derivative(bond_amount)?
+            .change_type::<I256>()?;
+        let rhs = (self.curve_fee()
+            * (fixed!(1e18) - self.calculate_spot_price_down()?)
             * (fixed!(1e18) - self.governance_lp_fee())
-            / self.vault_share_price();
-        if lhs >= rhs {
-            Ok(lhs - rhs)
-        } else {
-            Err(eyre!("Negative derivative."))
-        }
+            / self.vault_share_price())
+        .change_type::<I256>()?;
+        Ok(-(lhs - rhs))
     }
 }
 
@@ -790,6 +775,81 @@ mod tests {
         agent::HyperdriveMathAgent,
         preamble::{get_max_short, initialize_pool_with_random_state},
     };
+
+    #[tokio::test]
+    async fn fuzz_solvency_after_short_derivative() -> Result<()> {
+        let empirical_derivative_epsilon = fixed!(1e14);
+        let test_tolerance = fixed!(1e14);
+        let mut rng = thread_rng();
+        for _ in 0..*FAST_FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
+
+            // Min trade amount should be at least 1,000x the derivative epsilon
+            let bond_amount = rng.gen_range(fixed!(1e18)..=fixed!(10_000_000e18));
+
+            let f_x = match panic::catch_unwind(|| {
+                state.solvency_after_short(bond_amount, checkpoint_exposure)
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+            let f_x_plus_delta = match panic::catch_unwind(|| {
+                state.solvency_after_short(
+                    bond_amount + empirical_derivative_epsilon,
+                    checkpoint_exposure,
+                )
+            }) {
+                Ok(result) => match result {
+                    Ok(result) => result,
+                    Err(_) => continue, // The amount resulted in the pool being insolvent.
+                },
+                Err(_) => continue, // Overflow or underflow error from FixedPoint<U256>.
+            };
+
+            // Compute the absolute value of the empirical and analytical
+            // derivatives.
+            let solvency_after_short_derivative =
+                state.solvency_after_short_derivative(bond_amount)?;
+            let empirical_derivative = if f_x < f_x_plus_delta {
+                assert!(solvency_after_short_derivative >= fixed!(0));
+                (f_x_plus_delta - f_x) / empirical_derivative_epsilon
+            } else {
+                assert!(solvency_after_short_derivative <= fixed!(0));
+                (f_x - f_x_plus_delta) / empirical_derivative_epsilon
+            };
+            let solvency_after_short_derivative = solvency_after_short_derivative
+                .abs()
+                .change_type::<U256>()?;
+
+            // Ensure that the empirical and analytical derivatives match.
+            let derivative_diff = if empirical_derivative > solvency_after_short_derivative {
+                empirical_derivative - solvency_after_short_derivative
+            } else {
+                solvency_after_short_derivative - empirical_derivative
+            };
+            assert!(
+                derivative_diff < test_tolerance,
+                "expected abs(derivative_diff)={:#?} < test_tolerance={:#?};
+                calculated_derivative={:#?}, empirical_derivative={:#?}",
+                derivative_diff,
+                test_tolerance,
+                solvency_after_short_derivative,
+                empirical_derivative
+            );
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn fuzz_calculate_short_bonds_given_deposit() -> Result<()> {
