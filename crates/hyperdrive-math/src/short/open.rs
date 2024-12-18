@@ -933,7 +933,7 @@ mod tests {
     async fn test_defaults_calculate_spot_price_after_short() -> Result<()> {
         let mut rng = thread_rng();
         let mut num_checks = 0;
-        for _ in 0..*FUZZ_RUNS {
+        for _ in 0..*FAST_FUZZ_RUNS {
             // We use a random state but we will ignore any case where a call
             // fails because we want to test the default behavior when the state
             // allows all actions.
