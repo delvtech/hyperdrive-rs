@@ -195,7 +195,7 @@ impl State {
 
         let spot_price = match maybe_initial_spot_price {
             Some(spot_price) => spot_price,
-            None => self.calculate_spot_price()?,
+            None => self.calculate_spot_price_down()?,
         };
 
         // All of these are in base.
@@ -274,6 +274,14 @@ impl State {
     /// the reserves are updated such that
     /// `state.bond_reserves += bond_amount` and
     /// `state.share_reserves -= share_amount`.
+    ///
+    /// The pool shares delta is the initial amount minus the short principal
+    /// minus the curve fee, or:
+    ///     ∆z = z0 - z_sp - ø_c,
+    /// from calculate_pool_share_delta_after_open_short:
+    ///     z1 = z0 - ∆z
+    /// therefore,
+    ///     z1 = z0 - (z0 - z_sp - ø_c) = z_sp + ø_c
     pub fn calculate_pool_state_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
@@ -289,28 +297,45 @@ impl State {
         Ok(state)
     }
 
-    /// Calculate the share delta to be applied to the pool after opening a short.
+    /// Calculates the share delta to be applied to the pool after opening a
+    /// short.
+    ///
+    /// The share delta is given by:
+    ///
+    /// ```math
+    /// \Delta z =
+    ///     P_{\text{lp}}(\Delta y)
+    ///     - \left( \frac{\Phi_{c,os}(\Delta y)}{c}
+    ///     - \frac{\Phi_{g,os}(\Delta y)}{c} \right)
+    /// ```
+    ///
+    /// Using the definitions of `$P_{\text{lp}}(\Delta y)`$,
+    /// `$\Phi_{c,os}(\Delta y)$`, and `$\Phi_{g,os}(\Delta y)$`:
+    ///
+    /// ```math
+    /// \Delta z = z
+    ///     - \frac{1}{\mu} \cdot \left(
+    ///     \frac{\mu}{c} \cdot (k - (y + \Delta y)^{1 - t_s})
+    ///     \right)^{\frac{1}{1 - t_s}}
+    ///     - \frac{\phi_c \cdot (1 - p) \cdot \Delta y \cdot (1 - \phi_g)}{c}
+    /// ```
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
-        let curve_fee_base = self.open_short_curve_fee(bond_amount)?;
-        let curve_fee_shares = curve_fee_base.div_up(self.vault_share_price());
-        let gov_curve_fee_shares = self
-            .open_short_governance_fee(bond_amount, Some(curve_fee_base))?
-            .div_up(self.vault_share_price());
+        let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
         let short_principal = self.calculate_short_principal(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
-        if short_principal < (curve_fee_shares - gov_curve_fee_shares) {
+        if short_principal < total_fee_shares {
             return Err(eyre!(
                 "short_principal={:#?} is too low to account for fees={:#?}",
                 short_principal,
-                curve_fee_shares - gov_curve_fee_shares
+                total_fee_shares
             ));
         }
-        Ok(short_principal - (curve_fee_shares - gov_curve_fee_shares))
+        Ok(short_principal - total_fee_shares)
     }
 
     /// Calculates the spot price after opening a short.
@@ -326,7 +351,7 @@ impl State {
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
-        updated_state.calculate_spot_price()
+        updated_state.calculate_spot_price_down()
     }
 
     /// Calculate the spot rate after a short has been opened.
@@ -455,7 +480,7 @@ impl State {
             self.calculate_short_principal(self.minimum_transaction_amount())?;
         let price_adjustment_with_fees = close_vault_share_price / open_vault_share_price
             + self.flat_fee()
-            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price()?);
+            + self.curve_fee() * (fixed!(1e18) - self.calculate_spot_price_down()?);
         let approximate_bond_amount = (self.vault_share_price() / price_adjustment_with_fees)
             * (shares_deposit + minimum_short_principal);
         Ok(approximate_bond_amount)
@@ -512,6 +537,17 @@ mod tests {
             let checkpoint_exposure = alice
                 .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
                 .await?;
+            // Check that a short is possible.
+            if original_state.effective_share_reserves()?
+                < original_state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
+
             let max_short_amount = original_state.calculate_max_short(
                 U256::MAX,
                 original_state.vault_share_price(),
@@ -597,7 +633,7 @@ mod tests {
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     None,
                 )
@@ -789,7 +825,7 @@ mod tests {
             let short_deposit_derivative = state.calculate_open_short_derivative(
                 bond_amount,
                 state.vault_share_price(),
-                Some(state.calculate_spot_price()?),
+                Some(state.calculate_spot_price_down()?),
             )?;
 
             // Ensure that the empirical and analytical derivatives match.
@@ -839,9 +875,21 @@ mod tests {
 
             // Alice initializes the pool.
             alice.initialize(fixed_rate, contribution, None).await?;
-
-            // Attempt to predict the spot price after opening a short.
             let mut state = alice.get_state().await?;
+
+            // Check that a short is possible.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                continue;
+            }
+
             let bond_amount = rng.gen_range(
                 state.minimum_transaction_amount()..=bob.calculate_max_short(None).await?,
             );
@@ -860,7 +908,7 @@ mod tests {
             // Verify that the predicted spot price is equal to the ending spot
             // price.
             let expected_spot_price = state.calculate_spot_price_after_short(bond_amount, None)?;
-            let actual_spot_price = new_state.calculate_spot_price()?;
+            let actual_spot_price = new_state.calculate_spot_price_down()?;
             let abs_spot_price_diff = if actual_spot_price >= expected_spot_price {
                 actual_spot_price - expected_spot_price
             } else {
@@ -895,14 +943,18 @@ mod tests {
             // fails because we want to test the default behavior when the state
             // allows all actions.
             let state = rng.gen::<State>();
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
+            let checkpoint_exposure = {
+                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
+                if rng.gen() {
+                    -I256::try_from(value)?
+                } else {
+                    I256::try_from(value)?
+                }
+            };
             // We need to catch panics because of overflows.
             let max_bond_amount = match panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(3),
                 )
@@ -968,6 +1020,20 @@ mod tests {
             // Set a random variable rate.
             let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(1e18));
             alice.advance_time(variable_rate, 12.into()).await?;
+
+            // Check that a short is possible.
+            let state = alice.get_state().await?;
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                continue;
+            }
 
             // Bob opens a short with a random bond amount. Before opening the
             // short, we calculate the implied rate.
@@ -1062,7 +1128,7 @@ mod tests {
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
                 state.calculate_absolute_max_short(
-                    state.calculate_spot_price()?,
+                    state.calculate_spot_price_down()?,
                     checkpoint_exposure,
                     Some(max_iterations),
                 )
@@ -1129,6 +1195,21 @@ mod tests {
             // Get state and trade details.
             let mut state = alice.get_state().await?;
             let min_txn_amount = state.minimum_transaction_amount();
+
+            // Check that a short is possible.
+            let checkpoint_exposure = alice
+                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+                .await?;
+            if state.effective_share_reserves()?
+                < state.calculate_min_share_reserves(checkpoint_exposure)?
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
+
             let max_short = celine.calculate_max_short(None).await?;
             let bond_amount = rng.gen_range(min_txn_amount..=max_short);
 

@@ -126,15 +126,20 @@ impl State {
         Self { config, info }
     }
 
-    /// Calculates the pool's spot price.
-    pub fn calculate_spot_price(&self) -> Result<FixedPoint<U256>> {
-        YieldSpace::calculate_spot_price(self)
+    /// Calculates the pool's spot price, rounding down.
+    pub fn calculate_spot_price_down(&self) -> Result<FixedPoint<U256>> {
+        YieldSpace::calculate_spot_price_down(self)
+    }
+
+    /// Calculates the pool's spot price, rounding up.
+    pub fn calculate_spot_price_up(&self) -> Result<FixedPoint<U256>> {
+        YieldSpace::calculate_spot_price_up(self)
     }
 
     /// Calculate the pool's current spot (aka "fixed") rate.
     pub fn calculate_spot_rate(&self) -> Result<FixedPoint<U256>> {
         Ok(calculate_rate_given_fixed_price(
-            self.calculate_spot_price()?,
+            self.calculate_spot_price_down()?,
             self.position_duration(),
         ))
     }
@@ -364,8 +369,8 @@ mod tests {
             state.info.shorts_outstanding = uint256!(0);
             state.info.short_average_maturity_time = uint256!(0);
             // Make sure we're still solvent
-            if state.calculate_spot_price()? < state.calculate_min_spot_price()?
-                || state.calculate_spot_price()? > fixed!(1e18)
+            if state.calculate_spot_price_down()? < state.calculate_min_spot_price()?
+                || state.calculate_spot_price_down()? > fixed!(1e18)
                 || state.calculate_solvency().is_err()
             {
                 continue;
@@ -403,7 +408,7 @@ mod tests {
             new_state.info.share_reserves = target_share_reserves.into();
             new_state.info.bond_reserves = target_bond_reserves.into();
             if new_state.calculate_solvency().is_err()
-                || new_state.calculate_spot_price()? > fixed!(1e18)
+                || new_state.calculate_spot_price_down()? > fixed!(1e18)
             {
                 continue;
             }
