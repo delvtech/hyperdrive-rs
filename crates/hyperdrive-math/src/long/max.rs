@@ -29,14 +29,12 @@ impl State {
     /// We start by calculating the long that brings the pool's spot price to 1.
     /// If we are solvent at this point, then we're done. Otherwise, we approach
     /// the max long iteratively using Newton's method.
-    pub fn calculate_max_long<F: Into<FixedPoint<U256>>, I: Into<I256>>(
+    pub fn calculate_max_long<F: Into<FixedPoint<U256>>>(
         &self,
         budget: F,
-        checkpoint_exposure: I,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
         let budget = budget.into();
-        let checkpoint_exposure = checkpoint_exposure.into();
 
         // Check the spot price after opening a minimum long is less than the
         // max spot price
@@ -262,7 +260,6 @@ impl State {
     fn max_long_guess(
         &self,
         absolute_max_base_amount: FixedPoint<U256>,
-        checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
         // Calculate an initial estimate of the max long by using the spot price as
         // our conservative price.
@@ -326,11 +323,8 @@ impl State {
         &self,
         estimate_price: FixedPoint<U256>,
         spot_price: FixedPoint<U256>,
-        checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
-        let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
-        let mut estimate =
-            self.calculate_solvency()? + checkpoint_exposure / self.vault_share_price();
+        let mut estimate = self.calculate_solvency()? / self.vault_share_price();
         estimate = estimate.mul_div_down(self.vault_share_price(), fixed!(2e18));
         estimate /= fixed!(1e18) / estimate_price
             + self.governance_lp_fee() * self.curve_fee() * (fixed!(1e18) - spot_price)
@@ -378,7 +372,6 @@ impl State {
         &self,
         base_amount: FixedPoint<U256>,
         bond_amount: FixedPoint<U256>,
-        checkpoint_exposure: I256,
     ) -> Result<FixedPoint<U256>> {
         let governance_fee_shares =
             self.open_long_governance_fee(base_amount, None)? / self.vault_share_price();
@@ -392,15 +385,12 @@ impl State {
         }
         let share_reserves = (self.share_reserves() + share_amount) - governance_fee_shares;
         let exposure = self.long_exposure() + bond_amount;
-        let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
-        if share_reserves + checkpoint_exposure / self.vault_share_price()
+        if share_reserves / self.vault_share_price()
             >= exposure / self.vault_share_price() + self.minimum_share_reserves()
         {
-            Ok(
-                share_reserves + checkpoint_exposure / self.vault_share_price()
+            Ok(share_reserves / self.vault_share_price()
                     - exposure / self.vault_share_price()
-                    - self.minimum_share_reserves(),
-            )
+                - self.minimum_share_reserves())
         } else {
             Err(eyre!("Long would result in an insolvent pool."))
         }
