@@ -179,7 +179,6 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
             vault_share_price: open_vault_share_price,
             ..
         } = self.get_checkpoint(latest_checkpoint).await?;
-        let checkpoint_exposure = self.get_checkpoint_exposure(latest_checkpoint).await?;
         let state = self.get_state().await?;
 
         // We linearly interpolate between the current spot price and the minimum
@@ -204,7 +203,6 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         state.calculate_max_short(
             budget,
             open_vault_share_price,
-            checkpoint_exposure,
             Some(conservative_price),
             None,
         )

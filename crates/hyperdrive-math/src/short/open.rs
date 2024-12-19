@@ -492,8 +492,8 @@ impl State {
 mod tests {
     use std::panic;
 
-    use ethers::types::{U128, U256};
-    use fixedpointmath::{fixed, fixed_u256, int256, FixedPointValue};
+    use ethers::types::U256;
+    use fixedpointmath::{fixed, fixed_u256, int256};
     use hyperdrive_test_utils::{
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
@@ -534,13 +534,9 @@ mod tests {
             // Reset the variable rate to zero; get the state.
             alice.advance_time(fixed!(0), fixed!(0)).await?;
             let original_state = alice.get_state().await?;
-            // Get a random short amount.
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(original_state.to_checkpoint(alice.now().await?))
-                .await?;
             // Check that a short is possible.
             if original_state.effective_share_reserves()?
-                < original_state.calculate_min_share_reserves(checkpoint_exposure)?
+                < original_state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -548,11 +544,10 @@ mod tests {
                 celine.reset(Default::default()).await?;
                 continue;
             }
-
+            // Get a random short amount.
             let max_short_amount = original_state.calculate_max_short(
                 U256::MAX,
                 original_state.vault_share_price(),
-                checkpoint_exposure,
                 None,
                 None,
             )?;
@@ -623,24 +618,15 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed_u256!(0)..=fixed!(10_000_000e18));
-                if rng.gen() {
-                    -I256::try_from(value).unwrap()
-                } else {
-                    I256::try_from(value).unwrap()
-                }
-            };
             // We need to catch panics because of overflows.
-            let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(checkpoint_exposure, None, None)
-            }) {
-                Ok(max_bond_amount) => match max_bond_amount {
-                    Ok(max_bond_amount) => max_bond_amount,
-                    Err(_) => continue, // Max threw an Err.
-                },
-                Err(_) => continue, // Max threw a panic.
-            };
+            let max_bond_amount =
+                match panic::catch_unwind(|| state.calculate_absolute_max_short(None, None)) {
+                    Ok(max_bond_amount) => match max_bond_amount {
+                        Ok(max_bond_amount) => max_bond_amount,
+                        Err(_) => continue, // Max threw an Err.
+                    },
+                    Err(_) => continue, // Max threw a panic.
+                };
             if max_bond_amount < state.minimum_transaction_amount() + fixed!(1) {
                 continue;
             }
@@ -875,11 +861,8 @@ mod tests {
             let mut state = alice.get_state().await?;
 
             // Check that a short is possible.
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                .await?;
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves(checkpoint_exposure)?
+                < state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -938,29 +921,20 @@ mod tests {
             // fails because we want to test the default behavior when the state
             // allows all actions.
             let state = rng.gen::<State>();
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
             // We need to catch panics because of overflows.
-            let max_bond_amount = match panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(10))
-            }) {
-                Ok(max_bond_amount) => match max_bond_amount {
-                    Ok(max_bond_amount) => {
-                        if max_bond_amount <= state.minimum_transaction_amount() {
-                            continue;
+            let max_bond_amount =
+                match panic::catch_unwind(|| state.calculate_absolute_max_short(None, Some(10))) {
+                    Ok(max_bond_amount) => match max_bond_amount {
+                        Ok(max_bond_amount) => {
+                            if max_bond_amount <= state.minimum_transaction_amount() {
+                                continue;
+                            }
+                            max_bond_amount
                         }
-                        max_bond_amount
-                    }
-                    Err(_) => continue, // Err; max short insolvent
-                },
-                Err(_) => continue, // panic; likely in FixedPoint<U256>
-            };
+                        Err(_) => continue, // Err; max short insolvent
+                    },
+                    Err(_) => continue, // panic; likely in FixedPoint<U256>
+                };
             // Using the default behavior
             let bond_amount = rng.gen_range(state.minimum_transaction_amount()..=max_bond_amount);
             let price_with_default = state.calculate_spot_price_after_short(bond_amount, None)?;
@@ -1016,11 +990,8 @@ mod tests {
 
             // Check that a short is possible.
             let state = alice.get_state().await?;
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                .await?;
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves(checkpoint_exposure)?
+                < state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -1112,15 +1083,11 @@ mod tests {
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
-            let checkpoint_exposure = rng
-                .gen_range(fixed!(0)..=FixedPoint::<I256>::MAX)
-                .raw()
-                .flip_sign_if(rng.gen());
             let max_iterations = 7;
             let open_vault_share_price = rng.gen_range(fixed!(0)..=state.vault_share_price());
             // We need to catch panics because of FixedPoint<U256> overflows & underflows.
             let max_trade = panic::catch_unwind(|| {
-                state.calculate_absolute_max_short(checkpoint_exposure, None, Some(max_iterations))
+                state.calculate_absolute_max_short(None, Some(max_iterations))
             });
             // Since we're fuzzing it's possible that the max can fail.
             // We're only going to use it in this test if it succeeded.
@@ -1186,11 +1153,8 @@ mod tests {
             let min_txn_amount = state.minimum_transaction_amount();
 
             // Check that a short is possible.
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                .await?;
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves(checkpoint_exposure)?
+                < state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -1305,15 +1269,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
-            let checkpoint_exposure = {
-                let value = rng.gen_range(fixed!(0)..=FixedPoint::from(U256::from(U128::MAX)));
-                if rng.gen() {
-                    -I256::try_from(value)?
-                } else {
-                    I256::try_from(value)?
-                }
-            };
-            match get_max_short(state.clone(), checkpoint_exposure, None) {
+            match get_max_short(state.clone(), None) {
                 Ok(max_short_bonds) => {
                     let bond_amount =
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
