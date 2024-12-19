@@ -1,6 +1,6 @@
 use ethers::types::{I256, U256};
 use eyre::{eyre, Result};
-use fixedpointmath::{fixed, FixedPoint};
+use fixedpointmath::{fixed, fixed_i256, FixedPoint};
 
 use crate::{calculate_effective_share_reserves, State, YieldSpace};
 
@@ -39,47 +39,45 @@ impl State {
             .pow(self.time_stretch())
     }
 
-    /// Calculate the minimum share reserves allowed by the pool given the
-    /// current exposure and share adjustment.
-    pub fn calculate_min_share_reserves(
-        &self,
-        checkpoint_exposure: I256,
-    ) -> Result<FixedPoint<U256>> {
-        // We have the twin constraints that `$z \geq z_{min} + exposure$` and
-        // `$z - \zeta \geq z_{min}$`. Combining these together, we calculate
-        // the share reserves after a max short as
-        // `$z_{optimal} = z_{min} + max(0, \zeta) + exposure$`.
-        let exposure_shares = self.long_minus_checkpoint_exposure_shares(checkpoint_exposure)?;
+    /// Calculate the minimum pool share reserves assuming a short trade is
+    /// next, given the current exposure and share adjustment.
+    ///
+    /// We have the twin constraints that `$z \geq z_{min} + exposure$` and
+    /// `$z - \zeta \geq z_{min}$`. Combining these together, we calculate
+    /// the share reserves after a max short as
+    /// `$z_{optimal} = z_{min} + max(0, \zeta) + exposure$`.
+    ///
+    /// This function is useful when working with shorts because it converts
+    /// a piece-wise linear calculation into a linear one by computing the net
+    /// exposure.
+    pub fn calculate_min_share_reserves_given_exposure(&self) -> Result<FixedPoint<U256>> {
+        // We want the current total exposure, with no netting from shorts.
+        let exposure_shares = self.exposure_after_short_shares(fixed!(0))?;
         let min_share_reserves = self.minimum_share_reserves()
             + FixedPoint::try_from(self.share_adjustment().max(I256::zero()))?
             + exposure_shares;
         Ok(min_share_reserves)
     }
 
-    /// Calculate the long exposure minus the checkpoint exposure, in shares.
+    /// Calculate the current exposure minus new short exposure, in shares.
     ///
     /// The long exposure will account for any executed trades. Any new short
-    /// net previous longs by subtracting from the long exposure. This increases
-    /// solvency until the checkpoint exposure goes negative. Past that point,
-    /// shorts will impact solvency by decreasing share reserves.
-    ///
-    /// This function is useful when working with shorts because it converts
-    /// a piece-wise linear calculation into a linear one by computing the net
-    /// exposure.
-    fn long_minus_checkpoint_exposure_shares(
+    /// nets previous longs by subtracting bonds from the long exposure.
+    /// This increases solvency until the checkpoint exposure goes negative.
+    /// Past that point, shorts will impact solvency by decreasing share
+    /// reserves.
+    fn exposure_after_short_shares(
         &self,
-        checkpoint_exposure: I256,
+        bond_amount: FixedPoint<U256>,
     ) -> Result<FixedPoint<U256>> {
         let exposure_shares = {
-            let checkpoint_exposure = FixedPoint::try_from(checkpoint_exposure.max(I256::zero()))?;
-            if self.long_exposure() < checkpoint_exposure {
-                return Err(eyre!(
-                    "expected long_exposure={:#?} >= checkpoint_exposure={:#?}.",
-                    self.long_exposure(),
-                    checkpoint_exposure
-                ));
-            } else {
-                (self.long_exposure() - checkpoint_exposure).div_up(self.vault_share_price())
+            // The short will net out all long exposure.
+            if self.long_exposure() < bond_amount {
+                fixed!(0)
+            }
+            // The short will leave some exposure.
+            else {
+                (self.long_exposure() - bond_amount).div_up(self.vault_share_price())
             }
         };
         Ok(exposure_shares)
@@ -724,26 +722,9 @@ impl State {
     /// short:
     ///
     /// ```math
-    /// e(\Delta y) = e_0 - min(\Delta y + D(\Delta y), max(e_{c}, 0))
+    /// e(\Delta y) = e_0 - \Delta y
     /// ```
-    ///
-    /// We simplify our `$e(\Delta y)$` formula by noting that the max short is
-    /// only constrained by solvency when
-    /// `$\Delta y + D(\Delta y) > max(e_{c}, 0)$` since
-    /// `$\Delta y + D(\Delta y)$` grows faster than
-    /// `$P(\Delta y) - \tfrac{\phi_{c}}{c} \cdot \left( 1 - p \right) \cdot \Delta y$`.
-    /// With this in mind,
-    /// `$min(\Delta y + D(\Delta y), max(e_{c}, 0)) = max(e_{c}, 0)$` whenever
-    /// solvency is actually a constraint, so we can write:
-    ///
-    /// ```math
-    /// e(\Delta y) = e_0 - max(e_{c}, 0)
-    /// ```
-    fn solvency_after_short(
-        &self,
-        bond_amount: FixedPoint<U256>,
-        checkpoint_exposure: I256,
-    ) -> Result<FixedPoint<U256>> {
+    fn solvency_after_short(&self, bond_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         let pool_share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
         // If the share reserves would underflow when the short is opened,
         // then we revert with an insufficient liquidity error.
@@ -754,7 +735,7 @@ impl State {
                 pool_share_delta
             ));
         }
-        // Need to check that z - zeta >= z_min
+        // Need to check that z - zeta >= z_min.
         let new_share_reserves = self.share_reserves() - pool_share_delta;
         let new_effective_share_reserves =
             calculate_effective_share_reserves(new_share_reserves, self.share_adjustment())?;
@@ -763,7 +744,7 @@ impl State {
             new_effective_share_reserves, self.minimum_share_reserves()));
         }
         // Check global exposure. This also ensures z >= z_min.
-        let exposure_shares = self.long_minus_checkpoint_exposure_shares(checkpoint_exposure)?;
+        let exposure_shares = self.exposure_after_short_shares(bond_amount)?;
         if new_share_reserves >= exposure_shares + self.minimum_share_reserves() {
             Ok(new_share_reserves - exposure_shares - self.minimum_share_reserves())
         } else {
@@ -811,7 +792,17 @@ impl State {
     ///
     /// ```math
     /// s'(\Delta y) = 0 - \left( P'(\Delta y) - \frac{(c'(\Delta y)
-    ///          - g'(\Delta y))}{c} \right)
+    ///          - g'(\Delta y))}{c} \right) - \frac{e'(\Delta y)}{c}
+    /// ```
+    ///
+    /// where `$e'(\Delta y)$` is piecewise linear:
+    ///
+    /// ```math
+    /// e'(\Delta y) =
+    /// \begin{cases}
+    ///     -\frac{1}{c} & \text{if} e_0 <\Delta y \\
+    ///     0 & \text{otherwise}
+    /// \end{cases}
     /// ```
     fn solvency_after_short_derivative(
         &self,
@@ -825,15 +816,20 @@ impl State {
             * (fixed!(1e18) - self.governance_lp_fee())
             / self.vault_share_price())
         .change_type::<I256>()?;
-        Ok(-(lhs - rhs))
+        let exposure_prime = if self.long_exposure() < bond_amount {
+            fixed_i256!(0)
+        } else {
+            -(fixed!(1e18).div_up(self.vault_share_price())).change_type::<I256>()?
+        };
+        Ok(-(lhs - rhs) - exposure_prime)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{panic, path::absolute};
+    use std::panic;
 
-    use ethers::types::{I256, U128, U256};
+    use ethers::types::U256;
     use fixedpointmath::{fixed, fixed_u256, uint256, FixedPoint};
     use hyperdrive_test_utils::{
         chain::TestChain,
