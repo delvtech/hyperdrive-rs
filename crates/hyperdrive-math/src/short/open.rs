@@ -923,7 +923,7 @@ mod tests {
             let state = rng.gen::<State>();
             // We need to catch panics because of overflows.
             let max_bond_amount =
-                match panic::catch_unwind(|| state.calculate_absolute_max_short(None, Some(10))) {
+                match panic::catch_unwind(|| state.calculate_absolute_max_short(None, None)) {
                     Ok(max_bond_amount) => match max_bond_amount {
                         Ok(max_bond_amount) => {
                             if max_bond_amount <= state.minimum_transaction_amount() {
