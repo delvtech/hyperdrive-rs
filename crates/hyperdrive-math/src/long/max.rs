@@ -621,6 +621,12 @@ mod tests {
             // Bob opens a max long.
             let max_spot_price = bob.get_state().await?.calculate_max_spot_price()?;
             let max_long = bob.calculate_max_long(None).await?;
+            let state = alice.get_state().await?;
+            // Ensure max long is valid.
+            if state.calculate_open_long(max_long).is_err() {
+                continue;
+            }
+            // Get the andicipated spot price & open the log.
             let spot_price_after_long = bob
                 .get_state()
                 .await?

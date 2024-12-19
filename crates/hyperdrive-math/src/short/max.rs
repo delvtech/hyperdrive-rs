@@ -753,8 +753,8 @@ impl State {
     ///     \right)^{\frac{1}{1 - t_s}}
     ///     - \frac{\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \cdot \Delta y}{c}
     /// ```
-    /// where the second term is P_{\text{lp}}(\Delta y) and the remaining terms
-    /// are from fees. Therefore, the derivative is
+    /// where the second term is `$P_{\text{lp}}(\Delta y)$` and the remaining
+    /// terms are from fees. Therefore, the derivative is
     ///
     /// ```math
     /// \frac{\partial \Delta z}{\partial \Delta y} = - P_{\text{lp}}'(\Delta y)
