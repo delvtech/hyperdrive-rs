@@ -47,11 +47,8 @@ pub async fn initialize_pool_with_random_state(
         // Celine opens a short.
         state = alice.get_state().await?;
 
-        // Get the current checkpoint exposure.
-        let checkpoint_exposure = alice
-            .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-            .await?;
-        let max_short = get_max_short(state, checkpoint_exposure, None)?;
+        // Open a short.
+        let max_short = get_max_short(state, None)?;
         let short_amount = rng.gen_range(min_txn..=max_short);
         celine.fund(short_amount + fixed!(10e18)).await?; // Fund a little extra for slippage.
         celine.open_short(short_amount, None, None).await?;
@@ -131,11 +128,7 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
 }
 
 /// Conservative and safe estimate of the maximum short.
-pub fn get_max_short(
-    state: State,
-    checkpoint_exposure: I256,
-    maybe_max_num_tries: Option<usize>,
-) -> Result<FixedPoint<U256>> {
+pub fn get_max_short(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
 
     // We linearly interpolate between the current spot price and the minimum
@@ -159,7 +152,6 @@ pub fn get_max_short(
         state.calculate_max_short(
             U256::from(U128::MAX),
             state.vault_share_price(),
-            checkpoint_exposure,
             Some(conservative_price),
             Some(5),
         )
@@ -263,29 +255,21 @@ mod tests {
             let seed = rng.gen();
             ChaCha8Rng::seed_from_u64(seed)
         };
-
         // Initialize the test chain & agents.
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
         let mut bob = chain.bob().await?;
         let mut celine = chain.celine().await?;
-
         for _ in 0..*FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
-
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
-
-            // Get state and trade details.
+            // Get state.
             let state = alice.get_state().await?;
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
-                .await?;
-
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves(checkpoint_exposure)?
+                < state.calculate_min_share_reserves_given_exposure()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -293,13 +277,11 @@ mod tests {
                 celine.reset(Default::default()).await?;
                 continue;
             }
-
             // Open the max short.
             let max_short = bob.calculate_max_short(None).await?;
             assert!(max_short >= state.minimum_transaction_amount());
             bob.fund(max_short + fixed!(10e18)).await?;
             bob.open_short(max_short, None, None).await?;
-
             // Reset the chain & agents.
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
