@@ -392,6 +392,8 @@ impl State {
         }
         let share_reserves = (self.share_reserves() + share_amount) - governance_fee_shares;
         let exposure = self.long_exposure() + bond_amount;
+        // Netting allows us to remove any negative checkpoint exposure from the
+        // long exposure.
         let checkpoint_exposure = FixedPoint::try_from(-checkpoint_exposure.min(int256!(0)))?;
         if share_reserves + checkpoint_exposure / self.vault_share_price()
             >= exposure / self.vault_share_price() + self.minimum_share_reserves()
