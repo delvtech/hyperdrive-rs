@@ -826,10 +826,11 @@ mod tests {
     use ethers::types::U256;
     use fixedpointmath::{fixed, fixed_u256, uint256, FixedPoint};
     use hyperdrive_test_utils::{
-        chain::TestChain,
+        chain::{self, TestChain},
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
     };
     use hyperdrive_wrappers::wrappers::{
+        erc4626_target0::NameWithTokenIdCall,
         ihyperdrive::{Checkpoint, Options},
         mock_hyperdrive_math::MaxTradeParams,
     };
@@ -1230,10 +1231,100 @@ mod tests {
         Ok(())
     }
 
+    /// This test ensures that a new absolute max after one has been opened is
+    /// smaller than the tolerance, if possible..
+    #[tokio::test]
+    async fn fuzz_sol_calculate_absolute_max_short_twice() -> Result<()> {
+        // Set parameters.
+        let abs_max_bonds_tolerance = fixed_u256!(1e9);
+        let max_iterations = 500;
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+        // Get chain objects.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+        // Run fuzz tests.
+        let mut num_tests = 0;
+        for _ in 0..*SLOW_FUZZ_RUNS {
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+            // Run the preamble.
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            // Get the current state from solidity.
+            let state = alice.get_state().await?;
+            let effective_share_reserves = state.effective_share_reserves()?;
+            let min_share_reserves = state.calculate_min_share_reserves_given_exposure()?;
+            let share_reserves = state.share_reserves();
+            // Make sure a short is possible.
+            if effective_share_reserves.min(share_reserves) < min_share_reserves {
+                // Revert to the snapshot and reset the agents' wallets.
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
+            match state.solvency_after_short(state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => {
+                    // Revert to the snapshot and reset the agents' wallets.
+                    chain.revert(id).await?;
+                    alice.reset(Default::default()).await?;
+                    bob.reset(Default::default()).await?;
+                    celine.reset(Default::default()).await?;
+                    continue;
+                }
+            }
+            // Get the max short.
+            let absolute_max_short_bonds = state.calculate_absolute_max_short(
+                Some(abs_max_bonds_tolerance),
+                Some(max_iterations),
+            )?;
+            // Get the deposit for this short.
+            let max_short_deposit_base =
+                state.calculate_open_short(absolute_max_short_bonds, state.vault_share_price())?;
+            // Open the short.
+            celine.fund(max_short_deposit_base).await?;
+            celine
+                .open_short(max_short_deposit_base, None, None)
+                .await?;
+            // Get the new absolute max short.
+            // It's possible (if not preferred) that there is no new max short.
+            // Otherwise, it should be smaller than the tolerance.
+            match state
+                .calculate_absolute_max_short(Some(abs_max_bonds_tolerance), Some(max_iterations))
+            {
+                Ok(new_absolute_max_short_bonds) => {
+                    // Check that the new absolute max short is smaller than the
+                    // tolerance.
+                    assert!(new_absolute_max_short_bonds < absolute_max_short_bonds);
+                    assert!(new_absolute_max_short_bonds <= abs_max_bonds_tolerance);
+                }
+                Err(_) => (),
+            };
+            // Revert to the snapshot and reset the agents' wallets.
+            num_tests += 1;
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
+        }
+        assert!(num_tests > 0);
+        Ok(())
+    }
+
     #[tokio::test]
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         // TODO: This should be fixed!(0.0001e18) == 0.01%
-        let budget_tolerance = fixed!(1e18);
+        let budget_tolerance = fixed!(1);
 
         // Spawn a test chain and create two agents -- Alice and Bob. Alice
         // is funded with a large amount of capital so that she can initialize
@@ -1244,14 +1335,14 @@ mod tests {
         // Initialize the chain and the agents.
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
-        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
         let config = alice.get_config().clone();
-
+        let mut num_tests = 1;
         for _ in 0..*FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
-            // Fund Alice and Bob.
+            // Fund Alice and Celine.
             let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
             alice.fund(contribution).await?;
 
@@ -1286,32 +1377,34 @@ mod tests {
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
-                // Don't need to reset bob because he hasn't done anything.
+                // Don't need to reset Celine because he hasn't done anything.
                 continue;
             }
             let global_max_short_bonds = state.calculate_absolute_max_short(None, None)?;
 
-            // Bob should always be budget constrained when trying to open the short.
+            // Celine should always be budget constrained when trying to open the short.
             let global_max_base_required = state
                 .calculate_open_short(global_max_short_bonds, open_vault_share_price.into())?;
             let budget = rng.gen_range(
                 state.minimum_transaction_amount()..=global_max_base_required - fixed!(1e18),
             );
-            bob.fund(budget).await?;
+            celine.fund(budget).await?;
 
-            // Bob opens a max short position. We allow for a very small amount
-            // of slippage to account for interest accrual between the time the
-            // calculation is performed and the transaction is submitted.
+            // Celine opens a max short position. We allow for a very small
+            // amount of slippage to account for interest accrual between the
+            // time the calculation is performed and the transaction is
+            // submitted.
             let slippage_tolerance = fixed!(0.0001e18); // 0.01%
-            let max_short_bonds = bob.calculate_max_short(Some(slippage_tolerance)).await?;
-            bob.open_short(max_short_bonds, None, None).await?;
+            let max_short_bonds = celine.calculate_max_short(Some(slippage_tolerance)).await?;
+            celine.open_short(max_short_bonds, None, None).await?;
 
-            // Bob used a slippage tolerance of 0.01%, which means
+            // Celine used a slippage tolerance of 0.01%, which means
             // that the max short is always consuming at least 99.99% of
             // the budget.
-            let max_allowable_balance =
-                budget * (fixed!(1e18) - slippage_tolerance) * budget_tolerance;
-            let remaining_balance = bob.base();
+            let max_allowable_balance = budget_tolerance;
+            let remaining_balance = celine.base();
+            println!("remaining_balance {:#?}", remaining_balance);
+            assert!(false);
             assert!(remaining_balance < max_allowable_balance,
                 "expected {}% of budget consumed, or remaining_balance={} < max_allowable_balance={}
                 global_max_short_bonds = {}; max_short_bonds = {}; global_max_base_required={}",
@@ -1324,11 +1417,12 @@ mod tests {
             );
 
             // Revert to the snapshot and reset the agents' wallets.
+            num_tests += 1;
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
-            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
         }
-
+        assert!(num_tests > 0);
         Ok(())
     }
 
