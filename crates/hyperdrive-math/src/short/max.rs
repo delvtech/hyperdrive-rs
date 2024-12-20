@@ -758,7 +758,7 @@ impl State {
     ///
     /// ```math
     /// \frac{\partial \Delta z}{\partial \Delta y} = - P_{\text{lp}}'(\Delta y)
-    ///         - \left(\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \right)
+    ///     - \frac{1}{c} \cdot \left(\phi_c \cdot (1 - p) \cdot (1 - \phi_g) \right)
     /// ```
     fn calculate_pool_share_delta_after_short_derivative(
         &self,
