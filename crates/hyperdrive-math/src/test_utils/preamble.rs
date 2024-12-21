@@ -23,7 +23,7 @@ pub async fn initialize_pool_with_random_state(
     celine: &mut Agent<ChainClient<LocalWallet>, ChaCha8Rng>,
 ) -> Result<()> {
     // Get random pool liquidity & fixed rate.
-    let pool_initial_contribution = rng.gen_range(fixed!(1_000e18)..=fixed!(1_000_000_000e18));
+    let pool_initial_contribution = rng.gen_range(fixed!(10_000e18)..=fixed!(1_000_000_000e18));
     let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
 
     // Alice initializes the pool.
@@ -68,11 +68,21 @@ pub async fn initialize_pool_with_random_state(
         .await?;
 
     // Add some liquidity again to make sure future bots can make trades.
-    let liquidity_amount = rng.gen_range(fixed!(1_000e18)..=fixed!(100_000_000e18));
+    let state = alice.get_state().await?;
+    let min_base_reserves =
+        state.calculate_min_share_reserves_given_exposure()? * state.vault_share_price();
+    let positive_share_adjustment =
+        FixedPoint::<U256>::try_from(state.share_adjustment().min(0.into()))?
+            * state.vault_share_price();
     let exposure = alice.get_state().await?.long_exposure();
-    alice.fund(liquidity_amount + exposure).await?;
+    let min_base = min_base_reserves + positive_share_adjustment + exposure;
+    let liquidity_amount = rng.gen_range(min_base..=min_base + fixed!(1_000_000e18));
+    alice.fund(liquidity_amount).await?;
+    alice.add_liquidity(liquidity_amount, None).await?;
+
+    let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
     alice
-        .add_liquidity(liquidity_amount + exposure, None)
+        .advance_time(variable_rate, state.position_duration())
         .await?;
 
     Ok(())
@@ -268,20 +278,18 @@ mod tests {
             // Get state.
             let state = alice.get_state().await?;
             // Check that a short is possible.
-            if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                celine.reset(Default::default()).await?;
-                continue;
-            }
+            assert!(
+                state.effective_share_reserves()?
+                    > state.calculate_min_share_reserves_given_exposure()?
+            );
+            assert!(state
+                .solvency_after_short(state.minimum_transaction_amount())
+                .is_ok());
             // Open the max short.
-            let max_short = bob.calculate_max_short(None).await?;
+            let max_short = celine.calculate_max_short(None).await?;
             assert!(max_short >= state.minimum_transaction_amount());
-            bob.fund(max_short + fixed!(10e18)).await?;
-            bob.open_short(max_short, None, None).await?;
+            celine.fund(max_short + fixed!(10e18)).await?;
+            celine.open_short(max_short, None, None).await?;
             // Reset the chain & agents.
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;

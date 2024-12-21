@@ -718,7 +718,7 @@ impl State {
     /// ```math
     /// e(\Delta y) = e_0 - \Delta y
     /// ```
-    fn solvency_after_short(&self, bond_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
+    pub fn solvency_after_short(&self, bond_amount: FixedPoint<U256>) -> Result<FixedPoint<U256>> {
         let pool_share_delta = self.calculate_pool_share_delta_after_open_short(bond_amount)?;
         // If the share reserves would underflow when the short is opened,
         // then we revert with an insufficient liquidity error.
@@ -833,6 +833,7 @@ mod tests {
         erc4626_target0::NameWithTokenIdCall,
         ihyperdrive::{Checkpoint, Options},
         mock_hyperdrive_math::MaxTradeParams,
+        mock_lido::SharesOfCall,
     };
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
@@ -1260,16 +1261,24 @@ mod tests {
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
             // Get the current state from solidity.
             let state = alice.get_state().await?;
-            let effective_share_reserves = state.effective_share_reserves()?;
-            let min_share_reserves = state.calculate_min_share_reserves_given_exposure()?;
-            let share_reserves = state.share_reserves();
             // Make sure a short is possible.
-            if effective_share_reserves.min(share_reserves) < min_share_reserves {
+            let effective_share_reserves = state.effective_share_reserves()?;
+            println!("effective_share_reserves {:#?}", effective_share_reserves);
+            let share_reserves = state.share_reserves();
+            println!("share_reserves           {:#?}", share_reserves);
+            let min_share_reserves = state.calculate_min_share_reserves_given_exposure()?;
+            println!("min_share_reserves       {:#?}", min_share_reserves);
+            if state
+                .effective_share_reserves()?
+                .min(state.share_reserves())
+                <= state.calculate_min_share_reserves_given_exposure()?
+            {
                 // Revert to the snapshot and reset the agents' wallets.
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
                 bob.reset(Default::default()).await?;
                 celine.reset(Default::default()).await?;
+                assert!(false);
                 continue;
             }
             match state.solvency_after_short(state.minimum_transaction_amount()) {
@@ -1325,6 +1334,8 @@ mod tests {
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         // TODO: This should be fixed!(0.0001e18) == 0.01%
         let budget_tolerance = fixed!(1);
+        let abs_max_bond_tolerance = fixed!(1e9);
+        let max_iterations = 500;
 
         // Spawn a test chain and create two agents -- Alice and Bob. Alice
         // is funded with a large amount of capital so that she can initialize
@@ -1380,7 +1391,8 @@ mod tests {
                 // Don't need to reset Celine because he hasn't done anything.
                 continue;
             }
-            let global_max_short_bonds = state.calculate_absolute_max_short(None, None)?;
+            let global_max_short_bonds = state
+                .calculate_absolute_max_short(Some(abs_max_bond_tolerance), Some(max_iterations))?;
 
             // Celine should always be budget constrained when trying to open the short.
             let global_max_base_required = state
