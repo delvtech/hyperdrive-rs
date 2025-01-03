@@ -529,14 +529,15 @@ mod tests {
             alice.advance_time(fixed!(0), fixed!(0)).await?;
             let original_state = alice.get_state().await?;
             // Check that a short is possible.
-            if original_state.effective_share_reserves()?
-                < original_state.calculate_min_share_reserves_given_exposure()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                celine.reset(Default::default()).await?;
-                continue;
+            match original_state.solvency_after_short(original_state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => {
+                    chain.revert(id).await?;
+                    alice.reset(Default::default()).await?;
+                    bob.reset(Default::default()).await?;
+                    celine.reset(Default::default()).await?;
+                    continue;
+                }
             }
             // Get a random short amount.
             let max_short_amount = original_state.calculate_max_short(
@@ -856,16 +857,16 @@ mod tests {
             alice.initialize(fixed_rate, contribution, None).await?;
             let mut state = alice.get_state().await?;
 
-            // Check that a short is possible.
-            if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                continue;
+            // Check that a short is possible & generate a random short amount.
+            match state.solvency_after_short(state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => {
+                    chain.revert(id).await?;
+                    alice.reset(Default::default()).await?;
+                    bob.reset(Default::default()).await?;
+                    continue;
+                }
             }
-
             let bond_amount = rng.gen_range(
                 state.minimum_transaction_amount()..=bob.calculate_max_short(None).await?,
             );
@@ -988,13 +989,14 @@ mod tests {
 
             // Check that a short is possible.
             let state = alice.get_state().await?;
-            if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                continue;
+            match state.solvency_after_short(state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => {
+                    chain.revert(id).await?;
+                    alice.reset(Default::default()).await?;
+                    bob.reset(Default::default()).await?;
+                    continue;
+                }
             }
 
             // Bob opens a short with a random bond amount. Before opening the
@@ -1151,14 +1153,15 @@ mod tests {
             let min_txn_amount = state.minimum_transaction_amount();
 
             // Check that a short is possible.
-            if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                bob.reset(Default::default()).await?;
-                celine.reset(Default::default()).await?;
-                continue;
+            match state.solvency_after_short(state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => {
+                    chain.revert(id).await?;
+                    alice.reset(Default::default()).await?;
+                    bob.reset(Default::default()).await?;
+                    celine.reset(Default::default()).await?;
+                    continue;
+                }
             }
 
             let max_short = celine.calculate_max_short(None).await?;
