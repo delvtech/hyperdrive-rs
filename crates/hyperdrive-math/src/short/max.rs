@@ -649,20 +649,38 @@ impl State {
     /// an iterative loop that checks solvency and refines the result as a
     /// precautionary measure.
     fn absolute_max_short_guess(&self) -> Result<FixedPoint<U256>> {
-        let min_share_reserves = self.calculate_min_share_reserves_given_exposure()?.change_type::<U256>()?;
+        // Check that a short is possible.
+        if self
+            .solvency_after_short(self.minimum_transaction_amount())
+            .is_err()
+        {
+            return Err(eyre!("No short is possible."));
+        }
+        // min_share_reseves = z_min + max(zeta, 0) + e/c
+        let min_share_reserves = self.calculate_min_share_reserves_given_exposure()?;
+        let effective_share_reserves = self.effective_share_reserves()?.change_type::<I256>()?;
         // z0 - zeta - z1
-        let effective_shares_minus_min_shares =
-            self.effective_share_reserves()? - min_share_reserves;
+        let effective_minus_min_shares = effective_share_reserves - min_share_reserves;
         // ø_c * (1 - ø_g) * (1 - p)
-        let fee_component = self
+        let fee_component = (self
             .curve_fee()
             .mul_up(fixed!(1e18) - self.governance_lp_fee())
-            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?);
-        // (c * (z0 - zeta - z1)) / (p + ø_c * (1 - ø_g) * (1 - p))
-        let mut conservative_bond_delta = self.vault_share_price().mul_div_up(
-            effective_shares_minus_min_shares,
-            self.calculate_spot_price_up()? + fee_component,
-        );
+            .mul_up(fixed!(1e18) - self.calculate_spot_price_down()?))
+        .change_type::<I256>()?;
+        // Use a linear estimate that lies below the YieldSpace curve.
+        // (c * (z0 - zeta - z1)) / (ø_c * (1 - ø_g) * (1 - p) - p)
+        let mut conservative_bond_delta = {
+            let divisor = fee_component - self.calculate_spot_price_up()?.change_type::<I256>()?;
+            let delta = self
+                .vault_share_price()
+                .change_type::<I256>()?
+                .mul_div_up(effective_minus_min_shares, divisor);
+            if delta < fixed!(0) {
+                self.minimum_transaction_amount()
+            } else {
+                delta.change_type::<U256>()?
+            }
+        };
         // Iteratively adjust to ensure solvency.
         loop {
             match self.solvency_after_short(conservative_bond_delta) {
