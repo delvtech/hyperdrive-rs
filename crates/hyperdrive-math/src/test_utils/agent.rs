@@ -181,29 +181,12 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         } = self.get_checkpoint(latest_checkpoint).await?;
         let state = self.get_state().await?;
 
-        // We linearly interpolate between the current spot price and the minimum
-        // price that the pool can support. This is a conservative estimate of
-        // the short's realized price.
-        let conservative_price = {
-            // We estimate the minimum price that short will pay by a
-            // weighted average of the spot price and the minimum possible
-            // spot price the pool can quote. We choose the weights so that this
-            // is an underestimate of the worst case realized price.
-            let spot_price = state.calculate_spot_price_down()?;
-            let min_price = state.calculate_min_spot_price()?;
-
-            // Calculate the linear interpolation.
-            let base_reserves = FixedPoint::from(state.info.vault_share_price)
-                * (FixedPoint::from(state.info.share_reserves));
-            let weight = (min(self.wallet.base, base_reserves) / base_reserves)
-                .pow(fixed!(1e18) - FixedPoint::from(self.get_config().time_stretch))?;
-            spot_price * (fixed!(1e18) - weight) + min_price * weight
-        };
-
-        state.calculate_max_short(
+        let absolute_max_bond_amount = state.calculate_absolute_max_short(None, None)?;
+        state.calculate_short_bonds_given_deposit(
             budget,
-            open_vault_share_price,
-            Some(conservative_price),
+            open_vault_share_price.into(),
+            absolute_max_bond_amount,
+            None,
             None,
         )
     }

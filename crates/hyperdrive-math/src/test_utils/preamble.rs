@@ -32,55 +32,69 @@ pub async fn initialize_pool_with_random_state(
         .initialize(fixed_rate, pool_initial_contribution, None)
         .await?;
 
-    // Advance the time for over a term and make trades in some of the checkpoints.
-    let mut time_remaining = alice.get_config().position_duration;
-    while time_remaining > uint256!(0) {
+    // Determine a bounded random amount of trade sequences.
         let mut state = alice.get_state().await?;
-        let min_txn = state.minimum_transaction_amount();
+    let position_duration = state.position_duration();
+    let checkpoint_duration = state.checkpoint_duration();
+    let checkpoints_per_position = position_duration / checkpoint_duration;
+    let total_time = fixed!(1.1e18) * position_duration;
+    let delta_multiplier = rng.gen_range(fixed!(0.5e18)..=fixed!(10e18));
+    let time_delta = total_time / (checkpoints_per_position / delta_multiplier);
 
+    // Advance the time for over a position term and make trades in some of the
+    // checkpoints.
+        let min_txn = state.minimum_transaction_amount();
+    let mut time_remaining = total_time;
+    while time_remaining > fixed!(0) {
+        state = alice.get_state().await?;
         // Bob opens a long.
-        let max_long = get_max_long(state, None)?;
+        let max_long = get_max_long(&state, None)?;
         let long_amount = rng.gen_range(min_txn..=max_long);
-        bob.fund(long_amount + fixed!(10e18)).await?; // Fund a little extra for slippage.
+        // Fund extra for slippage.
+        bob.fund(long_amount + fixed!(10e18)).await?;
         bob.open_long(long_amount, None, None).await?;
 
         // Celine opens a short.
         state = alice.get_state().await?;
-
-        // Open a short.
-        let max_short = get_max_short(state, None)?;
-        let short_amount = rng.gen_range(min_txn..=max_short);
-        celine.fund(short_amount + fixed!(10e18)).await?; // Fund a little extra for slippage.
-        celine.open_short(short_amount, None, None).await?;
-
+        let max_short = get_max_short(&state, None)?;
+        let short_bond_amount = rng.gen_range(min_txn..=max_short);
+        let user_deposit_shares =
+            state.calculate_open_short(short_bond_amount, state.vault_share_price())?;
+        // Fund extra for slippage.
+        celine
+            .fund(user_deposit_shares * state.vault_share_price() + fixed!(10e18))
+            .await?;
+        celine.open_short(short_bond_amount, None, None).await?;
         // Advance the time and mint all of the intermediate checkpoints.
-        let multiplier = rng.gen_range(fixed!(10e18)..=fixed!(100e18));
-        let delta = FixedPoint::from(time_remaining)
-            .min(FixedPoint::from(alice.get_config().checkpoint_duration) * multiplier);
-        time_remaining -= U256::from(delta);
+        time_remaining -= time_delta;
         let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
-        alice.advance_time(variable_rate, delta).await?;
+        alice.advance_time(variable_rate, time_delta).await?;
     }
 
     // Mint a checkpoint to close any matured positions.
+    let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
+    alice
+        .advance_time(
+            variable_rate,
+            FixedPoint::from(alice.get_config().position_duration * 2),
+        )
+        .await?;
     alice
         .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
         .await?;
 
     // Add some liquidity again to make sure future bots can make trades.
     let state = alice.get_state().await?;
-    let min_base_reserves =
-        state.calculate_min_share_reserves_given_exposure()? * state.vault_share_price();
+    let min_share_reserves = state
+        .calculate_min_share_reserves_given_exposure()?
+        .change_type::<U256>()?;
     let positive_share_adjustment =
-        FixedPoint::<U256>::try_from(state.share_adjustment().min(0.into()))?
-            * state.vault_share_price();
-    let exposure = alice.get_state().await?.long_exposure();
-    let min_base = min_base_reserves + positive_share_adjustment + exposure;
-    let liquidity_amount = rng.gen_range(min_base..=min_base + fixed!(1_000_000e18));
+        FixedPoint::<U256>::try_from(state.share_adjustment().min(0.into()))?;
+    let min_base = (min_share_reserves + positive_share_adjustment) * state.vault_share_price()
+        + state.long_exposure();
+    let liquidity_amount = rng.gen_range(min_base..=min_base + fixed!(100_000e18));
     alice.fund(liquidity_amount).await?;
     alice.add_liquidity(liquidity_amount, None).await?;
-
-    let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
     alice
         .advance_time(variable_rate, state.position_duration())
         .await?;
@@ -89,7 +103,7 @@ pub async fn initialize_pool_with_random_state(
 }
 
 /// Conservative and safe estimate of the maximum long.
-fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
+fn get_max_long(state: &State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
     let checkpoint_exposure = I256::from(0);
 
@@ -138,40 +152,20 @@ fn get_max_long(state: State, maybe_max_num_tries: Option<usize>) -> Result<Fixe
 }
 
 /// Conservative and safe estimate of the maximum short.
-pub fn get_max_short(state: State, maybe_max_num_tries: Option<usize>) -> Result<FixedPoint<U256>> {
+pub fn get_max_short(
+    state: &State,
+    maybe_max_num_tries: Option<usize>,
+) -> Result<FixedPoint<U256>> {
+    if state
+        .solvency_after_short(state.minimum_transaction_amount())
+        .is_err()
+    {
+        return Ok(fixed!(0));
+    }
+    // Get the max
+    let mut max_short = state.calculate_absolute_max_short(None, None)?;
+    // Verify that the max is solvent & if not, reduce until it is.
     let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-
-    // We linearly interpolate between the current spot price and the minimum
-    // price that the pool can support. This is a conservative estimate of
-    // the short's realized price.
-    let conservative_price = {
-        // We estimate the minimum price that short will pay by a
-        // weighted average of the spot price and the minimum possible
-        // spot price the pool can quote. We choose the weights so that this
-        // is an underestimate of the worst case realized price.
-        let spot_price = state.calculate_spot_price_down()?;
-        let min_price = state.calculate_min_spot_price()?;
-
-        // Calculate the linear interpolation.
-        let weight = fixed!(1e18).pow(fixed!(1e18) - state.time_stretch())?;
-        spot_price * (fixed!(1e18) - weight) + min_price * weight
-    };
-
-    // Compute the max short.
-    let mut max_short = match panic::catch_unwind(|| {
-        state.calculate_max_short(
-            U256::from(U128::MAX),
-            state.vault_share_price(),
-            Some(conservative_price),
-            Some(5),
-        )
-    }) {
-        Ok(max_short_no_panic) => match max_short_no_panic {
-            Ok(max_short) => max_short,
-            Err(_) => state.share_reserves() / state.vault_share_price() * fixed!(10e18),
-        },
-        Err(_) => state.share_reserves() / state.vault_share_price() * fixed!(10e18),
-    };
     let mut num_tries = 0;
     let mut success = false;
     while !success {
@@ -278,10 +272,6 @@ mod tests {
             // Get state.
             let state = alice.get_state().await?;
             // Check that a short is possible.
-            assert!(
-                state.effective_share_reserves()?
-                    > state.calculate_min_share_reserves_given_exposure()?
-            );
             assert!(state
                 .solvency_after_short(state.minimum_transaction_amount())
                 .is_ok());

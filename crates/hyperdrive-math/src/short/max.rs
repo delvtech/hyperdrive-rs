@@ -990,7 +990,7 @@ mod tests {
                                 },
                                 Err(_) => continue,
                             }
-                            let max_short_bonds = match get_max_short(state.clone(), None) {
+                            let max_short_bonds = match get_max_short(&state, None) {
                                 Ok(max_short_trade) => {
                                     max_short_trade.min(absolute_max_bond_amount)
                                 }

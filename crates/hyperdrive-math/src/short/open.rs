@@ -1269,7 +1269,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
-            match get_max_short(state.clone(), None) {
+            match get_max_short(&state, None) {
                 Ok(max_short_bonds) => {
                     let bond_amount =
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
