@@ -1364,13 +1364,39 @@ mod tests {
         Ok(())
     }
 
+    /// Estimate solvency after short, open the short, verify solvency.
+    #[ignore]
+    #[tokio::test]
+    async fn fuzz_sol_solvency_after_short() -> Result<()> {
+        let solvency_tolerance = fixed!(1e18);
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
+            let mut rng = thread_rng();
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+        // Initialize the test chain.
+        let chain = TestChain::new().await?;
+        let mut alice = chain.alice().await?;
+        let mut bob = chain.bob().await?;
+        let mut celine = chain.celine().await?;
+
+        // Run the fuzz tests.
+        for iter in 0..*SLOW_FUZZ_RUNS {
+            println!("");
+            println!("iter {:#?}", iter);
+            // Snapshot the chain.
+            let id = chain.snapshot().await?;
+            // Run the preamble.
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            // Get the current state from solidity.
+            let mut state = alice.get_state().await?;
                     // Check that a short is possible.
-                    // TODO: We will remove this check in the future; this a failure case in rust that is not
-                    // checked in solidity.
-                    if state.effective_share_reserves()?
-                        < state
-                            .calculate_min_share_reserves_given_exposure()?
-                            .change_type::<U256>()?
+            if state
+                .solvency_after_short(state.minimum_transaction_amount())
+                .is_err()
                     {
                         chain.revert(id).await?;
                         alice.reset(Default::default()).await?;
@@ -1379,124 +1405,70 @@ mod tests {
                         continue;
                     }
 
-                    // Solidity reports everything is good, so we run the Rust fns.
-                    let rust_max_bonds = panic::catch_unwind(|| {
-                        state.calculate_absolute_max_short(None, Some(max_iterations))
-                    });
+            // Open the max short.
+            let max_short = state.calculate_absolute_max_short(None, None)?;
+            let max_short_deposit_shares =
+                state.calculate_open_short(max_short, state.vault_share_price())?;
+            celine
+                .fund((max_short_deposit_shares + fixed!(100e18)).into())
+                .await?;
+            println!("");
+            println!(
+                "pre_short_exposure_sh  ={:#?}",
+                state.long_exposure().div_up(state.vault_share_price())
+            );
+            println!(
+                "bond_amount_shares     ={:#?}",
+                max_short.div_up(state.vault_share_price())
+            );
+            println!("GUESS");
+            let solvency_after_short_guess = state.solvency_after_short(max_short)?;
+            celine.open_short(max_short, None, None).await?;
+            alice
+                .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
+                .await?;
 
-                    // Compare the max bond amounts.
-                    let rust_max_bonds_unwrapped = rust_max_bonds.unwrap().unwrap();
-                    let sol_max_bonds_fp = FixedPoint::from(sol_max_bonds);
-                    let error = if rust_max_bonds_unwrapped > sol_max_bonds_fp {
-                        rust_max_bonds_unwrapped - sol_max_bonds_fp
+            // Check solvency values.
+            state = alice.get_state().await?;
+            println!("REAL");
+            println!("share_reserves         ={:#?}", state.share_reserves());
+            println!(
+                "exposure_shares        ={:#?}",
+                state.long_exposure().div_up(state.vault_share_price())
+            );
+            println!(
+                "minimum_share_reserves ={:#?}",
+                state.minimum_share_reserves()
+            );
+            let solvency_after_short_rs = state.calculate_solvency()?;
+            // TODO: add solvency function to mock hyperdrive so we can call it.
+            let solvency_after_short_sol = (state.share_reserves()
+                - state.long_exposure().div_up(state.vault_share_price()))
+                - state.minimum_share_reserves();
+
+            // Ensure solidity & rust solvency values are within tolerance.
+            let error = if solvency_after_short_guess > solvency_after_short_rs {
+                solvency_after_short_guess - solvency_after_short_rs
                     } else {
-                        sol_max_bonds_fp - rust_max_bonds_unwrapped
+                solvency_after_short_rs - solvency_after_short_guess
                     };
                     assert!(
-                        error < max_bonds_tolerance,
-                        "expected abs(rust_bonds - sol_bonds)={} >= max_bonds_tolerance={}",
+                error <= solvency_tolerance,
+                "rust error={:#?} > tolerance={:#?}",
                         error,
-                        max_bonds_tolerance
-                    );
-
-                    // The amount Celine has to pay will always be less than the bond amount.
-                    celine.fund(sol_max_bonds.into()).await?;
-                    match celine
-                        .hyperdrive()
-                        .open_short(
-                            sol_max_bonds.into(),
-                            FixedPoint::from(U256::MAX).into(),
-                            fixed!(0).into(),
-                            Options {
-                                destination: celine.address(),
-                                as_base: true,
-                                extra_data: [].into(),
-                            },
-                        )
-                        .call()
-                        .await
-                    {
-                        Ok((_, sol_max_base)) => {
-                            // Calling any Solidity Hyperdrive transaction causes the
-                            // mock yield source to accrue some interest. We want to use
-                            // the state before the Solidity OpenShort, but with the
-                            // vault share price after the block tick.
-                            // Get the current vault share price & update state.
-                            let vault_share_price = alice.get_state().await?.vault_share_price();
-                            state.info.vault_share_price = vault_share_price.into();
-
-                            // Get the open vault share price.
-                            let Checkpoint {
-                                weighted_spot_price: _,
-                                last_weighted_spot_price_update_time: _,
-                                vault_share_price: open_vault_share_price,
-                            } = alice
-                                .get_checkpoint(state.to_checkpoint(alice.now().await?))
-                                .await?;
-
-                            // Compare the open short call outputs.
-                            let rust_max_base = state.calculate_open_short(
-                                rust_max_bonds_unwrapped,
-                                open_vault_share_price.into(),
-                            );
-
-                            let rust_max_base_unwrapped = rust_max_base.unwrap();
-                            let sol_max_base_fp = FixedPoint::from(sol_max_base);
-                            let error = if rust_max_base_unwrapped > sol_max_base_fp {
-                                rust_max_base_unwrapped - sol_max_base_fp
+                solvency_tolerance
+            );
+            let error = if solvency_after_short_guess > solvency_after_short_sol {
+                solvency_after_short_guess - solvency_after_short_sol
                             } else {
-                                sol_max_base_fp - rust_max_base_unwrapped
+                solvency_after_short_sol - solvency_after_short_guess
                             };
                             assert!(
-                                error < max_base_tolerance,
-                                "expected abs(rust_base - sol_base)={} >= max_base_tolerance={}",
+                error <= solvency_tolerance,
+                "solidity error={:#?} > tolerance={:#?}",
                                 error,
-                                max_base_tolerance
-                            );
-
-                            // Make sure the pool was drained.
-                            let pool_shares = state
-                                .effective_share_reserves()?
-                                .min(state.share_reserves());
-                            let min_share_reserves = state.minimum_share_reserves();
-                            assert!(pool_shares >= min_share_reserves,
-                                "effective_share_reserves={} should always be greater than the minimum_share_reserves={}.",
-                                state.effective_share_reserves()?,
-                                min_share_reserves,
-                            );
-                            let reserve_amount_above_minimum = pool_shares - min_share_reserves;
-                            assert!(reserve_amount_above_minimum < reserves_drained_tolerance,
-                                "share_reserves={} - minimum_share_reserves={} (diff={}) should be < tolerance={}",
-                                pool_shares,
-                                min_share_reserves,
-                                reserve_amount_above_minimum,
-                                reserves_drained_tolerance,
-                            );
-                        }
-
-                        // Solidity calculate_max_short worked, but passing that bond amount to open_short failed.
-                        Err(_) => assert!(
-                            false,
-                            "Solidity calculate_max_short produced an insolvent answer!"
-                        ),
-                    }
-                }
-
-                // Solidity calculate_max_short failed; verify that rust calculate_max_short fails.
-                Err(_) => {
-                    // Get the current vault share price & update state.
-                    let vault_share_price = alice.get_state().await?.vault_share_price();
-                    state.info.vault_share_price = vault_share_price.into();
-
-                    // Get the current checkpoint exposure.
-                    // Solidity reports everything is good, so we run the Rust fns.
-                    let rust_max_bonds = panic::catch_unwind(|| {
-                        state.calculate_absolute_max_short(None, Some(max_iterations))
-                    });
-
-                    assert!(rust_max_bonds.is_err() || rust_max_bonds.unwrap().is_err());
-                }
-            }
+                solvency_tolerance
+            );
 
             // Revert to the snapshot and reset the agent's wallets.
             chain.revert(id).await?;
