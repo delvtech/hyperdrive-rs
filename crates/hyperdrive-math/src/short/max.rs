@@ -1202,49 +1202,46 @@ mod tests {
         Ok(())
     }
 
+    /// This test ensures that `calculate_short_bonds_given_deposit` returns a
+    /// short bond amount that results consuming the agent's budget, ignoring
+    /// the slippage guard.
     #[tokio::test]
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
-        // TODO: This should be fixed!(0.0001e18) == 0.01%
-        let budget_tolerance = fixed!(1e18);
-
-        // Spawn a test chain and create two agents -- Alice and Bob. Alice
-        // is funded with a large amount of capital so that she can initialize
-        // the pool. Bob is funded with a small amount of capital so that we
-        // can test `calculate_max_short` when budget is the primary constraint.
+        let abs_max_bond_tolerance = fixed!(1e9);
+        let remaining_balance_tolerance = fixed!(1e9);
+        // Set up a random number generator. We use ChaCha8Rng with a randomly
+        // generated seed, which makes it easy to reproduce test failures given
+        // the seed.
+        let mut rng = {
         let mut rng = thread_rng();
-
-        // Initialize the chain and the agents.
+            let seed = rng.gen();
+            ChaCha8Rng::seed_from_u64(seed)
+        };
+        // Initialize the test chain.
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
         let mut bob = chain.bob().await?;
-        let config = alice.get_config().clone();
+        let mut celine = chain.celine().await?;
 
-        for _ in 0..*FUZZ_RUNS {
+        // Run the fuzz tests.
+        let mut num_tests = 0;
+        for _ in 0..*SLOW_FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
-
-            // Fund Alice and Bob.
-            let contribution = rng.gen_range(fixed!(100_000e18)..=fixed!(100_000_000e18));
-            alice.fund(contribution).await?;
-
-            // Alice initializes the pool.
-            let fixed_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
-            alice.initialize(fixed_rate, contribution, None).await?;
-
-            // Some of the checkpoint passes and variable interest accrues.
-            alice
-                .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-                .await?;
-            let variable_rate = rng.gen_range(fixed!(0)..=fixed!(0.5e18));
-            alice
-                .advance_time(
-                    variable_rate,
-                    FixedPoint::from(config.checkpoint_duration) * fixed!(0.5e18),
-                )
-                .await?;
-
+            // Run the preamble.
+            initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
             // Get the current state of the pool.
             let state = alice.get_state().await?;
+            // Check that a short is possible.
+            if state
+                .solvency_after_short(state.minimum_transaction_amount())
+                .is_err()
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
             let Checkpoint {
                 vault_share_price: open_vault_share_price,
                 weighted_spot_price: _,
@@ -1252,57 +1249,56 @@ mod tests {
             } = alice
                 .get_checkpoint(state.to_checkpoint(alice.now().await?))
                 .await?;
-            // Check that a short is possible.
-            if state.effective_share_reserves()?
-                < state
-                    .calculate_min_share_reserves_given_exposure()?
-                    .change_type::<U256>()?
-            {
-                chain.revert(id).await?;
-                alice.reset(Default::default()).await?;
-                // Don't need to reset bob because he hasn't done anything.
-                continue;
-            }
-            let global_max_short_bonds = state.calculate_absolute_max_short(None, None)?;
 
-            // Bob should always be budget constrained when trying to open the short.
+            // Celine should always be budget constrained when trying to open the short.
+            let global_max_short_bonds =
+                state.calculate_absolute_max_short(Some(abs_max_bond_tolerance), None)?;
             let global_max_base_required = state
                 .calculate_open_short(global_max_short_bonds, open_vault_share_price.into())?;
+            if global_max_base_required - fixed!(1e18) <= state.minimum_transaction_amount() {
+                continue; // Avoid case where max is within 1e18 of min.
+            }
             let budget = rng.gen_range(
                 state.minimum_transaction_amount()..=global_max_base_required - fixed!(1e18),
             );
-            bob.fund(budget).await?;
+            celine.fund(budget).await?;
 
-            // Bob opens a max short position. We allow for a very small amount
-            // of slippage to account for interest accrual between the time the
-            // calculation is performed and the transaction is submitted.
-            let slippage_tolerance = fixed!(0.0001e18); // 0.01%
-            let max_short_bonds = bob.calculate_max_short(Some(slippage_tolerance)).await?;
-            bob.open_short(max_short_bonds, None, None).await?;
+            // Celine opens a max short position.
+            let slippage_tolerance = fixed!(0.01e18);
+            let max_short_bonds = celine.calculate_max_short(Some(slippage_tolerance)).await?;
+            celine
+                .open_short(max_short_bonds, Some(slippage_tolerance), None)
+                .await?;
 
-            // Bob used a slippage tolerance of 0.01%, which means
-            // that the max short is always consuming at least 99.99% of
-            // the budget.
-            let max_allowable_balance =
-                budget * (fixed!(1e18) - slippage_tolerance) * budget_tolerance;
-            let remaining_balance = bob.base();
-            assert!(remaining_balance < max_allowable_balance,
-                "expected {}% of budget consumed, or remaining_balance={} < max_allowable_balance={}
-                global_max_short_bonds = {}; max_short_bonds = {}; global_max_base_required={}",
-                format!("{}", fixed!(100e18)*(fixed!(1e18) - budget_tolerance)).trim_end_matches("0"),
+            // The max short should consume the budget up to the slippage
+            // tolerance.
+            let remaining_balance = celine.base();
+            assert!(
+                remaining_balance <= remaining_balance_tolerance + budget * slippage_tolerance,
+                "expected remaining_balance={:#?} <= remaining_balance_tolerance={:#?}
+                global_max_short_bonds={:#?}
+                global_max_base_required={:#?}
+                budget={:#?}
+                max_short_bonds={:#?}",
                 remaining_balance,
-                max_allowable_balance,
+                format!(
+                    "{}",
+                    remaining_balance_tolerance + budget * slippage_tolerance
+                ),
                 global_max_short_bonds,
-                max_short_bonds,
                 global_max_base_required,
+                budget,
+                max_short_bonds,
             );
 
             // Revert to the snapshot and reset the agents' wallets.
+            num_tests += 1;
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
-            bob.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
         }
-
+        // Assert that we've run at least 50% of the tests.
+        assert!(num_tests > 50);
         Ok(())
     }
 
