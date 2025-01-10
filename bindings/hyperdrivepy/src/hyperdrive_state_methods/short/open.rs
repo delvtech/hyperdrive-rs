@@ -54,8 +54,11 @@ impl HyperdriveState {
                     err
                 ))
             })?;
-
-        let result = U256::from(result_fp).to_string();
+        let result = U256::try_from(result_fp)
+            .map_err(|err| {
+                PyErr::new::<PyValueError, _>(format!("Failed to convert to U256 {}", err))
+            })?
+            .to_string();
         Ok(result)
     }
 
