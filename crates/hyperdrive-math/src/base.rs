@@ -22,7 +22,7 @@ impl State {
     /// ```
     pub fn calculate_solvency(&self) -> Result<FixedPoint<U256>> {
         let share_reserves = self.share_reserves();
-        let long_exposure_shares = self.long_exposure() / self.vault_share_price();
+        let long_exposure_shares = self.long_exposure().div_up(self.vault_share_price());
         let min_share_reserves = self.minimum_share_reserves();
         if share_reserves > long_exposure_shares + min_share_reserves {
             Ok((share_reserves - long_exposure_shares) - min_share_reserves)
