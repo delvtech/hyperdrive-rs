@@ -530,7 +530,9 @@ mod tests {
             let original_state = alice.get_state().await?;
             // Check that a short is possible.
             if original_state.effective_share_reserves()?
-                < original_state.calculate_min_share_reserves_given_exposure()?
+                < original_state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -858,7 +860,9 @@ mod tests {
 
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -989,7 +993,9 @@ mod tests {
             // Check that a short is possible.
             let state = alice.get_state().await?;
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -1152,7 +1158,9 @@ mod tests {
 
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;

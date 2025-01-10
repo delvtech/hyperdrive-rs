@@ -587,29 +587,29 @@ impl State {
             };
 
             // Refine the new bond amount if necessary by binary search.
-                    let mut num_tries = 0;
+            let mut num_tries = 0;
             let mut rng = thread_rng();
-                    loop {
+            loop {
                 match self.solvency_after_short(new_bond_amount) {
                     // New bond amount is good; assign it & get out of the loop.
                     Ok(_) => {
                         last_good_bond_amount = new_bond_amount;
                         break;
-                        }
+                    }
                     // New bond amount is too large.
                     Err(_) => {
                         new_bond_amount -= (new_bond_amount - last_good_bond_amount) / fixed!(2e18);
                     }
                 }
-                        num_tries += 1;
+                num_tries += 1;
                 // We've tried enough; back up to a new random starting point
                 // and try again.
                 if num_tries >= 1_000 {
                     last_good_bond_amount -= delta_y.abs().change_type::<U256>()?
                         * rng.gen_range(fixed!(1e5)..=fixed!(1e12));
                     break;
-                    }
                 }
+            }
         }
         // We did not find a solution within tolerance in the provided number of
         // iterations.
@@ -928,7 +928,7 @@ mod tests {
             // Compute function at two close points.
             let f_x = state.calculate_pool_share_delta_after_open_short(bond_amount)?;
             let f_x_plus_delta = state.calculate_pool_share_delta_after_open_short(
-                    bond_amount + empirical_derivative_epsilon,
+                bond_amount + empirical_derivative_epsilon,
             )?;
             // Compute the empirical and analytical derivatives.
             let pool_share_delta_derivative =
@@ -1111,7 +1111,9 @@ mod tests {
             if state
                 .effective_share_reserves()?
                 .min(state.share_reserves())
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 continue;
             }
@@ -1152,7 +1154,9 @@ mod tests {
             if state
                 .effective_share_reserves()?
                 .min(state.share_reserves())
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 continue;
             }
@@ -1179,7 +1183,6 @@ mod tests {
 
     /// This test ensures that the short functions for converting between a
     /// deposit in shares and bonds to be shorted are invertible.
-    #[ignore] // TODO: Unignore once this passes.
     #[tokio::test]
     async fn fuzz_open_short_inversion() -> Result<()> {
         let abs_max_bonds_tolerance = fixed_u256!(1e9);
@@ -1193,7 +1196,9 @@ mod tests {
             if state
                 .effective_share_reserves()?
                 .min(state.share_reserves())
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 continue;
             }
@@ -1328,7 +1333,9 @@ mod tests {
                 .await?;
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
@@ -1444,7 +1451,9 @@ mod tests {
                     // TODO: We will remove this check in the future; this a failure case in rust that is not
                     // checked in solidity.
                     if state.effective_share_reserves()?
-                        < state.calculate_min_share_reserves_given_exposure()?
+                        < state
+                            .calculate_min_share_reserves_given_exposure()?
+                            .change_type::<U256>()?
                     {
                         chain.revert(id).await?;
                         alice.reset(Default::default()).await?;
