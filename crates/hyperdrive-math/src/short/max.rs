@@ -1302,12 +1302,12 @@ mod tests {
         Ok(())
     }
 
+    /// Test to ensure that the rust computed absolute max short can always be
+    /// opened in the smart contracts.
     #[tokio::test]
-    async fn fuzz_sol_calculate_max_short_without_budget_then_open_short() -> Result<()> {
-        let max_bonds_tolerance = fixed!(1e10);
-        let max_base_tolerance = fixed!(1e10);
-        let reserves_drained_tolerance = fixed!(1e27);
-
+    async fn fuzz_absolute_max_short_valid() -> Result<()> {
+        let bond_tolerance = fixed!(1e9);
+        let max_iterations = 500;
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
@@ -1316,54 +1316,54 @@ mod tests {
             let seed = rng.gen();
             ChaCha8Rng::seed_from_u64(seed)
         };
-
         // Initialize the test chain.
         let chain = TestChain::new().await?;
         let mut alice = chain.alice().await?;
         let mut bob = chain.bob().await?;
         let mut celine = chain.celine().await?;
 
+        // Run the fuzz tests.
+        let mut num_tests = 0;
         for _ in 0..*SLOW_FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
-
             // Run the preamble.
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
+            // Get the current state of the pool.
+            let state = alice.get_state().await?;
+            // Check that a short is possible.
+            if state
+                .solvency_after_short(state.minimum_transaction_amount())
+                .is_err()
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
 
-            // Get the current state from solidity.
-            let mut state = alice.get_state().await?;
-
-            // Get the current checkpoint exposure.
-            let checkpoint_exposure = alice
-                .get_checkpoint_exposure(state.to_checkpoint(alice.now().await?))
+            // Get the max short.
+            let global_max_short_bonds =
+                state.calculate_absolute_max_short(Some(bond_tolerance), Some(max_iterations))?;
+            // Celine opens a max short position.
+            // Test passes if this does not revert or throw any errors.
+            let slippage_tolerance = fixed!(0.01e18);
+            celine.fund(global_max_short_bonds * fixed!(100e18)).await?; // plenty of money
+            celine
+                .open_short(global_max_short_bonds, Some(slippage_tolerance), None)
                 .await?;
 
-            // Get the global max short from Solidity.
-            let max_iterations = 7;
-            match chain
-                .mock_hyperdrive_math()
-                .calculate_max_short(
-                    MaxTradeParams {
-                        share_reserves: state.info.share_reserves,
-                        bond_reserves: state.info.bond_reserves,
-                        longs_outstanding: state.info.longs_outstanding,
-                        long_exposure: state.info.long_exposure,
-                        share_adjustment: state.info.share_adjustment,
-                        time_stretch: state.config.time_stretch,
-                        vault_share_price: state.info.vault_share_price,
-                        initial_vault_share_price: state.config.initial_vault_share_price,
-                        minimum_share_reserves: state.config.minimum_share_reserves,
-                        curve_fee: state.config.fees.curve,
-                        flat_fee: state.config.fees.flat,
-                        governance_lp_fee: state.config.fees.governance_lp,
-                    },
-                    checkpoint_exposure,
-                    max_iterations.into(),
-                )
-                .call()
-                .await
-            {
-                Ok(sol_max_bonds) => {
+            // Revert to the snapshot and reset the agents' wallets.
+            num_tests += 1;
+            chain.revert(id).await?;
+            alice.reset(Default::default()).await?;
+            celine.reset(Default::default()).await?;
+        }
+        // Assert that we've run at least 50% of the tests.
+        assert!(num_tests > 50);
+        Ok(())
+    }
+
                     // Check that a short is possible.
                     // TODO: We will remove this check in the future; this a failure case in rust that is not
                     // checked in solidity.
