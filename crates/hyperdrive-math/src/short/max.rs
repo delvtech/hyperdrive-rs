@@ -890,17 +890,13 @@ mod tests {
         chain::TestChain,
         constants::{FAST_FUZZ_RUNS, FUZZ_RUNS, SLOW_FUZZ_RUNS},
     };
-    use hyperdrive_wrappers::wrappers::{
-        ihyperdrive::{Checkpoint, Options},
-        mock_hyperdrive_math::MaxTradeParams,
-    };
+    use hyperdrive_wrappers::wrappers::ihyperdrive::Checkpoint;
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
     use super::*;
     use crate::test_utils::{
-        agent::HyperdriveMathAgent,
-        preamble::{get_max_short, initialize_pool_with_random_state},
+        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
     };
 
     #[tokio::test]
@@ -960,6 +956,8 @@ mod tests {
         let empirical_derivative_epsilon = fixed!(1e14);
         let test_tolerance = fixed!(1e14);
         let mut rng = thread_rng();
+
+        // Run the fuzz tests.
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             // Min trade amount should be at least 1,000x the derivative epsilon
@@ -1025,19 +1023,12 @@ mod tests {
     async fn fuzz_calculate_absolute_max_short_guess() -> Result<()> {
         let solvency_tolerance = fixed!(100_000_000e18);
         let mut rng = thread_rng();
+
+        // Run the fuzz tests.
         for _ in 0..*FAST_FUZZ_RUNS {
             // Compute a random state and checkpoint exposure.
             let state = rng.gen::<State>();
             // Check that a short is possible.
-            if state
-                .effective_share_reserves()?
-                .min(state.share_reserves())
-                < state
-                    .calculate_min_share_reserves_given_exposure()?
-                    .change_type::<U256>()?
-            {
-                continue;
-            }
             match state.solvency_after_short(state.minimum_transaction_amount()) {
                 Ok(_) => (),
                 Err(_) => continue,
@@ -1045,6 +1036,18 @@ mod tests {
 
             // Compute the guess, check that it is solvent.
             let max_short_guess = state.absolute_max_short_guess()?;
+            assert!(
+                state.solvency_after_short(max_short_guess).is_ok(),
+                "max_short_guess={:#?} is not solvent",
+                max_short_guess
+            );
+            assert!(
+                state
+                    .calculate_open_short(max_short_guess, state.vault_share_price())
+                    .is_ok(),
+                "cannot open short with max_short_guess={:#?}",
+                max_short_guess
+            );
             let solvency = state.solvency_after_short(max_short_guess)?;
 
             // Check that the remaining available shares in the pool are below a
@@ -1056,7 +1059,6 @@ mod tests {
                 solvency_tolerance
             );
         }
-
         Ok(())
     }
 
@@ -1067,20 +1069,12 @@ mod tests {
     async fn fuzz_calculate_absolute_max_short() -> Result<()> {
         let bonds_tolerance = fixed_u256!(1e9);
         let max_iterations = 500;
-        // Run the fuzz tests
+
+        // Run the fuzz tests.
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
             // Make sure a short is possible.
-            if state
-                .effective_share_reserves()?
-                .min(state.share_reserves())
-                < state
-                    .calculate_min_share_reserves_given_exposure()?
-                    .change_type::<U256>()?
-            {
-                continue;
-            }
             match state.solvency_after_short(state.minimum_transaction_amount()) {
                 Ok(_) => (),
                 Err(_) => continue,
@@ -1093,10 +1087,18 @@ mod tests {
             // The short should be valid.
             assert!(absolute_max_short >= state.minimum_transaction_amount());
             assert!(state.solvency_after_short(absolute_max_short).is_ok());
-
+            assert!(state
+                .calculate_open_short(absolute_max_short, state.vault_share_price())
+                .is_ok());
             // Adding tolerance more bonds should be insolvent.
             assert!(state
                 .solvency_after_short(absolute_max_short + bonds_tolerance)
+                .is_err());
+            assert!(state
+                .calculate_open_short(
+                    absolute_max_short + bonds_tolerance,
+                    state.vault_share_price()
+                )
                 .is_err());
         }
         Ok(())
@@ -1109,20 +1111,12 @@ mod tests {
         let abs_max_bonds_tolerance = fixed_u256!(1e9);
         let budget_base_tolerance = fixed_u256!(1e9);
         let max_iterations = 500;
-        // Run the fuzz tests
         let mut rng = thread_rng();
-        for _ in 0..*FUZZ_RUNS {
+
+        // Run the fuzz tests.
+        for _ in 0..*SLOW_FUZZ_RUNS {
             let state = rng.gen::<State>();
             // Make sure a short is possible.
-            if state
-                .effective_share_reserves()?
-                .min(state.share_reserves())
-                < state
-                    .calculate_min_share_reserves_given_exposure()?
-                    .change_type::<U256>()?
-            {
-                continue;
-            }
             match state.solvency_after_short(state.minimum_transaction_amount()) {
                 Ok(_) => (),
                 Err(_) => continue,
@@ -1213,7 +1207,7 @@ mod tests {
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
         let mut rng = {
-        let mut rng = thread_rng();
+            let mut rng = thread_rng();
             let seed = rng.gen();
             ChaCha8Rng::seed_from_u64(seed)
         };
@@ -1393,17 +1387,17 @@ mod tests {
             initialize_pool_with_random_state(&mut rng, &mut alice, &mut bob, &mut celine).await?;
             // Get the current state from solidity.
             let mut state = alice.get_state().await?;
-                    // Check that a short is possible.
+            // Check that a short is possible.
             if state
                 .solvency_after_short(state.minimum_transaction_amount())
                 .is_err()
-                    {
-                        chain.revert(id).await?;
-                        alice.reset(Default::default()).await?;
-                        bob.reset(Default::default()).await?;
-                        celine.reset(Default::default()).await?;
-                        continue;
-                    }
+            {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
+                continue;
+            }
 
             // Open the max short.
             let max_short = state.calculate_absolute_max_short(None, None)?;
@@ -1449,24 +1443,24 @@ mod tests {
             // Ensure solidity & rust solvency values are within tolerance.
             let error = if solvency_after_short_guess > solvency_after_short_rs {
                 solvency_after_short_guess - solvency_after_short_rs
-                    } else {
+            } else {
                 solvency_after_short_rs - solvency_after_short_guess
-                    };
-                    assert!(
+            };
+            assert!(
                 error <= solvency_tolerance,
                 "rust error={:#?} > tolerance={:#?}",
-                        error,
+                error,
                 solvency_tolerance
             );
             let error = if solvency_after_short_guess > solvency_after_short_sol {
                 solvency_after_short_guess - solvency_after_short_sol
-                            } else {
+            } else {
                 solvency_after_short_sol - solvency_after_short_guess
-                            };
-                            assert!(
+            };
+            assert!(
                 error <= solvency_tolerance,
                 "solidity error={:#?} > tolerance={:#?}",
-                                error,
+                error,
                 solvency_tolerance
             );
 
@@ -1491,8 +1485,18 @@ mod tests {
             let inc = i_val * fixed!(1e9); // range is 1e9->1e19
             increments.push(inc);
         }
+
+        // Run the fuzz tests.
         for _ in 0..*FUZZ_RUNS {
             let state = rng.gen::<State>();
+            // Ensure a short is possible.
+            if state
+                .solvency_after_short(state.minimum_transaction_amount())
+                .is_err()
+            {
+                continue;
+            }
+
             // Vary the baseline scale factor by adjusting the initial bond amount.
             let bond_amount = rng.gen_range(fixed!(1e10)..=fixed!(100_000_000e18));
             // Compute f_x at the baseline bond_amount.
