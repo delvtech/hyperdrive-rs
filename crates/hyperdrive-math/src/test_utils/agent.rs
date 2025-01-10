@@ -1,4 +1,4 @@
-use std::{cmp::min, collections::btree_map::Entry};
+use std::collections::btree_map::Entry;
 
 use ethers::{prelude::EthLogDecode, signers::LocalWallet, types::U256};
 use eyre::Result;
@@ -173,22 +173,26 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
     ) -> Result<FixedPoint<U256>> {
         let budget =
             self.wallet.base * (fixed!(1e18) - maybe_slippage_tolerance.unwrap_or(fixed!(0.01e18)));
-
         let latest_checkpoint = self.latest_checkpoint().await?;
         let Checkpoint {
             vault_share_price: open_vault_share_price,
             ..
         } = self.get_checkpoint(latest_checkpoint).await?;
         let state = self.get_state().await?;
-
         let absolute_max_bond_amount = state.calculate_absolute_max_short(None, None)?;
-        state.calculate_short_bonds_given_deposit(
-            budget,
-            open_vault_share_price.into(),
-            absolute_max_bond_amount,
-            None,
-            None,
-        )
+        let absolute_max_base_amount =
+            state.calculate_open_short(absolute_max_bond_amount, open_vault_share_price.into())?;
+        if budget >= absolute_max_base_amount {
+            Ok(absolute_max_base_amount)
+        } else {
+            state.calculate_short_bonds_given_deposit(
+                budget,
+                open_vault_share_price.into(),
+                absolute_max_bond_amount,
+                None,
+                None,
+            )
+        }
     }
 
     #[instrument(skip(self))]

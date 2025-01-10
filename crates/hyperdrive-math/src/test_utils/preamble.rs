@@ -33,18 +33,15 @@ pub async fn initialize_pool_with_random_state(
         .await?;
 
     // Determine a bounded random amount of trade sequences.
-        let mut state = alice.get_state().await?;
-    let position_duration = state.position_duration();
-    let checkpoint_duration = state.checkpoint_duration();
-    let checkpoints_per_position = position_duration / checkpoint_duration;
-    let total_time = fixed!(1.1e18) * position_duration;
-    let delta_multiplier = rng.gen_range(fixed!(0.5e18)..=fixed!(10e18));
-    let time_delta = total_time / (checkpoints_per_position / delta_multiplier);
+    let mut state = alice.get_state().await?;
+    let total_time = fixed!(1.1e18) * state.position_duration();
+    let num_steps = rng.gen_range(fixed!(1e18)..=fixed!(3e18));
+    let time_delta = total_time / num_steps;
 
     // Advance the time for over a position term and make trades in some of the
     // checkpoints.
-        let min_txn = state.minimum_transaction_amount();
-    let mut time_remaining = total_time;
+    let min_txn = state.minimum_transaction_amount();
+    let mut time_remaining = total_time.change_type::<I256>()?;
     while time_remaining > fixed!(0) {
         state = alice.get_state().await?;
         // Bob opens a long.
@@ -56,7 +53,12 @@ pub async fn initialize_pool_with_random_state(
 
         // Celine opens a short.
         state = alice.get_state().await?;
-        let max_short = get_max_short(&state, None)?;
+        let max_short = state.absolute_max_short_guess()?; // Less accurate but faster to compute.
+        if max_short == min_txn {
+            let short_base = state
+                .calculate_open_short(max_short * fixed!(1000e18), state.vault_share_price())?;
+            println!("short_base {:#?}", short_base);
+        }
         let short_bond_amount = rng.gen_range(min_txn..=max_short);
         let user_deposit_shares =
             state.calculate_open_short(short_bond_amount, state.vault_share_price())?;
@@ -66,22 +68,10 @@ pub async fn initialize_pool_with_random_state(
             .await?;
         celine.open_short(short_bond_amount, None, None).await?;
         // Advance the time and mint all of the intermediate checkpoints.
-        time_remaining -= time_delta;
         let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
         alice.advance_time(variable_rate, time_delta).await?;
+        time_remaining -= time_delta.change_type::<I256>()?;
     }
-
-    // Mint a checkpoint to close any matured positions.
-    let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
-    alice
-        .advance_time(
-            variable_rate,
-            FixedPoint::from(alice.get_config().position_duration * 2),
-        )
-        .await?;
-    alice
-        .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
-        .await?;
 
     // Add some liquidity again to make sure future bots can make trades.
     let state = alice.get_state().await?;
@@ -95,10 +85,15 @@ pub async fn initialize_pool_with_random_state(
     let liquidity_amount = rng.gen_range(min_base..=min_base + fixed!(100_000e18));
     alice.fund(liquidity_amount).await?;
     alice.add_liquidity(liquidity_amount, None).await?;
+    // Advance time logner than a position duration & checkpoint one last time
+    // to ensure all positions are closed.
+    let variable_rate = rng.gen_range(fixed!(0.01e18)..=fixed!(0.1e18));
     alice
-        .advance_time(variable_rate, state.position_duration())
+        .advance_time(variable_rate, state.position_duration() * fixed!(2e18))
         .await?;
-
+    alice
+        .checkpoint(alice.latest_checkpoint().await?, uint256!(0), None)
+        .await?;
     Ok(())
 }
 
@@ -151,58 +146,10 @@ fn get_max_long(state: &State, maybe_max_num_tries: Option<usize>) -> Result<Fix
     Ok(max_long)
 }
 
-/// Conservative and safe estimate of the maximum short.
-pub fn get_max_short(
-    state: &State,
-    maybe_max_num_tries: Option<usize>,
-) -> Result<FixedPoint<U256>> {
-    if state
-        .solvency_after_short(state.minimum_transaction_amount())
-        .is_err()
-    {
-        return Ok(fixed!(0));
-    }
-    // Get the max
-    let mut max_short = state.calculate_absolute_max_short(None, None)?;
-    // Verify that the max is solvent & if not, reduce until it is.
-    let max_num_tries = maybe_max_num_tries.unwrap_or(10);
-    let mut num_tries = 0;
-    let mut success = false;
-    while !success {
-        max_short = match panic::catch_unwind(|| {
-            state.calculate_open_short(max_short, state.vault_share_price())
-        }) {
-            Ok(short_result_no_panic) => match short_result_no_panic {
-                Ok(_) => {
-                    success = true;
-                    max_short
-                }
-                Err(_) => max_short / fixed!(10e18),
-            },
-            Err(_) => max_short / fixed!(10e18),
-        };
-        if max_short < state.minimum_transaction_amount() {
-            return Err(eyre!(
-                "max_short={} was less than minimum_transaction_amount={}.",
-                max_short,
-                state.minimum_transaction_amount()
-            ));
-        }
-        num_tries += 1;
-        if num_tries > max_num_tries {
-            return Err(eyre!(
-                "Failed to find a max short. Last attempted value was {}",
-                max_short,
-            ));
-        }
-    }
-    Ok(max_short)
-}
-
 #[cfg(test)]
 mod tests {
     use fixedpointmath::fixed;
-    use hyperdrive_test_utils::{chain::TestChain, constants::FUZZ_RUNS};
+    use hyperdrive_test_utils::{chain::TestChain, constants::SLOW_FUZZ_RUNS};
     use rand::{thread_rng, Rng, SeedableRng};
     use rand_chacha::ChaCha8Rng;
 
@@ -226,7 +173,7 @@ mod tests {
         let mut bob = chain.bob().await?;
         let mut celine = chain.celine().await?;
 
-        for _ in 0..*FUZZ_RUNS {
+        for _ in 0..*SLOW_FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
 
@@ -264,7 +211,7 @@ mod tests {
         let mut alice = chain.alice().await?;
         let mut bob = chain.bob().await?;
         let mut celine = chain.celine().await?;
-        for _ in 0..*FUZZ_RUNS {
+        for _ in 0..*SLOW_FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
             // Run the preamble.

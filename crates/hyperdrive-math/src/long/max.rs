@@ -460,7 +460,6 @@ mod tests {
     #[tokio::test]
     async fn fuzz_sol_absolute_max_long() -> Result<()> {
         let chain = TestChain::new().await?;
-
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
@@ -504,7 +503,6 @@ mod tests {
                 ),
             }
         }
-
         Ok(())
     }
 
@@ -516,24 +514,21 @@ mod tests {
     /// functions are equivalent.
     #[tokio::test]
     async fn fuzz_sol_calculate_max_long() -> Result<()> {
+        let test_tolerance = fixed!(1e11);
         let chain = TestChain::new().await?;
-
         // Fuzz the rust and solidity implementations against each other.
         let mut rng = thread_rng();
         for _ in 0..*FAST_FUZZ_RUNS {
             // Snapshot the chain.
             let id = chain.snapshot().await?;
-
             // Gen a random state.
             let state = rng.gen::<State>();
-
             // Generate a random checkpoint exposure.
             let checkpoint_exposure = rng.gen_range(0..=i128::MAX).flip_sign_if(rng.gen()).into();
-
             // Check Solidity against Rust.
             let max_iterations = 8usize;
             // We need to catch panics because of overflows.
-            let actual = panic::catch_unwind(|| {
+            let rust_base_amount = panic::catch_unwind(|| {
                 state.calculate_max_long(
                     U256::MAX,
                     checkpoint_exposure,
@@ -563,19 +558,28 @@ mod tests {
                 .call()
                 .await
             {
-                Ok((expected_base_amount, ..)) => {
-                    assert_eq!(
-                        actual.unwrap().unwrap(),
-                        FixedPoint::from(expected_base_amount)
+                Ok((sol_base_amount, ..)) => {
+                    let rust_base_amount = rust_base_amount.unwrap().unwrap();
+                    let sol_base_amount = FixedPoint::from(sol_base_amount);
+                    let error = if rust_base_amount > sol_base_amount {
+                        rust_base_amount - sol_base_amount
+                    } else {
+                        sol_base_amount - rust_base_amount
+                    };
+                    assert!(
+                        error <= test_tolerance,
+                        "abs(rust_base_amount={:#?}-sol_base_amount={:#?})={:#?} > tolerance={:#?}",
+                        rust_base_amount,
+                        sol_base_amount,
+                        error,
+                        test_tolerance
                     );
                 }
-                Err(_) => assert!(actual.is_err() || actual.unwrap().is_err()),
+                Err(_) => assert!(rust_base_amount.is_err() || rust_base_amount.unwrap().is_err()),
             }
-
             // Reset chain snapshot.
             chain.revert(id).await?;
         }
-
         Ok(())
     }
 

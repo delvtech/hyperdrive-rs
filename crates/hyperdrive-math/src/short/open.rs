@@ -61,6 +61,13 @@ impl State {
             ));
         }
 
+        // Verify final solvency. This ensures exposure is accounted for.
+        // In Hyperdrive Solidity this is done in `applyOpenShort`.
+        match self.solvency_after_short(bond_amount) {
+            Ok(_) => (),
+            Err(e) => return Err(e),
+        }
+
         // If the open share price hasn't been set, we use the current share
         // price, since this is what will be set as the checkpoint share price
         // in this transaction.
@@ -96,15 +103,6 @@ impl State {
         let curve_fee_shares = self
             .open_short_curve_fee(bond_amount)?
             .div_up(self.vault_share_price());
-        if share_reserves_delta < curve_fee_shares {
-            return Err(eyre!(format!(
-                "The transaction curve fee = {}, computed with coefficient = {},
-                is too high. It must be less than share reserves delta = {}",
-                curve_fee_shares,
-                self.curve_fee(),
-                share_reserves_delta
-            )));
-        }
 
         // If negative interest has accrued during the current checkpoint, we
         // set the close vault share price to equal the open vault share price.
@@ -498,8 +496,7 @@ mod tests {
 
     use super::*;
     use crate::test_utils::{
-        agent::HyperdriveMathAgent,
-        preamble::{get_max_short, initialize_pool_with_random_state},
+        agent::HyperdriveMathAgent, preamble::initialize_pool_with_random_state,
     };
 
     #[tokio::test]
@@ -1270,7 +1267,7 @@ mod tests {
         for _ in 0..*FAST_FUZZ_RUNS {
             let state = rng.gen::<State>();
             let open_vault_share_price = rng.gen_range(fixed!(1e5)..=state.vault_share_price());
-            match get_max_short(&state, None) {
+            match state.calculate_absolute_max_short(None, None) {
                 Ok(max_short_bonds) => {
                     let bond_amount =
                         rng.gen_range(state.minimum_transaction_amount()..=max_short_bonds);
