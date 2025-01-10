@@ -203,6 +203,7 @@ impl State {
             close_vault_share_price.div_up(open_vault_share_price) + self.flat_fee();
         let short_principal_derivative = self
             .calculate_short_principal_derivative(bond_amount)?
+            .change_type::<U256>()?
             .mul_up(self.vault_share_price());
         let curve_fee_derivative = self.curve_fee().mul_up((fixed!(1e18) - spot_price));
 
@@ -247,24 +248,20 @@ impl State {
     pub fn calculate_short_principal_derivative(
         &self,
         bond_amount: FixedPoint<U256>,
-    ) -> Result<FixedPoint<U256>> {
+    ) -> Result<FixedPoint<I256>> {
+        let bond_amount = bond_amount.change_type::<I256>()?;
+        let bond_reserves = self.bond_reserves().change_type::<I256>()?;
+        let vault_share_price = self.vault_share_price().change_type::<I256>()?;
+        let initial_vault_share_price = self.initial_vault_share_price().change_type::<I256>()?;
+        let time_stretch = self.time_stretch().change_type::<I256>()?;
+        let k_up = self.k_up()?.change_type::<I256>()?;
         // Avoid negative exponent by putting the term in the denominator.
-        let lhs = fixed!(1e18).div_up(
-            self.vault_share_price()
-                .mul_up((self.bond_reserves() + bond_amount).pow(self.time_stretch())?),
-        );
-        let rhs = (self
-            .initial_vault_share_price()
-            .div_up(self.vault_share_price())
-            .mul_up(
-                self.k_up()?
-                    - (self.bond_reserves() + bond_amount)
-                        .pow(fixed!(1e18) - self.time_stretch())?,
-            ))
-        .pow(
-            self.time_stretch()
-                .div_up(fixed!(1e18) - self.time_stretch()),
-        )?;
+        let lhs = fixed!(1e18)
+            .div_up(vault_share_price.mul_up((bond_reserves + bond_amount).pow(time_stretch)?));
+        let rhs = (initial_vault_share_price
+            .div_up(vault_share_price)
+            .mul_up(k_up - (bond_reserves + bond_amount).pow(fixed!(1e18) - time_stretch)?))
+        .pow(time_stretch.div_up(fixed!(1e18) - time_stretch))?;
         Ok(lhs.mul_up(rhs))
     }
 
@@ -289,7 +286,9 @@ impl State {
     ) -> Result<Self> {
         let share_amount = match maybe_share_amount {
             Some(share_amount) => share_amount,
-            None => self.calculate_pool_share_delta_after_open_short(bond_amount)?,
+            None => self
+                .calculate_pool_share_delta_after_open_short(bond_amount)?
+                .change_type::<U256>()?,
         };
         let mut state = self.clone();
         state.info.bond_reserves += bond_amount.into();
@@ -322,21 +321,14 @@ impl State {
     pub fn calculate_pool_share_delta_after_open_short(
         &self,
         bond_amount: FixedPoint<U256>,
-    ) -> Result<FixedPoint<U256>> {
+    ) -> Result<FixedPoint<I256>> {
         // calculate_short_principal returns z_0 - P_lp(∆y)
         let short_principal = self.calculate_short_principal(bond_amount)?;
         let total_fee_shares = self.calculate_open_short_total_fee_shares(bond_amount)?;
         if short_principal.mul_up(self.vault_share_price()) > bond_amount {
             return Err(eyre!("InsufficientLiquidity: Negative Interest"));
         }
-        if short_principal < total_fee_shares {
-            return Err(eyre!(
-                "short_principal={:#?} is too low to account for fees={:#?}",
-                short_principal,
-                total_fee_shares
-            ));
-        }
-        Ok(short_principal - total_fee_shares)
+        Ok(short_principal.change_type::<I256>()? - total_fee_shares.change_type::<I256>()?)
     }
 
     /// Calculates the spot price after opening a short.
@@ -348,7 +340,9 @@ impl State {
     ) -> Result<FixedPoint<U256>> {
         let share_amount = match maybe_base_amount {
             Some(base_amount) => base_amount / self.vault_share_price(),
-            None => self.calculate_pool_share_delta_after_open_short(bond_amount)?,
+            None => self
+                .calculate_pool_share_delta_after_open_short(bond_amount)?
+                .change_type::<U256>()?,
         };
         let updated_state =
             self.calculate_pool_state_after_open_short(bond_amount, Some(share_amount))?;
@@ -652,7 +646,8 @@ mod tests {
             {
                 Ok(sol_pool_delta) => {
                     let sol_pool_delta_with_fees = FixedPoint::from(sol_pool_delta) - fees;
-                    let rust_pool_delta_unwrapped = rust_pool_delta.unwrap();
+                    let rust_pool_delta_unwrapped =
+                        rust_pool_delta.unwrap().change_type::<U256>()?;
                     let result_equal = sol_pool_delta_with_fees
                         <= rust_pool_delta_unwrapped + test_tolerance
                         && sol_pool_delta_with_fees >= rust_pool_delta_unwrapped - test_tolerance;
@@ -737,8 +732,9 @@ mod tests {
 
             // Compute the empirical and analytical derivatives.
             let empirical_derivative = (f_x_plus_delta - f_x) / empirical_derivative_epsilon;
-            let short_principal_derivative =
-                state.calculate_short_principal_derivative(bond_amount)?;
+            let short_principal_derivative = state
+                .calculate_short_principal_derivative(bond_amount)?
+                .change_type::<U256>()?;
 
             // Ensure that the empirical and analytical derivatives match.
             let derivative_diff = if short_principal_derivative >= empirical_derivative {
@@ -941,7 +937,9 @@ mod tests {
 
             // Using a pre-calculated base amount
             let base_amount = match state.calculate_pool_share_delta_after_open_short(bond_amount) {
-                Ok(share_amount) => Some(share_amount * state.vault_share_price()),
+                Ok(share_amount) => {
+                    Some(share_amount.change_type::<U256>()? * state.vault_share_price())
+                }
                 Err(_) => continue,
             };
             let price_with_base_amount =
