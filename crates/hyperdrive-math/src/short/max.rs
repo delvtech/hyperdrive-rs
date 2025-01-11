@@ -91,10 +91,10 @@ impl State {
     /// deposit amount.
     ///
     /// If the result is Ok then the answer is guaranteed to be within
-    /// `maybe_base_tolerance` of the target base amount (default is 1e9).
+    /// `maybe_base_tolerance` of the target base amount (default is 1e10).
     ///
     /// Increasing `maybe_max_iterations` will increase the accuracy of the
-    /// result (default is 500).
+    /// result (default is 1_000).
     pub fn calculate_short_bonds_given_deposit(
         &self,
         target_base_amount: FixedPoint<U256>,
@@ -103,8 +103,8 @@ impl State {
         maybe_base_tolerance: Option<FixedPoint<U256>>,
         maybe_max_iterations: Option<usize>,
     ) -> Result<FixedPoint<U256>> {
-        let base_tolerance = maybe_base_tolerance.unwrap_or(fixed!(1e9));
-        let max_iterations = maybe_max_iterations.unwrap_or(500);
+        let base_tolerance = maybe_base_tolerance.unwrap_or(fixed!(1e10));
+        let max_iterations = maybe_max_iterations.unwrap_or(1_000);
 
         // The max bond amount might be below the pool's minimum.
         // If so, no short can be opened.
@@ -1109,8 +1109,8 @@ mod tests {
     #[tokio::test]
     async fn fuzz_open_short_inversion() -> Result<()> {
         let abs_max_bonds_tolerance = fixed_u256!(1e9);
-        let budget_base_tolerance = fixed_u256!(1e9);
-        let max_iterations = 500;
+        let budget_base_tolerance = fixed_u256!(1e10);
+        let max_iterations = 1_000;
         let mut rng = thread_rng();
 
         // Run the fuzz tests.
