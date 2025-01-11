@@ -1,0 +1,90 @@
+\documentclass{article}
+
+\usepackage{graphicx} % inserting images
+\usepackage{hyperref} % hyperlinks
+\hypersetup{ % hyperlink config
+    colorlinks=true,
+    linkcolor=blue, % equation numbers
+    filecolor=magenta,      
+    urlcolor=blue, % href links
+    }
+\usepackage{amsmath} % math formatting
+\usepackage{amssymb} % math symbols
+
+\usepackage{tikz} % render plots
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+\usepackage[many]{tcolorbox} % callout box
+\usepackage{csquotes} % quotes
+%\usepackage{emoji} % emoji
+
+\pgfplotsset{compat=1.17} % render plots
+
+\newcommand{\argmax}{\operatornamewithlimits{argmax}}
+\newcommand{\argmin}{\operatornamewithlimits{argmin}}
+
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+\newcommand{\callouttext}[2]{\emoji{#1} \textbf{#2}\smallskip}
+\newtcolorbox{callout}{
+    colback = sub, 
+    colframe = main, 
+    boxrule = 0pt, 
+    leftrule = 6pt % left rule weight
+}
+\newenvironment{infobox}{\wrapfigure{r}{5cm}}{\endwrapfigure}
+\definecolor{main}{HTML}{5989cf}    % setting main color to be used
+\definecolor{sub}{HTML}{cde4ff}     % setting sub color to be used
+\tcbset{
+    sharp corners,
+    colback = white,
+    before skip = 0.2cm,    % add extra space before the box
+    after skip = 0.5cm      % add extra space after the box
+}
+
+\setlength{\parindent}{0pt} % don't indent on new paragraphs
+
+%% Heading
+\title{The Hyperdrive-Yieldspace AMM}
+\author{Dylan Paiton}
+
+%% Document
+\begin{document}
+
+\maketitle
+
+
+\begin{abstract}
+This document gives a complete description of the Hyperdrive + Yieldspace AMM.
+In contrast to the existing \href{https://github.com/delvtech/hyperdrive/blob/main/docs/Hyperdrive_Whitepaper.pdf}{Hyperdrive whitepaper}, which provides an abstracted view of how Hyperdrive can be built on top of any AMM curve, this document provides details of the specific implementation deployed by the Element DAO on Ethereum mainnet and several L2 chains.
+\end{abstract}
+
+\section{Introduction}
+
+\subsection{The Hyperdrive-Yieldspace AMM}
+
+For a deployed market pool, the Hyperdrive-Yieldspace AMM uses a modified \href{https://yield.is/YieldSpace.pdf}{constant power sum formula} to derive a price relationship between two assets.
+In this case, our assets are vault shares, $z$, and bonds, $y$.
+When base, $x$, is supplied to the pool, it is converted into shares, $z$, by depositing the base into an underlying yield bearing vault.
+The relationship between base and shares is determined via the vault share price, $c = \tfrac{x}{z}$.
+The Hyperdrive AMM also accounts for an additional ``zeta'' adjustment to produce the effective shares, $z_e = z - \zeta$, as described in the \href{https://github.com/delvtech/hyperdrive/blob/main/docs/Hyperdrive_Whitepaper.pdf}{whitepaper}.
+Finally, the AMM then mints bonds, $y$, such that $k$ is kept constant.
+In accordance with the YieldSpace AMM dynamics, effective shares and bonds are related via an invariance formula:
+
+\begin{equation}\label{keq}
+k = \tfrac{c}{\mu} (\mu z_e)^{1 - t_{s}} + y^{1 - t_{s}}
+\end{equation}
+
+where $t_{s}$ is a time stretch constant that influences price slippage, and $\mu$ is the vault share price when the Hyperdrive pool was created.
+
+\section{Shorts}
+\input{short/short.tex}
+
+\section{Longs}
+\input{long/long.tex}
+
+\section{Liquidity}
+TODO
+
+\end{document}
