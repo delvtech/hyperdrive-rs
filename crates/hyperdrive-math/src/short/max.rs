@@ -85,6 +85,12 @@ impl State {
 
     /// Use Newton's method to find the amount of bonds shorted for a given base
     /// deposit amount.
+    ///
+    /// If the result is Ok then the answer is guaranteed to be within
+    /// `maybe_base_tolerance` of the target base amount (default is 1e9).
+    ///
+    /// Increasing `maybe_max_iterations` will increase the accuracy of the
+    /// result (default is 500).
     pub fn calculate_short_bonds_given_deposit(
         &self,
         target_base_amount: FixedPoint<U256>,
@@ -1122,6 +1128,105 @@ mod tests {
             assert!(state
                 .solvency_after_short(absolute_max_short + bonds_tolerance)
                 .is_err());
+        }
+        Ok(())
+    }
+
+    /// This test ensures that the short functions for converting between a
+    /// deposit in shares and bonds to be shorted are invertible.
+    #[ignore] // TODO: Unignore once this passes.
+    #[tokio::test]
+    async fn fuzz_open_short_inversion() -> Result<()> {
+        let abs_max_bonds_tolerance = fixed_u256!(1e9);
+        let budget_base_tolerance = fixed_u256!(1e9);
+        let max_iterations = 500;
+        // Run the fuzz tests
+        let mut rng = thread_rng();
+        for _ in 0..*FUZZ_RUNS {
+            let state = rng.gen::<State>();
+            // Make sure a short is possible.
+            if state
+                .effective_share_reserves()?
+                .min(state.share_reserves())
+                < state.calculate_min_share_reserves_given_exposure()?
+            {
+                continue;
+            }
+            match state.solvency_after_short(state.minimum_transaction_amount()) {
+                Ok(_) => (),
+                Err(_) => continue,
+            }
+
+            // Check invertibility near the max.
+            // Get the max short.
+            let absolute_max_short_bonds = state.calculate_absolute_max_short(
+                Some(abs_max_bonds_tolerance),
+                Some(max_iterations),
+            )?;
+            assert!(state.solvency_after_short(absolute_max_short_bonds).is_ok());
+            // Get the deposit for this short.
+            let max_short_deposit_base =
+                state.calculate_open_short(absolute_max_short_bonds, state.vault_share_price())?;
+            // Verify the bonds shorted when the deposit is a constraint.
+            let user_max_short_bonds = state.calculate_short_bonds_given_deposit(
+                max_short_deposit_base,
+                state.vault_share_price(),
+                absolute_max_short_bonds,
+                Some(budget_base_tolerance),
+                Some(max_iterations),
+            )?;
+            // Check that the outputs match up.
+            assert!(state.solvency_after_short(user_max_short_bonds).is_ok());
+            if user_max_short_bonds > absolute_max_short_bonds {
+                assert!(user_max_short_bonds - absolute_max_short_bonds <= abs_max_bonds_tolerance);
+            } else {
+                assert!(absolute_max_short_bonds - user_max_short_bonds <= abs_max_bonds_tolerance);
+            }
+
+            // Check invertibility near the min.
+            // Get the min short.
+            let absolute_min_short_bonds = state.minimum_transaction_amount();
+            assert!(state.solvency_after_short(absolute_min_short_bonds).is_ok());
+            // Get the deposit for this short.
+            let min_short_deposit_base =
+                state.calculate_open_short(absolute_min_short_bonds, state.vault_share_price())?;
+            // Verify the bonds shorted when the deposit is a constraint.
+            let user_min_short_bonds = state.calculate_short_bonds_given_deposit(
+                min_short_deposit_base,
+                state.vault_share_price(),
+                absolute_min_short_bonds,
+                Some(budget_base_tolerance),
+                Some(max_iterations),
+            )?;
+            // Check that the outputs match up.
+            assert!(state.solvency_after_short(user_min_short_bonds).is_ok());
+            if user_min_short_bonds > absolute_min_short_bonds {
+                assert!(user_min_short_bonds - absolute_min_short_bonds <= abs_max_bonds_tolerance);
+            } else {
+                assert!(absolute_min_short_bonds - user_min_short_bonds <= abs_max_bonds_tolerance);
+            }
+
+            // Check invertibility at a random point.
+            let random_short_bonds =
+                rng.gen_range(absolute_min_short_bonds..=absolute_max_short_bonds);
+            // Get the deposit for this short.
+            let random_short_deposit_base =
+                state.calculate_open_short(random_short_bonds, state.vault_share_price())?;
+            // Verify the bonds shorted when the deposit is a constraint.
+            let user_random_short_bonds = state.calculate_short_bonds_given_deposit(
+                random_short_deposit_base,
+                state.vault_share_price(),
+                random_short_bonds,
+                Some(budget_base_tolerance),
+                Some(max_iterations),
+            )?;
+            // Check that the outputs match up.
+            assert!(state.solvency_after_short(user_random_short_bonds).is_ok());
+            if user_random_short_bonds > random_short_bonds {
+                assert!(user_random_short_bonds - random_short_bonds <= abs_max_bonds_tolerance);
+            } else {
+                assert!(random_short_bonds - user_random_short_bonds <= abs_max_bonds_tolerance);
+            }
         }
         Ok(())
     }
