@@ -1251,6 +1251,10 @@ mod tests {
             let global_max_base_required = state
                 .calculate_open_short(global_max_short_bonds, open_vault_share_price.into())?;
             if global_max_base_required - fixed!(1e18) <= state.minimum_transaction_amount() {
+                chain.revert(id).await?;
+                alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
+                celine.reset(Default::default()).await?;
                 continue; // Avoid case where max is within 1e18 of min.
             }
             let budget = rng.gen_range(
