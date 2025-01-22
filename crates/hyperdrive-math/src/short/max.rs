@@ -1233,6 +1233,7 @@ mod tests {
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
                 celine.reset(Default::default()).await?;
                 continue;
             }
@@ -1289,6 +1290,7 @@ mod tests {
             num_tests += 1;
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
             celine.reset(Default::default()).await?;
         }
         // Assert that we've run at least 50% of the tests.
@@ -1332,6 +1334,7 @@ mod tests {
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
+                bob.reset(Default::default()).await?;
                 celine.reset(Default::default()).await?;
                 continue;
             }
