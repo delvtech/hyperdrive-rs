@@ -269,7 +269,9 @@ mod tests {
             let state = alice.get_state().await?;
             // Check that a short is possible.
             if state.effective_share_reserves()?
-                < state.calculate_min_share_reserves_given_exposure()?
+                < state
+                    .calculate_min_share_reserves_given_exposure()?
+                    .change_type::<U256>()?
             {
                 chain.revert(id).await?;
                 alice.reset(Default::default()).await?;
