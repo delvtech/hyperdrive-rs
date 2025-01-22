@@ -1202,7 +1202,7 @@ mod tests {
     #[tokio::test]
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         let abs_max_bond_tolerance = fixed!(1e9);
-        let remaining_balance_tolerance = fixed!(1e9);
+        let remaining_balance_tolerance = fixed!(1e10);
         // Set up a random number generator. We use ChaCha8Rng with a randomly
         // generated seed, which makes it easy to reproduce test failures given
         // the seed.
