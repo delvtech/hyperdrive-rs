@@ -206,6 +206,7 @@ mod tests {
 
     #[tokio::test]
     async fn fuzz_calculate_bonds_given_effective_shares_and_rate() -> Result<()> {
+        let test_tolerance = fixed!(1e8);
         let mut rng = thread_rng();
         for _ in 0..*FUZZ_RUNS {
             // Gen the random state.
@@ -218,8 +219,13 @@ mod tests {
 
             // Get the min rate.
             // We need to catch panics because of overflows.
-            let max_long = match state.calculate_max_long(U256::MAX, checkpoint_exposure, None) {
-                Ok(max_long) => max_long,
+            let max_long = match panic::catch_unwind(|| {
+                state.calculate_max_long(U256::MAX, checkpoint_exposure, None)
+            }) {
+                Ok(max_long) => match max_long {
+                    Ok(max_long) => max_long,
+                    Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
+                },
                 Err(_) => continue, // Max threw an Err. Don't finish this fuzz iteration.
             };
             let min_rate = state.calculate_spot_rate_after_long(max_long, None)?;
@@ -227,13 +233,7 @@ mod tests {
             // Get the max rate.
             // We need to catch panics because of overflows.
             let max_short = match panic::catch_unwind(|| {
-                state.calculate_max_short(
-                    U256::MAX,
-                    open_vault_share_price,
-                    checkpoint_exposure,
-                    None,
-                    None,
-                )
+                state.calculate_max_short(U256::MAX, open_vault_share_price, None, None)
             }) {
                 Ok(max_short) => match max_short {
                     Ok(max_short) => max_short,
@@ -259,14 +259,13 @@ mod tests {
             let mut new_state: State = state.clone();
             new_state.info.bond_reserves = bond_reserves.into();
             let new_spot_rate = new_state.calculate_spot_rate()?;
-            let tolerance = fixed!(1e8);
             assert!(
-                target_rate.abs_diff(new_spot_rate) < tolerance,
+                target_rate.abs_diff(new_spot_rate) < test_tolerance,
                 r#"
       target rate: {target_rate}
     new spot rate: {new_spot_rate}
              diff: {diff}
-        tolerance: {tolerance}
+        tolerance: {test_tolerance}
 "#,
                 diff = target_rate.abs_diff(new_spot_rate),
             );
