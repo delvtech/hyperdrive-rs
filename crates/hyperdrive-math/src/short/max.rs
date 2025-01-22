@@ -1351,6 +1351,7 @@ mod tests {
             num_tests += 1;
             chain.revert(id).await?;
             alice.reset(Default::default()).await?;
+            bob.reset(Default::default()).await?;
             celine.reset(Default::default()).await?;
         }
         // Assert that we've run at least 50% of the tests.
@@ -1379,8 +1380,6 @@ mod tests {
 
         // Run the fuzz tests.
         for iter in 0..*SLOW_FUZZ_RUNS {
-            println!("");
-            println!("iter {:#?}", iter);
             // Snapshot the chain.
             let id = chain.snapshot().await?;
             // Run the preamble.
@@ -1406,16 +1405,6 @@ mod tests {
             celine
                 .fund((max_short_deposit_shares + fixed!(100e18)).into())
                 .await?;
-            println!("");
-            println!(
-                "pre_short_exposure_sh  ={:#?}",
-                state.long_exposure().div_up(state.vault_share_price())
-            );
-            println!(
-                "bond_amount_shares     ={:#?}",
-                max_short.div_up(state.vault_share_price())
-            );
-            println!("GUESS");
             let solvency_after_short_guess = state.solvency_after_short(max_short)?;
             celine.open_short(max_short, None, None).await?;
             alice
@@ -1424,16 +1413,6 @@ mod tests {
 
             // Check solvency values.
             state = alice.get_state().await?;
-            println!("REAL");
-            println!("share_reserves         ={:#?}", state.share_reserves());
-            println!(
-                "exposure_shares        ={:#?}",
-                state.long_exposure().div_up(state.vault_share_price())
-            );
-            println!(
-                "minimum_share_reserves ={:#?}",
-                state.minimum_share_reserves()
-            );
             let solvency_after_short_rs = state.calculate_solvency()?;
             // TODO: add solvency function to mock hyperdrive so we can call it.
             let solvency_after_short_sol = (state.share_reserves()
