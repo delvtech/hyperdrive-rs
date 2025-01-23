@@ -1,0 +1,535 @@
+\subsection{Max long}
+
+\subsubsection{The Hyperdrive-Yieldspace AMM}
+
+For a deployed market pool, the Hyperdrive-Yieldspace AMM uses a modified \href{https://yield.is/YieldSpace.pdf}{constant power sum formula} to derive a price relationship between two assets.
+In this case, our assets are vault shares, $z$, and bonds, $y$.
+When base, $x$, is supplied to the market, it is converted into shares, $z$, by depositing the base into an underlying yield bearing vault.
+The Hyperdrive AMM then supplies bonds, $y$, such that $k$ is kept constant.
+The two are related via an invariance formula (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/yield_space.rs#L285}{yieldspace.rs, l285}):
+
+\begin{equation}\label{keq}
+\begin{aligned}
+k &= \tfrac{\mu}{c}^{-t_{s}} x^{1 - t_{s}} + y^{1 - t_{s}} \\
+&= \tfrac{c}{\mu} (\mu z)^{1 - t_{s}} + y^{1 - t_{s}}
+\end{aligned}
+\end{equation}
+
+where $t_{s}$ is the time stretch constant, $c$ is the current vault share price, and $\mu$ is the share price of the vault when the Hyperdrive pool was created (aka \code{initial_share_price}).
+
+The relationship between shares and bonds is also described using the spot price.
+Our generic equation for spot price (\href{https://github.com/delvtech/hyperdrive/blob/34b562e8952cf9cf235e551484790bbc7ff65884/crates/hyperdrive-math/src/long/max.rs#L154}{max.rs, l154} and \href{https://github.com/delvtech/hyperdrive/blob/570263e2b85c411b4097132bfe7ad2a085e3180b/crates/hyperdrive-math/src/yield_space.rs#L36-L37}{yieldspace.rs, l36}) is given by:
+
+\begin{equation}\label{simple-price}
+p = \left( \tfrac{\mu z}{y} \right)^{t_s}
+\end{equation}
+
+\begin{callout}
+\callouttext{bulb}{NOTE}
+
+We can use the procedure outlined in Appendix C of the \href{https://yield.is/YieldSpace.pdf}{YieldSpace paper} to relate the price and invariant formula.
+Recall from the paper:
+
+\begin{displayquote}
+In any invariant-based liquidity provision formula, the price at any point along the curve is equal to the negation of the derivative at that point
+
+$p_{x} = -\tfrac{dy}{dx}$
+\end{displayquote}
+
+However, in Hyperdrive we consider a price that is $<=1$, while the YieldSpace paper assumes it is $>=1$, which we can express as an inversion:
+$p_{\text{hyperdrive}} = \tfrac{1}{p_{\text{yieldspace}}}$.
+Given this, and that base is converted to shares via $x = cz$, we can derive the invariant from the price as such:
+
+\begin{displaymath}
+\begin{aligned}
+-\tfrac{dy}{dx} &= p^{-1} \\
+-\tfrac{dy}{dx} &= \left( \tfrac{\mu z}{y} \right)^{-t_s} \\
+-\tfrac{dy}{dx} &= \left( \mu \tfrac{x}{c} \right)^{-t_s} y^{t_{s}} \\
+-y^{-t_{s}} \tfrac{dy}{dx} &= \left( \mu \tfrac{x}{c} \right)^{-t_s} \\
+-\int{y^{-t_{s}}}{dy} &= \int{\left( \mu \tfrac{x}{c} \right)^{-t_s}}{dx} \\
+-\tfrac{1}{1-t_{s}} y^{1 - t_{s}} + \alpha_{1} &= \mu^{-t_{s}} \tfrac{1}{c^{-t_{s}}} \left( \tfrac{1}{1-t_{s}} x^{1-t_{s}} + \alpha_{2} \right) \\
+-y^{1 - t_{s}} + \alpha_{1}^{\prime} &= \left( \tfrac{\mu}{c} \right)^{-t_{s}} x^{1-t_{s}} + \alpha_{2}^{\prime\prime} \\
+\alpha_{1}^{\prime} - \alpha_{2}^{\prime\prime} &= \left( \tfrac{\mu}{c} \right)^{-t_{s}} x^{1 - t_{s}} + y^{1 - t_{s}} \\
+k &= \tfrac{c}{\mu} \left( \tfrac{\mu}{c} \right)^{1 - t_{s}} x^{1 - t_{s}} + y^{1 - t_{s}} \\
+k &= \tfrac{c}{\mu} \left( \tfrac{\mu}{c} x \right)^{1 - t_{s}} + y^{1 - t_{s}} \\
+k &= \tfrac{c}{\mu} (\mu z)^{1 - t_{s}} + y^{1 - t_{s}} \\
+\end{aligned}
+\end{displaymath}
+
+\end{callout}
+
+Hyperdrive computes fees that are removed from the system whenever a trade is made.
+The fee constants are denoted with $\phi$, where $\phi_{f}$ refers to the flat fee, $\phi_{c}$ refers to the curve fee, and $\phi_{g}$ is the governance fee.
+The open-long governance and curve fees can be written as a function of the base transferred, $\Delta x$, and initial spot price (\href{https://github.com/delvtech/hyperdrive/blob/2a8c81fa401f31031be8ad87117a0a7a85a866ff/crates/hyperdrive-math/src/long/fees.rs}{fees.rs}):
+
+\begin{align}
+\label{curve-fee} \Phi_{c}(\Delta x) &= \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \Delta x \\
+\label{gov-fee} \Phi_{g}(\Delta x) &= \phi_{g} p_{0} \Phi_{c}(\Delta x) = \phi_{g} \phi_{c} \left( 1 - p_{0} \right) \Delta x
+\end{align}
+
+where $p_{0}$ is the spot price before the trade, i.e. the current spot price.
+We do not include a function for the flat fee because it is only applied when closing a long.
+
+\begin{callout}
+\callouttext{bulb}{NOTE}
+
+We will use capital letters to denote functions and lower-case letters to denote scalars.
+\end{callout}
+
+The pool's maximum spot price such that the trade doesn't result in negative interest is given by (\href{https://github.com/delvtech/hyperdrive/blob/570263e2b85c411b4097132bfe7ad2a085e3180b/crates/hyperdrive-math/src/long/max.rs#L147}{max.rs, line 147} and derived in \href{https://github.com/delvtech/hyperdrive/issues/655}{issue \#655}):
+
+\begin{equation}\label{pmax}
+p_{\text{max}} = \tfrac{(1 - \phi_{f})}{1 + \phi_{c} \left( \tfrac{1}{p_{0}}-1 \right)(1-\phi_{f})}
+\end{equation}
+
+\subsubsection{Deriving the target base and bond amounts}
+
+Our goal is to determine the maximum long that can be opened for a given market, which will result in the max spot price.
+The two price equations can be used to derive the target reserve levels for a pool with the max spot price.
+These are given as target shares, $z_{t}$, and target bonds, $y_{t}$.
+First we will solve for the target bond reserves in terms of the target share reserves by setting equations \eqref{simple-price} and \eqref{pmax} to be equal \href{https://github.com/delvtech/hyperdrive/blob/570263e2b85c411b4097132bfe7ad2a085e3180b/crates/hyperdrive-math/src/long/max.rs#L162}{max.rs, l162}:
+
+\begin{equation}
+\begin{aligned}
+p &= p_{\text{max}} \\
+\left( \tfrac{\mu z_{t}}{y_{t}} \right)^{T_s} &= \tfrac{(1 - \phi_{f})}{1 + \phi_{c} \left( \tfrac{1}{p_{0}}-1 \right)(1-\phi_{f})} \\
+\tfrac{\mu z_{t}}{y_{t}} &= \left( \tfrac{\left( 1 - \phi_{f} \right)}{1 + \phi_{c} \left( \tfrac{1}{p_{0}}-1 \right) \left( 1-\phi_{f} \right)} \right)^{\tfrac{1}{t_{s}}} \\
+y_{t} &= \tfrac{\mu z_{t}}{\left( \tfrac{(1 - \phi_{f})}{1 + \phi_{c} \left( \tfrac{1}{p_{0}}-1 \right)(1-\phi_{f})} \right)^{\tfrac{1}{t_{s}}}} \\
+y_{t} &= \mu z_{t} \left( \tfrac{1 + \phi_{c} (\tfrac{1}{p_{0}} - 1) (1 - \phi_{f})}{1 - \phi_{f}} \right)^{\tfrac{1}{t_{s}}}
+\end{aligned}
+\end{equation}
+
+\begin{callout}
+\callouttext{bulb}{NOTE}
+That last step required some algebra acrobatics:
+\begin{displaymath}
+\tfrac{1}{\left( \cfrac{x}{y} \right)^{c}} = \tfrac{1}{\cfrac{x^c}{y^c}} = \tfrac{1}{\cfrac{y^{-c}}{x^{-c}}} = \tfrac{1}{\left( \cfrac{y}{x} \right)^{-c}} = \left( \tfrac{y}{x} \right)^{c}
+\end{displaymath}
+\end{callout}
+
+Using the invariant equation we can solve for $z_{t}$ isolated, without $y_{t}$ \href{https://github.com/delvtech/hyperdrive/blob/570263e2b85c411b4097132bfe7ad2a085e3180b/crates/hyperdrive-math/src/long/max.rs#L175}{max.rs, l175}:
+
+\begin{equation}
+\begin{aligned}
+k &= \tfrac{c}{\mu} (\mu z_{t})^{1 - t_{s}} + y_{t}^{1 - t_{s}} \\
+k &= \tfrac{c}{\mu} (\mu z_{t})^{1-t_{s}} + \left( \mu z_{t} \left( \tfrac{1 + \phi_{c} (\tfrac{1}{p_{0}}-1) (1 - \phi_{f})}{1 - \phi_{f}} \right)^{\tfrac{1}{t_{s}}} \right)^{1-t_{s}} \\
+k &= \left( \mu z_{t} \right)^{1 - t_{s}} \left( \tfrac{c}{\mu} + \left( \tfrac{1 + \phi_{c}\left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1-t_{s}}{t_{s}}} \right) \\
+\left( \mu z_{t} \right)^{1-t_{s}} &= k \bigg/ \left( \tfrac{c}{\mu} + \left( \tfrac{1 + \phi_{c}\left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1-t_{s}}{t_{s}}} \right) \\
+\mu z_{t} &= \left( k \bigg/ \left( \tfrac{c}{\mu} + \left( \tfrac{1 + \phi_{c}\left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1-t_{s}}{t_{s}}} \right) \right)^{\tfrac{1}{1-t_{s}}} \\
+z_{t} &= \tfrac{1}{\mu} \left( k \bigg/ \left( \tfrac{c}{\mu} + \left( \tfrac{1 + \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1-t_{s}}{t_{s}}} \right) \right)^{\tfrac{1}{1 - t_{s}}}
+\end{aligned}
+\end{equation}
+
+Next, we plug this result into our earlier equation to get $y_{t}$ isolated (\href{https://github.com/delvtech/hyperdrive/blob/570263e2b85c411b4097132bfe7ad2a085e3180b/crates/hyperdrive-math/src/long/max.rs#L202}{max.rs, l202}):
+
+\begin{equation}\label{yt-price}
+\begin{aligned}
+y_{t} &= \mu z_{t} \left( \tfrac{1 + \phi_{c} (\tfrac{1}{p_{0}} - 1) (1 - \phi_{f})}{1 - \phi_{f}} \right)^{\tfrac{1}{t_{s}}} \\
+&= \left( k \bigg/ \left( \tfrac{c}{\mu} + \left( \tfrac{1 + \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1-t_{s}}{t_{s}}} \right) \right)^{\tfrac{1}{1 - t_{s}}} \left( \tfrac{1 + \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \left( 1 - \phi_{f} \right)}{1 - \phi_{f}} \right)^{\tfrac{1}{t_{s}}} \\
+\end{aligned}
+\end{equation}
+
+These target reserve levels then correspond to opening a long for a delta base or bonds (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L207}{max.rs, l213} and \href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L213}{max.rs, l219}, respectively):
+
+\begin{align}
+\Delta x &= c (z_{t} - z) \label{dx} \\
+\Delta y &= (y - y_{t}) - \Phi_{c}(\Delta x) \label{dy}
+\end{align}
+
+If the pool is solvent after opening this long, then we're done.
+Otherwise, we will use a numerical approach to estimate the actual trade amount.
+
+\subsubsection{Iterative refinement of the maximum long amount}
+
+Opening a long causes a change in both base and bonds and is impacted by fees.
+Without a closed-form solution, we will need a numerical approach to estimate the actual trade amount for most pool conditions.
+Specifically, we will use Newton's method with the pool's solvency as our objective function.
+Solvency captures the protocol's ability to pay its debts by measuring its assets versus its liabilities and minimum reserves.
+Assets are the share reserves, $z$.
+Liabilities are the aggregate long exposure.
+Minimum share reserves are set in a pool's configuration, as $z_{\text{min}}$.
+Liabilities and reserves are converted to common units (base or shares) via the share price, $c$.
+
+\begin{equation}\label{solvency}
+\begin{aligned}
+S(z) &= \text{assets} - \text{liabilities} - \text{minimum\_reserves} \\
+&= z - \tfrac{l}{c} - z_{\text{min}} \\
+&= \tfrac{1}{c} \left( x - l - x_{\text{min}} \right)
+\end{aligned}
+\end{equation}
+
+For a single long, the change in exposure is given by the amount of bonds returned, $\Delta l = Y(\Delta x)$ (aka the amount of longs opened, or long amount).
+The amount of bonds returned can be broken down into a component without fees and a fee component (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/open.rs#L11}{open.rs, l11}):
+
+\begin{equation}\label{long-amount}
+Y(\Delta x) = Y_{*}(\Delta x) - \Phi_{c}(\Delta x)
+\end{equation}
+
+where, for some initial bond reserves, $y_{0}$, and base reserves, $x_{0}$ (or alternatively initial \href{https://github.com/delvtech/hyperdrive/blob/34b562e8952cf9cf235e551484790bbc7ff65884/contracts/src/libraries/HyperdriveMath.sol#L147}{effective share reserves}, $z_{0}$),
+
+\begin{equation}
+\begin{aligned}
+Y_{*}(\Delta x) &= y_{0} - \left( k - \tfrac{c}{\mu} \left( \mu \left( z_{0} + \tfrac{\Delta x}{c} \right) \right)^{1 - t_{s}} \right)^{\tfrac{1}{1 - t_{s}}} \\
+&= y_{0} - \left( k - \tfrac{c}{\mu} \left( \tfrac{\mu}{c} \left( x_{0} + \Delta x \right) \right)^{1 - t_{s}} \right)^{\tfrac{1}{1 - t_{s}}} \\
+&= y_{0} - \left( k - \left( \tfrac{\mu}{c} \right)^{- t_{s}} \left( x_{0} + \Delta x \right)^{1 - t_{s}} \right)^{\tfrac{1}{1 - t_{s}}} \\
+\end{aligned}
+\end{equation}
+
+When a long is opened, the share reserves is increased by (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L315}{max.rs, l315}):
+
+\begin{equation}\label{dz}
+\Delta z = \tfrac{\Delta x - \Phi_{g}(\Delta x)}{c}
+\end{equation}
+
+Using these components, we can derive our objective function as the solvency after a change in shares (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L329}{max.rs, l329}):
+
+\begin{equation}
+\begin{aligned}
+S(\Delta z) &= \left( z_{0} + \Delta z \right) - \left( \tfrac{l_{0} + l_{\text{chk}} + \Delta l}{c} \right) - z_{\text{min}} \\
+\therefore \\
+S(\Delta x) &= \tfrac{1}{c} \left( x_{0} + \Delta x - \Phi_{g}\left( \Delta x \right) - l_{0} - l_{\text{chk}} - Y(\Delta x) - x_{\text{min}} \right) \\
+\end{aligned}
+\end{equation}
+
+where $l_{\text{chk}}$ is the checkpoint long exposure and is assumed to be $>= 0$.
+We add the checkpoint exposure to account for negative exposure from non-netted shorts in the checkpoint.
+We will keep everything in units of base, but see \href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L336}{max.rs, l336} for the implementation using units of shares.
+
+In summary, our optimization objective is
+
+\begin{equation}
+\begin{split}
+\argmax\limits_{\Delta x} -S(\Delta x) \\
+\text{s.t.} S(\Delta x) > 0
+\end{split}
+\end{equation}
+
+
+To perform Newton's method we also need the gradient of the objective, starting with the long amount:
+
+\begin{equation}\label{long-amount-no-fees}
+Y^{\prime}(\Delta x) = Y_{*}^{\prime}(\Delta x) - \Phi_{c}^{\prime}(\Delta x)
+\end{equation}
+
+where,
+
+\begin{equation}
+\begin{aligned}
+Y_{*}^{\prime}(\Delta x) &= \left( \tfrac{\mu}{c} \right)^{-t_{s}} \left( x_{0} + \Delta x \right)^{-t_{s}} \left( k - \left( \tfrac{\mu}{c} \right)^{-t_{s}} \left( x_{0} + \Delta x \right)^{1-t_{s}}  \right)^{\tfrac{t_{s}}{1-t_{s}}} \\
+&= \left( \mu (z_{0} + \tfrac{\Delta x}{c}) \right)^{-t_{s}} \left( k - \tfrac{c}{\mu} \left( \mu (z_{0} + \tfrac{\Delta x}{c} \right)^{1 - t_{s}} \right)^{\tfrac{t_{s}}{1 - t_{s}}} \\
+\end{aligned}
+\end{equation}
+
+We also need the gradient of the governance and curve fee calculations:
+
+\begin{align}
+\Phi_{c}^{\prime}(\Delta x) &= \phi_{c}(\tfrac{1}{p_{0}} - 1) \\
+\Phi_{g}^{\prime}(\Delta x) &= \phi_{g}p_{0}\Phi_{c}^{\prime}(\Delta x)
+\end{align}
+
+Together, these give us the solvency gradient:
+
+\begin{equation}
+\begin{aligned}
+S^{\prime}(\Delta x) &= \tfrac{1}{c} \left( 1 - \Phi_{g}^{\prime}(\Delta x) - Y^{\prime}(\Delta x) \right) \\
+\end{aligned}
+\end{equation}
+
+We want to discover a $\Delta x$ to push the pool to be as close to insolvent as possible, without passing over to actually being insolvent.
+We achieve this by maximizing the negative solvency, since solvency decreases as more longs are opened.
+For each iteration of Newton's method (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L73}{max.rs, l73}):
+
+\begin{equation}
+\begin{aligned}
+\Delta x_{n+1} &= \Delta x_n - \tfrac{S(\Delta x_n)}{S'(\Delta x_n)} \\
+&= \Delta x_n + \tfrac{S(\Delta x_n)}{-S'(\Delta x_n)}
+\end{aligned}
+\end{equation}
+
+In the actual implementation, we will iteratively compute solvency for the new $\Delta x_{n}$ until the system is no longer solvent, and then back up one step to return the maximum long.
+
+\subsubsection{Deriving an initial guess for the max long amount}
+
+The rate of convergence for Newton's method is improved with a better initial guess, $\Delta x_{n=0}$.
+To derive an initial guess, we can use a conservative price estimate, $p_{r}$, to approximate $Y(\Delta x)$ (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L253}{max.rs, l253}):
+
+\begin{equation}\label{approx-long-amount}
+\begin{aligned}
+Y(\Delta x) &\approx \tfrac{\Delta x}{p_{r}} - \Phi_{c}(\Delta x) \\
+&\approx \Delta x \left( \tfrac{1}{p_{r}} - \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \right) \\
+\end{aligned}
+\end{equation}
+
+We define our initial solvency as in equation \eqref{solvency}:
+$s_{0} = \tfrac{1}{c} \left(x_{0} - l_{0} - x_{\text{min}} \right)$.
+Plugging this into our solvency function $S(\Delta x)$, we can calculate the share reserves and exposure after opening a long with $\Delta x$ base as (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L259}{max.rs, l259}):
+
+\begin{equation}
+\begin{aligned}
+Z(\Delta x) &= z_0 + \tfrac{\Delta x - \Phi_{g}(\Delta x)}{c} \\
+Z(\Delta x) &= \tfrac{1}{c} \left( x_0 + \Delta x - \Phi_{g}(\Delta x) \right) \\
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+L(\Delta x) &= l_0 + l_{\text{chk}} + 2 Y(\Delta x) - \Delta x + \Phi_{g}(\Delta x) \\
+&= l_0 + l_{\text{chk}} + 2 p_{r}^{-1} \Delta x - 2 \Phi_{c}(\Delta x) - \Delta x + \Phi_{g}(\Delta x)
+\end{aligned}
+\end{equation}
+
+These formulae allow us to calculate the approximate ending solvency of (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L271}{max.rs, l271}):
+
+\begin{equation}
+\begin{aligned}
+S(\Delta x) &\approx Z(\Delta x) - \tfrac{L(\Delta x)}{c} - z_{\text{min}} \\
+&\approx \tfrac{1}{c} \left( x_0 + \Delta x - \Phi_{g}(\Delta x) - L(\Delta x) - x_{\text{min}} \right) \\
+&\approx \tfrac{1}{c} \left( x_0 + 2 \Delta x - 2 \Phi_{g}(\Delta x) - l_{0} - l_{\text{chk}} - 2\tilde{Y}(\Delta x) - x_{\text{min}} \right) \\
+\end{aligned}
+\end{equation}
+
+If we rearrange to represent the initial solvency, $s_0$, then we can solve for $\Delta x$ (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/long/max.rs#L278}{max.rs, l278}):
+
+\begin{equation}\label{approx-solvency}
+\begin{aligned}
+s_{0} - \tfrac{1}{c} l_{\text{chk}} + \tfrac{2}{c} \left( \Delta x - \Phi_{g}(\Delta x) - \tilde{Y}(\Delta x) \right) &\approx 0 \\
+s_{0} - \tfrac{1}{c} l_{\text{chk}} + \tfrac{2}{c} \left( \Delta x - \Phi_{g}(\Delta x) - \tilde{Y}(\Delta x) \right) &\approx 0 \\
+s_{0} - \tfrac{1}{c} l_{\text{chk}} + \tfrac{2}{c} \Delta x \left( 1 - \phi_{g}\phi_{c} \left( 1 - p_{0} \right) - \tfrac{1}{p_{r}} + \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \right) &\approx 0 \\
+\end{aligned}
+\end{equation}
+
+\begin{equation}
+\begin{aligned}
+&\therefore \\
+\Delta x &\approx \tfrac{c}{2} \tfrac{-(s_{0}-(\tfrac{1}{c} l_{\text{chk}}))}{1 - \phi_{g}\phi_{c} \left( 1 - p_{0} \right) - p_{r}^{-1} + \phi_{c} \left( p_{0}^{-1} - 1 \right)} \\
+\Delta x &\approx \tfrac{c}{2} \tfrac{s_{0} + \tfrac{1}{c} l_{\text{chk}}}{p_{r}^{-1} + \phi_{g}\phi_{c} \left( 1 - p_{0} \right) - \phi_{c} \left( p_{0}^{-1} - 1 \right) - 1} \\
+\end{aligned}
+\end{equation}
+
+This gives us the initial value for $\Delta x_{0}$ in the iterative process.
+
+\begin{callout}
+\callouttext{exclamation}{Discrepancy}
+
+This does not match \href{https://github.com/delvtech/hyperdrive/blob/5c12ca877c7dec2da03fac2e033141db8cfeb099/crates/hyperdrive-math/src/long/max.rs#L73}{max.rs, l73}, which has the numerator equal to $s_{0} + l_{\text{chk}}$.
+
+\end{callout}
+
+
+\subsection{Targeted long}
+
+\subsubsection{Targeted long for a given rate}
+
+We can follow a similar derivation to get a long that results in a \textit{target} fixed rate (aka spot rate). The fixed rate for a Hyperdrive pool given the spot price, $p$, and the annualized position duration, $t_{d}$ is given by:
+
+\begin{equation}
+r = (1-p)(p t_{d})^{-1}
+\end{equation}
+
+Note that the conversion from a ``price'' (which is computed at a single point in time) to a ``rate'' (which is computed using at least 2 points in time) is automatic because of the predetermined position duration.
+Solving for $p$, we get:
+
+\begin{equation}
+\begin{aligned}
+(1-p)(p t_{d})^{-1} &= r \\
+\tfrac{1}{p t_{d}} - \tfrac{1}{t_{d}} &= r \\
+\tfrac{1}{p} \tfrac{1}{t_{d}}  &= r + \tfrac{1}{t_{d}} \\
+\tfrac{1}{p} &= t_{d} \left( r + \tfrac{1}{t_{d}} \right) \\
+p &= \left( rt_{d} + 1 \right)^{-1}
+\end{aligned}
+\end{equation}
+
+As before, we use $p = \left( \tfrac{\mu z_{t}}{y_{t}} \right)^{t_{s}}$ to find target reserve bonds, $y_{t}$, in terms of a target rate, $r_{t}$ (\href{https://github.com/delvtech/hyperdrive/blob/f410574fffcb8b2556208c158494ba2972525843/crates/hyperdrive-math/src/utils.rs#L112}{utils.rs, l112}):
+
+\begin{equation}\label{yt-zt-rate}
+\begin{aligned}
+\left( \tfrac{\mu z_t}{y_t} \right)^{t_s} &= \tfrac{1}{r t_d + 1} \\
+\tfrac{\mu z_t}{y_t} &= \left( \tfrac{1}{r t_d + 1} \right)^{\tfrac{1}{t_s}} \\
+y_t &= \tfrac{\mu z_t}{\left( \tfrac{1}{r t_d + 1} \right)^{\tfrac{1}{t_s}}} \\
+y_t &= \mu z_t \left( r t_d + 1 \right)^{\tfrac{1}{t_s}}
+\end{aligned}
+\end{equation}
+
+We then use the invariant formula from Equation \eqref{keq} to determine the share reserves required for a given rate.
+
+\begin{equation}
+\begin{aligned}
+\tfrac{c}{\mu} (\mu z_{t})^{1 - t_{s}} + y_{t}^{1 - t_{s}} &= k \\
+\tfrac{c}{\mu} (\mu z_{t})^{1 - t_{s}} + \left( \mu z_{t} \left( r_{t}t_{d}+1 \right)^{\tfrac{1}{t_{s}}} \right)^{1 - t_{s}} &= k \\
+\tfrac{c}{\mu} (\mu z_{t})^{1 - t_{s}} + \left( \mu z_{t} \right)^{1-t_{s}} \left( \left( r_{t}t_{d}+1 \right)^{\tfrac{1}{t_{s}}} \right)^{1 - t_{s}} &= k \\
+(\mu z_{t})^{1 - t_{s}} \left( \tfrac{c}{\mu} +  \left( (r_{t} t_{d}+1)^{\tfrac{1}{t_{s}}} \right)^{1-t_{s}} \right) &= k \\
+(\mu z_{t})^{1 - t_{s}} &=  \tfrac{k}{ \tfrac{c}{\mu} + \left( (r_{t} t_{d}+1)^{\tfrac{1}{t_{s}}} \right)^{1-t_{s}}} \\
+z_{t} &= \tfrac{1}{\mu} \left( \tfrac{k}{ \tfrac{c}{\mu} + \left( (r_{t} t_{d}+1)^{\tfrac{1}{t_{s}}} \right)^{1-t_{s}}} \right)^{\tfrac{1}{1-t_{s}}}
+\end{aligned}
+\end{equation}
+
+And finally, we plug this in to equation \eqref{yt-zt-rate} to isolate the target bonds, $y_{t}$.
+
+\begin{equation}
+y_{t} = \left( \tfrac{k}{ \tfrac{c}{\mu} +  \left( \left( r_{t} t_{d} + 1 \right)^{\tfrac{1}{t_{s}}} \right)^{1-t_{s}}} \right)^{1-t_{s}} \left( r_{t} t_{d} + 1 \right)^{\tfrac{1}{t_{s}}}
+\end{equation}
+
+Using these targets in Equations \eqref{dx} and \eqref{dy}, we can compute the long base amount to hit a target rate assuming an infinitesimally-derived price (i.e. spot price).
+The approximate reserve levels for a target rate are much more likely to be solvent than the reserves after an approximated maximum long, but we still have to deal with the discrepancy between the spot price and the realized price that arises from a realistic trade size.
+
+\subsubsection{Iteratively finding a trade for a target rate}
+
+We need to know how the rate changes when base reserves change, $R(\Delta x)$, which will become our new objective function.
+The derivative of this objective will give us the updates in each step of the refinement algorithm.
+
+Picking up from \eqref{long-amount}, we can write the full equation for the bonds received for a given base provided from a long trade (\href{https://github.com/delvtech/hyperdrive/blob/c167ab4b35722388c3d75ac012cbb262cba00a77/crates/hyperdrive-math/src/long/open.rs#L12}{open.rs, l112}):
+
+\begin{equation}
+    Y(\Delta x) = y_{0} - \left( k - \left( \tfrac{\mu}{c} \right)^{- t_{s}} \left( x_{0} + \Delta x \right)^{1 - t_{s}} \right)^{\tfrac{1}{1 - t_{s}}} - \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \Delta x
+\end{equation}
+
+This is also the amount that is subtracted from the pool, i.e. $\Delta y_{\text{pool}} = Y(\Delta x)$ and thus $y_{\text{new-pool}} = y_{\text{old-pool}} - Y(\Delta x)$.
+The corresponding delta that would be applied to the pool's effective share reserves is (\href{https://github.com/delvtech/hyperdrive/blob/c167ab4b35722388c3d75ac012cbb262cba00a77/crates/hyperdrive-math/src/long/open.rs#L63}{open.rs, l63}):
+
+\begin{equation}
+\begin{aligned}
+\Delta z_{e, \text{pool}} &= \tfrac{1}{c} \left( \Delta x - \Phi_{g}(\Delta x) \right) - \zeta \\
+&= \tfrac{\Delta x}{c} \left( 1 - \phi_{g} \phi_{c} \left( 1 - p_{0} \right) \right) - \zeta
+\end{aligned}
+\end{equation}
+
+where $\zeta$ is the pool's zeta adjustment state, which is unchanged when opening positions.
+The instantaneous spot price given pool reserve levels $(z_{e}, y)$ is
+
+\begin{equation}
+p = \left( \tfrac{\mu z_{e}}{y} \right)^{t_{s}}
+\end{equation}
+
+Together these allow us to derive the new share price after opening a long (\href{https://github.com/delvtech/hyperdrive/blob/18dfd4aa5a7f8d19bd34d9693aadf773995b1b14/crates/hyperdrive-math/src/long/open.rs#L52}{open.rs, l52}):
+
+\begin{equation}
+\begin{aligned}
+P(\Delta x) &= \left( \tfrac{\mu \left( z_{e0, \text{pool}} + \Delta z_{e, \text{pool}} \right)}{\left( y - \Delta y_{\text{pool}} \right)} \right)^{t_{s}} \\
+&= \left( \tfrac{\mu \left( z_{e0} + \tfrac{\Delta x}{c} \left( 1 - \phi_{g} \phi_{c} \left( 1 - p_{0} \right) \right) - \zeta \right)}{\left( y_{0} - \left( y_{0} - \left( k - \left( \tfrac{\mu}{c} \right)^{- t_{s}} \left( x_{0} + \Delta x \right)^{1 - t_{s}} \right)^{\tfrac{1}{1 - t_{s}}} - \phi_{c} \left( \tfrac{1}{p_{0}} - 1 \right) \Delta x \right) \right)} \right)^{t_{s}} \\
+\end{aligned}
+\end{equation}
+
+where again $p_{0}$, $y_{0}$, $z_{e0}$, and $x_{0}$ are the spot price, bond reserves, effective share reserves, and base reserves before the trade, respectively.
+
+We will also need the derivative of this function:
+
+\begin{multline}
+P^{\prime}(\Delta x) = t_{s} \left( \frac{y_{0} - Y(\Delta x)}{\mu \left( z_{e0} + \tfrac{\Delta x}{c} - \tfrac{\Phi_{g}(\Delta x)}{c} - \zeta \right)} \right)^{1 - t_{s}} \\
+\frac{ \left( y_{0} - Y(\Delta x) \right) \tfrac{\mu}{c} \left( 1 - \Phi^{\prime}_{g}(\Delta x) \right) + Y^{\prime}(\Delta x) \mu \left( z_{e0} + \tfrac{\Delta x}{c} - \tfrac{\Phi_{g}(\Delta x)}{c} - \zeta \right)}{\left( y_{0} - Y(\Delta x) \right)^{2}}
+\end{multline}
+
+Given this, we can write the rate:
+
+\begin{equation}
+R(\Delta x) = \left( 1 - P(\Delta x) \right) \left( P(\Delta x) t_{d} \right)^{-1}
+\end{equation}
+
+And the derivative of the rate:
+
+\begin{equation}
+\begin{aligned}
+R^{\prime}(\Delta x) &= \frac{-P^{\prime}(\Delta x) P(\Delta x) t_{d} - \left( 1 - P(\Delta x) \right) \left( P^{\prime}(\Delta x) t_{d} \right)}{(P(\Delta x) t_{d})^{2}} \\
+&= \frac{-P^{\prime}(\Delta x) P(\Delta x) t_{d} - P^{\prime}(\Delta x) t_{d} + P^{\prime}(\Delta x) P(\Delta x) t_{d}}{(P(\Delta x) t_{d})^{2}} \\
+&= \frac{-P^{\prime}(\Delta x)}{P(\Delta x)^2 t_{d}}
+\end{aligned}
+\end{equation}
+
+We can now write our optimization function for the Newton updates.
+$l(\Delta x) = R(\Delta x) - r_{t}$ shifts the trading curve down towards the zero-point.
+
+\begin{equation}
+\begin{split}
+\argmax\limits_{\Delta x} (R(\Delta x) - r_{t}) \\
+\text{s.t.} S(\Delta x) > 0
+\end{split}
+\end{equation}
+
+As before, the derivative of loss gives us our $\Delta x$:
+
+\begin{equation}
+\begin{aligned}
+\Delta x_{n+1} &= \Delta x - \frac{l(\Delta x)}{l^{\prime}(\Delta x)} \\
+&= \Delta x_{n} - \frac{R(\Delta x) - r_{t}}{R^{\prime}(\Delta x)} \\
+&= \Delta x_{n} + \frac{R(\Delta x) - r_{t}}{-R^{\prime}(\Delta x)}
+\end{aligned}
+\end{equation}
+
+\pagebreak 
+
+The derivative of the price after a long.
+
+The price after a long that moves shares by $\Delta z$ and bonds by $\Delta y$
+is equal to
+
+\begin{equation}
+p(\Delta z) = \left( \frac{\mu \cdot
+    (z_{0} + \Delta z - (\zeta_{0} + \Delta \zeta))}
+    {y - \Delta y} \right)^{t_{s}}
+\end{equation}
+
+where $t_{s}$ is the time stretch constant and $z_{0}$ is the initial
+share reserves, and $\zeta$ is the zeta adjustment.
+The zeta adjustment is constant when opening a long, i.e.
+$\Delta \zeta = 0$, so we drop the subscript. Equivalently, for some
+amount of \code{delta_base}$= \Delta x$ provided to open a long, we can write:
+
+\begin{equation}
+p(\Delta x) = \left(
+    \frac{\mu (z_{0} + \frac{1}{c}
+    \cdot \left( \Delta x - \Phi_{g}(\Delta x) \right) - \zeta)}
+    {y_0 - y(\Delta x)}
+\right)^{t_{s}}
+\end{equation}
+
+where $\Phi_{g}(\Delta x)$ is the \code{open_long_governance_fee} (Eq \eqref{gov-fee}),
+$y(\Delta x)$ is the \code{long_amount},
+
+In other words,
+
+\begin{equation}
+z_1 = z_0 + \frac{
+    \Delta x - \phi_g \phi_c \left( 1 - p \right) \Delta x
+}{c}
+\end{equation}
+
+and $z_{e,1} = z_{1} - \zeta$. Therefore,
+
+\begin{equation}
+z_{e,1} = z_0 + \frac{
+    \Delta x - \phi_g \phi_n \left( 1 - p \right) \Delta x
+}{c} - \zeta
+\end{equation}
+
+and
+
+\begin{equation}
+p(\Delta x) = \left( \frac{\mu z_{e,1}}{y_{0} - y(x)} \right)^{t_{s}}
+\end{equation}
+
+To compute the derivative, we first define some auxiliary variables:
+
+\begin{equation}
+\begin{aligned}
+a(\Delta x) &= \mu (z_{0} + \frac{\Delta x}{c} - \frac{\Phi_{g}(\Delta x)}{c} - \zeta) \\
+&= \mu \left( z_{e,0} + \frac{\Delta x}{c} - \frac{\Phi_{g}(\Delta x)}{c} \right) \\
+b(\Delta x) &= y_0 - y(\Delta x) \\
+v(\Delta x) &= \frac{a(\Delta x)}{b(\Delta x)}
+\end{aligned}
+\end{equation}
+
+and thus $p(\Delta x) = v(\Delta x)^{t_{s}}$.
+Given these, we can write out intermediate derivatives:
+
+\begin{equation}
+\begin{aligned}
+a'(\Delta x) &= \frac{\mu}{c} (1 - \Phi_{g}'(\Delta x)) \\
+b'(\Delta x) &= -y'(\Delta x) \\
+v'(\Delta x) &= \frac{b(\Delta x) a'(\Delta x) - a(\Delta x) b'(\Delta x)}{b(\Delta x)^2}
+\end{aligned}
+\end{equation}
+
+And finally, the price after long derivative is:
+
+\begin{equation}
+p'(\Delta x) = v'(\Delta x) t_{s} v(\Delta x)^{(t_{s} - 1)}
+\end{equation}
