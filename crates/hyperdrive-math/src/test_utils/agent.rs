@@ -372,10 +372,12 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         maybe_tx_options: Option<TxOptions>,
     ) -> Result<(FixedPoint<U256>, FixedPoint<U256>)> {
         // Open the short and record the trade in the wallet.
+        println!("bond_amount: {}", bond_amount);
+
         let log = {
             let max_deposit = {
                 let slippage_tolerance = maybe_slippage_tolerance.unwrap_or(fixed!(0.01e18));
-                self.calculate_open_short(bond_amount).await? * (fixed!(1e18) + slippage_tolerance)
+                self.calculate_open_short(bond_amount).await? * (fixed!(2e18) + slippage_tolerance)
             };
             let tx = ContractCall(self.hyperdrive().open_short(
                 bond_amount.into(),
@@ -433,6 +435,8 @@ impl HyperdriveMathAgent for Agent<ChainClient<LocalWallet>, ChaCha8Rng> {
         if !log.as_base {
             panic!("Trades are expected to be executed as base.")
         }
+        println!("agent wallet base: {}", self.wallet.base);
+        println!("agent amount paid: {}", log.amount);
         self.wallet.base -= log.amount.into();
 
         Ok((log.maturity_time.into(), log.amount.into()))

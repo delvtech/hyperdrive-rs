@@ -1200,7 +1200,7 @@ mod tests {
     /// short bond amount that results consuming the agent's budget, ignoring
     /// the slippage guard.
     /// TODO: see Issue #136 for whiy this is failing.
-    #[ignore]
+    // #[ignore]
     #[tokio::test]
     async fn fuzz_calculate_max_short_budget_consumed() -> Result<()> {
         let abs_max_bond_tolerance = fixed!(1e9);
@@ -1262,14 +1262,32 @@ mod tests {
             let budget = rng.gen_range(
                 state.minimum_transaction_amount()..=global_max_base_required - fixed!(1e18),
             );
-            celine.fund(budget).await?;
+            println!("celine wallet base before funding: {}", celine.base());
+            celine.fund(budget - celine.base()).await?;
+            println!("celine wallet base after funding:  {}", celine.base());
 
             // Celine opens a max short position.
             let slippage_tolerance = fixed!(0.01e18);
             let max_short_bonds = celine.calculate_max_short(Some(slippage_tolerance)).await?;
-            celine
+            
+            println!("run #{}", num_tests);
+            println!("opening short with budget: {}", budget);
+            println!("global_max_short_bonds:    {}", global_max_short_bonds);
+            println!("global_max_base_required:  {}", global_max_base_required);
+
+            let (maturity_time, base_paid) = celine
                 .open_short(max_short_bonds, Some(slippage_tolerance), None)
                 .await?;
+
+            println!("full_budget:     {}", budget);
+            println!("base_paid:       {}", base_paid);
+            println!("intended_budget: {}", budget * (fixed!(1e18) - slippage_tolerance));
+            println!("short_bonds:     {}", max_short_bonds);
+            println!("maturity_time:   {}", maturity_time);
+
+            // celine
+            //     .open_short(max_short_bonds, Some(slippage_tolerance), None)
+            //     .await?;
 
             // The max short should consume the budget up to the slippage
             // tolerance.
